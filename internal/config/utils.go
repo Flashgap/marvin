@@ -124,7 +124,7 @@ func PrintConfig(c any) {
 		},
 	}
 	logrus.Infof("Config has been loaded")
-	toRange := append(headers, res.r...)
+	toRange := append(headers, res.r...) //nolint:gocritic // appendAssign: intentional — headers must stay unmodified; toRange is a read-only merged view
 	for i, r := range toRange {
 		category := "  ..."
 		if r.category != previousCategory {

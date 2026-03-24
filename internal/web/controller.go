@@ -47,7 +47,7 @@ type BaseController struct {
 func (*BaseController) Error(c *gin.Context, err error) bool {
 	// Catch nil is not nil apperrors.
 	var errMsg *apperrors.ErrorMessage
-	if errors.As(err, &errMsg) && errMsg == nil { // nolint: revive: intended
+	if errors.As(err, &errMsg) && errMsg == nil { // nolint:revive // intended
 		return false
 	}
 

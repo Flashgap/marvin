@@ -52,12 +52,13 @@ func Recovery(errorReportingSrv *errorreporting.Client) gin.HandlerFunc {
 						headers[idx] = current[0] + ": *"
 					}
 				}
-				if brokenPipe {
+				switch {
+				case brokenPipe:
 					log.Criticalf("%s\n%s", err, string(httpRequest))
-				} else if gin.IsDebugging() {
+				case gin.IsDebugging():
 					log.Criticalf("%s panic recovered:\n%s\n%s\n%s",
 						timeFormat(time.Now().UTC()), strings.Join(headers, "\r\n"), err, stack)
-				} else {
+				default:
 					log.Criticalf("%s panic recovered:\n%s\n%s",
 						timeFormat(time.Now().UTC()), err, stack)
 				}
@@ -75,7 +76,7 @@ func Recovery(errorReportingSrv *errorreporting.Client) gin.HandlerFunc {
 
 				// If the connection is dead, we can't write a status to it.
 				if brokenPipe {
-					c.Error(err.(error)) // nolint: errcheck
+					c.Error(err.(error)) // nolint:errcheck // If the connection is dead, there's no point in checking for errors.
 					c.Abort()
 				} else {
 					c.AbortWithStatus(http.StatusInternalServerError)
@@ -101,7 +102,7 @@ func stack(skip int) []byte {
 		// Print this much at least.  If we can't find the source, it won't show.
 		fmt.Fprintf(buf, "%s:%d (0x%x)\n", file, line, pc)
 		if file != lastFile {
-			data, err := os.ReadFile(file)
+			data, err := os.ReadFile(file) //nolint:gosec // Reading source files for stack trace is intentional and safe.
 			if err != nil {
 				continue
 			}

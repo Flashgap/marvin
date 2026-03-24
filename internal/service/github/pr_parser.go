@@ -100,7 +100,7 @@ type PRInfo struct {
 }
 
 // ParsePRContents returns a PRInfo from the PR's title body and branch name
-func ParsePRContents(title string, body string, branchName string, cfg PRParserConfig) (PRInfo, error) {
+func ParsePRContents(title, body, branchName string, cfg PRParserConfig) (PRInfo, error) {
 	var errs error
 	var newBody string
 	var addTitleIssueID bool
@@ -229,7 +229,7 @@ func ExtractDescription(input string) (string, error) {
 }
 
 // AddLinearLink returns the prBody with linearLink added to its dedicated section.
-func AddLinearLink(prBody string, linearLink string) (string, error) {
+func AddLinearLink(prBody, linearLink string) (string, error) {
 	match := fixedIssueSectionRegex.FindStringSubmatch(prBody)
 	if len(match) < 2 {
 		return "", fmt.Errorf("%w: %w", ErrSectionNotFound, ErrLinearLink)

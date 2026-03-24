@@ -15,7 +15,7 @@ func CleanFuncName(funcName string) string {
 	parts := strings.Split(funcName, ".")
 
 	if len(parts) == funcParts {
-		parts = slices.Delete(parts, 1, 2) //nolint:gomnd
+		parts = slices.Delete(parts, 1, 2) //nolint:gomnd // Remove the receiver type, which is not relevant for our use case.
 	}
 
 	return strings.TrimSuffix(strings.Join(parts, "."), "-fm")

@@ -63,11 +63,12 @@ func LogContextMiddleware() gin.HandlerFunc {
 		// Catch the result and log the request info
 		c.Set(logrus.FieldKeyResponseStatus, c.Writer.Status())
 		c.Set(logrus.FieldKeyResponseSize, c.Writer.Size())
-		if c.Writer.Status() >= http.StatusInternalServerError {
+		switch c.Writer.Status() {
+		case http.StatusInternalServerError:
 			WithContext(c).Critical(c.FullPath())
-		} else if c.Writer.Status() >= http.StatusBadRequest {
+		case http.StatusBadRequest:
 			WithContext(c).Error(c.FullPath())
-		} else {
+		default:
 			WithContext(c).Info(c.FullPath())
 		}
 	}

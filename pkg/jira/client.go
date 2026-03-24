@@ -46,7 +46,7 @@ func NewClient(host, token string) (Client, error) {
 	}, nil
 }
 
-func (c *client) SearchIssue(ctx context.Context, projectName string, summarySearchString string) (*SearchResponse, error) {
+func (c *client) SearchIssue(ctx context.Context, projectName, summarySearchString string) (*SearchResponse, error) {
 	params := make(url.Values)
 	params.Add("jql", fmt.Sprintf("project = %s AND summary ~ %q", projectName, summarySearchString))
 

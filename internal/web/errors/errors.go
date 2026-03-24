@@ -19,7 +19,7 @@ type DetailedErrorMessage struct {
 }
 
 // NewErrorMessage returns a new error message with the associated code and message
-func NewErrorMessage(httpCode int, code int, message string) *ErrorMessage {
+func NewErrorMessage(httpCode, code int, message string) *ErrorMessage {
 	return &ErrorMessage{
 		HTTPCode: httpCode,
 		Code:     code,
@@ -135,27 +135,4 @@ var AuthForbiddenError = NewErrorMessage(
 	http.StatusForbidden,
 	2003,
 	"Forbidden to use this path",
-)
-
-// AuthUserForbiddenError is thrown when a user tries to access a forbidden path
-// Deprecated: Use AuthForbiddenError instead
-var AuthUserForbiddenError = NewErrorMessage(
-	http.StatusForbidden,
-	2004,
-	"Not a path for you",
-)
-
-// AuthAdminForbiddenError is thrown when an admin tries to access a path without the proper ACL
-// Deprecated: Use AuthForbiddenError
-var AuthAdminForbiddenError = NewErrorMessage(
-	http.StatusForbidden,
-	2005,
-	"Insufficient rights",
-)
-
-// AuthMissingACL is thrown when we cannot retrieve a user's ACL
-var AuthMissingACL = NewErrorMessage(
-	http.StatusForbidden,
-	2006,
-	"Cannot get ACL",
 )

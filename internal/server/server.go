@@ -83,7 +83,7 @@ func (s *HTTP) Run(ctx context.Context, stop context.CancelFunc) {
 	// the request it is currently handling
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := s.Shutdown(ctx); err != nil {
+	if err := s.Shutdown(ctx); err != nil { //nolint:contextcheck // fresh context is intentional: parent is already cancelled by the OS signal at this point
 		log.Critical("Server forced to shutdown: ", err)
 	}
 

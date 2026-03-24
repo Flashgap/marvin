@@ -264,7 +264,7 @@ func (s *service) RemoveLabel(ctx context.Context, webhook github.RepoSenderGett
 
 	if _, err = s.RemovePRLabel(ctx, webhook, prNumber, ghLabel.GetName()); err != nil {
 		var apiErr *gogithub.ErrorResponse
-		if errors.As(err, &apiErr) && apiErr.Response.StatusCode == http.StatusNotFound { //nolint:revive
+		if errors.As(err, &apiErr) && apiErr.Response.StatusCode == http.StatusNotFound { //nolint:revive // Check is done in order
 			// Ignore not found errors, the label is already gone
 			return nil
 		}
@@ -285,7 +285,7 @@ func (s *service) AddLabel(ctx context.Context, webhook github.RepoSenderGetter,
 
 	if _, _, err = s.AddPRLabels(ctx, webhook, prNumber, []string{ghLabel.GetName()}); err != nil {
 		var apiErr *gogithub.ErrorResponse
-		if errors.As(err, &apiErr) && apiErr.Response.StatusCode == http.StatusUnprocessableEntity { //nolint:revive
+		if errors.As(err, &apiErr) && apiErr.Response.StatusCode == http.StatusUnprocessableEntity { //nolint:revive // Check is done in order
 			// Ignore unprocessable entity errors, the label is already there
 			return nil
 		}

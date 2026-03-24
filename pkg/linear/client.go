@@ -29,7 +29,7 @@ type client struct {
 
 // NewClient performs the second part of the OAuth handshake and returns a Client that is ready to perform
 // In order to retrieve an OAuth Code, see ClientLogin and implement the necessary callback
-func NewClient(ctx context.Context, oAuthToken string, workspaceSlug string) Client {
+func NewClient(ctx context.Context, oAuthToken, workspaceSlug string) Client {
 	httpClient := oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{
 		AccessToken: oAuthToken,
 		// The token was generated some time in 2023, and is supposed to last 10 years. This should be fine and

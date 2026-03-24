@@ -3,18 +3,82 @@ version: "2"
 linters:
   default: none
   enable:
-    # Unused code detection
-    - unused      # unused constants, variables, functions, types
-    - unparam     # unused function parameters
-    - ineffassign # assignments to variables never read after
-    # General quality (kept minimal)
-    - govet
-    # - staticcheck
+    # Correctness
+    - govet # Go's built-in vet checks
+    - staticcheck # Comprehensive static analysis (SA, S, ST families)
+    - errcheck # Unchecked error returns
+    - nilerr # Catches "if err != nil { return nil, nil }" bugs
 
-linters-settings:
-  unused:
+    # HTTP / network hygiene
+    - bodyclose # HTTP response bodies must be closed
+    - contextcheck # Context parameters must be threaded down, not silently replaced
+
+    # Dead code & unnecessary complexity
+    - unused # Unused constants, variables, functions, types
+    - ineffassign # Assignments to variables that are never read
+    - unparam # Function parameters always called with the same value
+
+    # Code quality
+    - gocritic # Broad diagnostic and style checks
+    - revive # Successor to golint — naming, exported doc comments
+
+    # Good practices
+    - gochecknoinits # Forbid init() functions
+
+    # Security
+    - gosec # Common security anti-patterns
+
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+      disabled-checks:
+        - unnamedResult # no named returns by convention — intentional
+
+    revive:
+      rules:
+        - name: exported
+          severity: warning
+          disabled: true # exported identifiers are not a concern for this codebase
+        # package-comments is too noisy for the current state of the codebase;
+        # re-enable once all packages have doc comments.
+        - name: package-comments
+          disabled: true
+        # Ginkgo / Gomega test suites use dot imports by convention.
+        - name: dot-imports
+          arguments:
+          - allowed-packages: ["github.com/onsi/ginkgo/v2", "github.com/onsi/gomega"]
+
+    errcheck:
+      exclude-functions:
+        # Closing resources in defer is idiomatic; the error is unactionable
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (net/http.ResponseWriter).Write
+
+  exclusions:
+    rules:
+    # Generated mock files — skip entirely
+    - path: mock/mock\.go
+      linters:
+        - revive
+        - gocritic
+        - unused
+        - errcheck
+        - contextcheck
+
+    # Test files — relax rules that are useful in production but noisy in tests
+    - path: _test\.go
+      linters:
+        - errcheck # Gomega assertions handle error checking
+        - gosec # Test code is not a security surface
+        - unparam # Test helpers often use fixed-value params by design
+        - contextcheck # Tests legitimately use context.Background()
+        - revive # Ginkgo DSL is idiomatic in test files
+
 
 issues:
-  # Show all issues, don't cap per linter
+  # Show every issue; don't cap per linter
   max-issues-per-linter: 0
   max-same-issues: 0

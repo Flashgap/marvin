@@ -63,7 +63,7 @@ func NewServer(ctx context.Context, cfg *Config, optServices ...*Services) (*Ser
 	}
 
 	srv.initializeControllers()
-	srv.initializeRouter()
+	srv.initializeRouter() //nolint:contextcheck // setup-only: no I/O happens; Gin recovery handler closure does not require a propagated context
 
 	return srv, nil
 }

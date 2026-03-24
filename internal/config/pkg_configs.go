@@ -10,7 +10,7 @@ import (
 func (cfg Base) LoggerConfig() logger.Config {
 	return logger.Config{
 		GoogleCloudProject: cfg.ProjectID,
-		DefaultLogLevel:    logrus.Level(cfg.LogLevel),
+		DefaultLogLevel:    logrus.Level(cfg.LogLevel), //nolint:gosec // This conversion is well-defined and intentional.
 		IsDevEnv:           cfg.IsDevEnv,
 	}
 }
