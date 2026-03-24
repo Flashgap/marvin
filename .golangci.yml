@@ -1,0 +1,20 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # Unused code detection
+    - unused      # unused constants, variables, functions, types
+    - unparam     # unused function parameters
+    - ineffassign # assignments to variables never read after
+    # General quality (kept minimal)
+    - govet
+    # - staticcheck
+
+linters-settings:
+  unused:
+
+issues:
+  # Show all issues, don't cap per linter
+  max-issues-per-linter: 0
+  max-same-issues: 0

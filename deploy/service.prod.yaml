@@ -1,0 +1,83 @@
+# This file is configured through deployParameters in the clouddeploy.prod.yaml file.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: svcs-marvin
+  labels:
+    cloud.googleapis.com/location: europe-west1
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/ingress-status: all
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/vpc-access-connector: projects/demo-dev/locations/europe-west1/connectors/gae-connector
+        autoscaling.knative.dev/minScale: 1
+        run.googleapis.com/cpu-throttling: 'false'
+    spec:
+      serviceAccountName: cloudrun@demo-dev.iam.gserviceaccount.com
+      volumes:
+        - name: gh-key
+          secret:
+            items:
+              - key: "latest"
+                path: "latest.pem"
+            secretName: MARVIN_GH_KEY
+      containers:
+        - image: svc-image
+          volumeMounts:
+            - mountPath: /app/secrets/gh-key
+              name: gh-key
+          env:
+            - name: ENVIRONMENT
+              value: "cloudrun"
+            - name: ENV
+              value: "prod"
+            - name: APP_ENGINE_SERVICE_ACCOUNT_EMAIL
+              value: "demo-dev@appspot.gserviceaccount.com"
+
+            - name: GH_SECRET_KEY
+              value: '/app/secrets/gh-key/latest.pem'
+            - name: GH_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: MARVIN_GH_WEBHOOK_SECRET
+                  key: "latest"
+            - name: GH_APP_ID
+              value: "12345678"
+            - name: GH_INSTALL_ID
+              value: "12345678"
+            - name: GH_LABELS_NAMING_VERSION
+              value: "2"
+
+            - name: LINEAR_OAUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: MARVIN_LINEAR_OAUTH_TOKEN
+                  key: "latest"
+            - name: MARVIN_SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: MARVIN_SLACK_BOT_TOKEN
+                  key: "latest"
+
+            - name: MARVIN_REVIEWERS_TEAMS
+              value: "test-repo:backend"
+            # This not-a-secret is passed as a secret because of Cloud deploy parameter length limit.
+            - name: MARVIN_REPOSITORIES
+              valueFrom:
+                secretKeyRef:
+                  name: "MARVIN_REPOSITORIES"
+                  key: "latest"
+            - name: MARVIN_GITHUB_TO_SLACK
+              value: "octocat:U12345678"
+            - name: JIRA_HOST
+              value: "https://ext.atlassian.net"
+            - name: JIRA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: MARVIN_JIRA_API_KEY
+                  key: "latest"
+            - name: JIRA_FIELDS
+              value: "ProjectKey:CIR,ProjectID:10407,TaskIssueTypeID:10412,EpicIssueTypeID:10413,StartDateCustomFieldKey:customfield_10515,InProgressTransitionID:21,DoneTransitionID:31"

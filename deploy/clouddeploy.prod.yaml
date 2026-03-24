@@ -1,0 +1,25 @@
+apiVersion: deploy.cloud.google.com/v1
+kind: DeliveryPipeline
+metadata:
+  name: svcs-marvin-pipeline
+description: Marvin service
+serialPipeline:
+  stages:
+    - targetId: svcs-marvin-prod
+      profiles: [ prod ]
+---
+apiVersion: deploy.cloud.google.com/v1
+kind: Target
+metadata:
+  name: svcs-marvin-prod
+description: Staging target for Marvin service
+run:
+  location: projects/demo-dev/locations/europe-west1
+executionConfigs:
+  - usages:
+    - RENDER
+    - PREDEPLOY
+    - DEPLOY
+    - VERIFY
+    - POSTDEPLOY
+    serviceAccount: clouddeploy@demo-dev.iam.gserviceaccount.com

@@ -1,0 +1,54 @@
+# This file specifies files that are *not* uploaded to Google Cloud Platform
+# using gcloud. It follows the same syntax as .gitignore, with the addition of
+# "#!include" directives (which insert the entries of the given .gitignore-style
+# file at that point).
+#
+# For more information, run:
+#   $ gcloud topic gcloudignore
+#
+.gcloudignore
+.dockerignore
+.github
+.vscode
+.idea
+# If you would like to upload your .git directory, .gitignore file or files
+# from your .gitignore file, remove the corresponding line
+# below:
+.git
+.gitignore
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.DS_Store
+# Test binary, build with `go test -c`
+*.test
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+#
+# All files specific to our project and service (from repository root)
+#
+# To test a .gcloudignore you must copy it to the repository root and run
+# gcloud meta list-files-for-upload
+#
+
+# Ignore build, cmd and docs
+/build
+/cmd
+/docs
+*.md
+.gitbook.yaml
+docker-compose.yml
+# Only keep remote config
+/config/*
+!/config/remote
+# Only upload our current svc without unnecessary files
+/svcs/*
+!/svcs/marvin
+/workers/*
+# Do not include go test files
+*_test.go

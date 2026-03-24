@@ -1,0 +1,106 @@
+name: CI
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches:
+      - main
+
+env:
+  GINKGO_VERSION: v2.27.1
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  mock_gen:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        id: setup-go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Cache mockgen
+        uses: actions/cache@v4
+        id: cache-mockgen
+        with:
+          path: "~/go/bin/mockgen"
+          key: ${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-mockgen-v0.6.0
+
+      - name: Install mockgen
+        if: steps.cache-mockgen.outputs.cache-hit != 'true'
+        run: go install go.uber.org/mock/mockgen@v0.6.0
+
+      - name: Run mockgen
+        run: make mockgen
+
+      - name: Check for changes
+        run: |
+          if git diff --exit-code; then
+            echo "No changes detected"
+          else
+            echo "::error::Go mocks need to be regenerated with make mockgen"
+            exit 1
+          fi
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.11
+          only-new-issues: true
+
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        id: setup-go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Cache Ginkgo
+        uses: actions/cache@v4
+        id: cache-ginkgo
+        with:
+          path: "~/go/bin/ginkgo"
+          key: ${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ env.GINKGO_VERSION }}-ginkgo
+
+      - name: Install ginkgo
+        if: steps.cache-ginkgo.outputs.cache-hit != 'true'
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@${{ env.GINKGO_VERSION }}
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Run tests
+        run: make test
