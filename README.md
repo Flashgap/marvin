@@ -95,7 +95,6 @@ Marvin is configured entirely through environment variables. Copy `config/local/
 | `GH_INSTALL_ID` | GitHub App installation ID | `87654321` |
 | `GH_SECRET_KEY` | Path to the `.pem` private key file | `/app/secrets/gh-key/latest.pem` |
 | `GH_WEBHOOK_SECRET` | Webhook secret used to verify payloads | `s3cr3t` |
-| `GH_LABELS_NAMING_VERSION` | Label naming convention version (default: `1`) | `2` |
 
 ### Marvin (required)
 

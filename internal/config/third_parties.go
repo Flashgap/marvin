@@ -14,9 +14,6 @@ type Github struct {
 
 	// GithubWebhookSecret holds the secret that GitHub should be sending to authenticate calls
 	GithubWebhookSecret string `envconfig:"GH_WEBHOOK_SECRET" required:"true" secret:"true"`
-
-	// GithubLabelsNamingVersion is the version of the naming convention for labels
-	GithubLabelsNamingVersion int `envconfig:"GH_LABELS_NAMING_VERSION" default:"1"`
 }
 
 // Slack configuration.

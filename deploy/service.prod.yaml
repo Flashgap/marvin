@@ -48,8 +48,6 @@ spec:
               value: "12345678"
             - name: GH_INSTALL_ID
               value: "12345678"
-            - name: GH_LABELS_NAMING_VERSION
-              value: "2"
 
             - name: LINEAR_OAUTH_TOKEN
               valueFrom:
