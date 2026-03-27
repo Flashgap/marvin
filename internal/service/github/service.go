@@ -19,8 +19,6 @@ import (
 const (
 	CommitTitleSizeLimit = 72
 	MinTimeSpent         = 0.25
-
-	mainBranchName = "main"
 )
 
 var (
@@ -185,7 +183,7 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 
 	log.Infof("PR has reviewers in team %s: %v", fromTeam, consideredReviewers)
 
-	requiredReviewers, err := s.requiredReviewCount(ctx, webhook, mainBranchName)
+	requiredReviewers, err := s.requiredReviewCount(ctx, webhook, webhook.GetRepo().GetDefaultBranch())
 	if err != nil {
 		return false, fmt.Errorf("error getting required reviewer count: %w", err)
 	}
