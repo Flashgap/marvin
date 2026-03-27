@@ -1,0 +1,37 @@
+[
+  {
+    "name": "action:Approved ✅",
+    "color": "0E8A16",
+    "description": "Pull request is ready to be merged"
+  },
+  {
+    "name": "action:Changes required 🔨",
+    "color": "CA69DA",
+    "description": "Pull request was reviewed and additional work is required"
+  },
+  {
+    "name": "action:DO NOT MERGE ⛔️",
+    "color": "D93F0B",
+    "description": "Pull request should not be merged"
+  },
+  {
+    "name": "action:Hotfix 🔥",
+    "color": "B60205",
+    "description": "Pull requests that immediately fix a bug"
+  },
+  {
+    "name": "action:Merge 🚀",
+    "color": "D4C5F9",
+    "description": "Pull request needs to be automatically merged"
+  },
+  {
+    "name": "action:Ready for review 👌",
+    "color": "0052CC",
+    "description": "Pull request is ready to be reviewed"
+  },
+  {
+    "name": "action:Work in progress ⏳",
+    "color": "FBCA04",
+    "description": "Pull request is being worked on and is not ready for review"
+  }
+]

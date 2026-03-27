@@ -83,6 +83,58 @@ Every feature is opt-in and enabled per repository via the `MARVIN_REPOSITORIES`
 
 ---
 
+## Slack App setup
+
+1. Go to https://api.slack.com/apps → **Create New App**.
+
+2. Use the **From Manifest** option and paste this manifest:
+
+```json
+{
+    "display_information": {
+        "name": "Marvin",
+        "description": "Productivity bot to help tech employees",
+        "background_color": "#383738",
+        "long_description": "Marvin is an automation bot. He takes care of Github PRs and makes sure engineers are following standard format. He also notifies people on Slack when they have work to do."
+    },
+    "features": {
+        "bot_user": {
+            "display_name": "Marvin",
+            "always_online": false
+        }
+    },
+    "oauth_config": {
+        "scopes": {
+            "bot": [
+                "calls:write",
+                "im:write",
+                "incoming-webhook"
+            ]
+        },
+        "pkce_enabled": false
+    },
+    "settings": {
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false
+    }
+}
+```
+
+3. Install the app to your workspace and grab the **Bot User OAuth Token** → `MARVIN_SLACK_BOT_TOKEN`.
+
+---
+
+## Linear App setup
+
+1. Go to https://linear.app/settings/api → **Create OAuth app**.
+
+2. Fill in the form:
+   - **Name**: `Marvin` (or any name you like)
+   - **Callback URL**: `https://your-marvin-url.com/linear/callback`
+
+3. Once created, create a Developer Token for the app → `LINEAR_OAUTH_TOKEN`.
+
 ## Configuration
 
 Marvin is configured entirely through environment variables. Copy `config/local/marvin.env` as a starting point.
@@ -248,3 +300,21 @@ docker pull ghcr.io/flashgap/marvin:latest
 The `deploy/` directory contains a Cloud Run deployment template. You will need to adapt the service account, VPC connector, and secret names to your own GCP project.
 
 The app is configured entirely through environment variables — any container platform (Cloud Run, Fly.io, Railway, etc.) works.
+
+## Configuration
+
+If you want to make use of the labels to control the flow of a PR, make sure to create them in your repository:
+
+```bash
+jq -c '.[]' labels.json | while read -r label; do
+  gh api \
+    --method POST \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2026-03-10" \
+    /repos/OWNER/REPO/labels \
+    -f "name=$(echo "$label" | jq -r '.name')" \
+    -f "description=$(echo "$label" | jq -r '.description')" \
+    -f "color=$(echo "$label" | jq -r '.color')" \
+    > /dev/null
+done
+```

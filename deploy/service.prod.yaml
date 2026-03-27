@@ -79,3 +79,8 @@ spec:
                   key: "latest"
             - name: JIRA_FIELDS
               value: "ProjectKey:CIR,ProjectID:10407,TaskIssueTypeID:10412,EpicIssueTypeID:10413,StartDateCustomFieldKey:customfield_10515,InProgressTransitionID:21,DoneTransitionID:31"
+
+            - name: LINEAR_WORKSPACE_SLUG
+              value: "marvin"
+            - name: LINEAR_ISSUE_PREFIXES
+              value: "ENG,BUG"

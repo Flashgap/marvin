@@ -29,7 +29,7 @@ type service struct {
 	fields *fields
 }
 
-// NewService returns a new GitHub service
+// NewService returns a new JIRA service
 func NewService(cfg *config.Jira, client jira.Client) (Service, error) {
 	f, err := newFields(cfg)
 	if err != nil {
