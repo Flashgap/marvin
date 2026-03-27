@@ -154,6 +154,22 @@ func (mr *MockClientMockRecorder) GetCommit(ctx, webhook, sha, opts any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCommit", reflect.TypeOf((*MockClient)(nil).GetCommit), ctx, webhook, sha, opts)
 }
 
+// GetRulesForBranch mocks base method.
+func (m *MockClient) GetRulesForBranch(ctx context.Context, webhook github.RepoSenderGetter, branch string) ([]*github0.RepositoryRule, *github0.Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRulesForBranch", ctx, webhook, branch)
+	ret0, _ := ret[0].([]*github0.RepositoryRule)
+	ret1, _ := ret[1].(*github0.Response)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetRulesForBranch indicates an expected call of GetRulesForBranch.
+func (mr *MockClientMockRecorder) GetRulesForBranch(ctx, webhook, branch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRulesForBranch", reflect.TypeOf((*MockClient)(nil).GetRulesForBranch), ctx, webhook, branch)
+}
+
 // ListCheckRunsForRef mocks base method.
 func (m *MockClient) ListCheckRunsForRef(ctx context.Context, webhook github.RepoSenderGetter, ref string, opts *github0.ListCheckRunsOptions) (*github0.ListCheckRunsResults, *github0.Response, error) {
 	m.ctrl.T.Helper()

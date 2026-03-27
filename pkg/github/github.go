@@ -12,6 +12,7 @@ type Client interface {
 	AddAssignees(ctx context.Context, webhook RepoSenderGetter, prNumber int, assignees []string) (*github.Issue, *github.Response, error)
 	ListTeamMembers(ctx context.Context, webhook RepoSenderGetter, teamSlug string, opts *github.TeamListTeamMembersOptions) ([]*github.User, *github.Response, error)
 	GetBranchProtection(ctx context.Context, webhook RepoSenderGetter, branch string) (*github.Protection, *github.Response, error)
+	GetRulesForBranch(ctx context.Context, webhook RepoSenderGetter, branch string) ([]*github.RepositoryRule, *github.Response, error)
 	ListReviewers(ctx context.Context, webhook RepoSenderGetter, number int, opts *github.ListOptions) (*github.Reviewers, *github.Response, error)
 	ListReviews(ctx context.Context, webhook RepoSenderGetter, prNumber int, opts *github.ListOptions) ([]*github.PullRequestReview, *github.Response, error)
 	ListCheckRunsForRef(ctx context.Context, webhook RepoSenderGetter, ref string, opts *github.ListCheckRunsOptions) (*github.ListCheckRunsResults, *github.Response, error)

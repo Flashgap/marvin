@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -110,6 +111,43 @@ func (s *service) ListAllReviewers(ctx context.Context, webhook github.RepoSende
 	return allReviewers, nil
 }
 
+// requiredReviewCount returns the number of required approving reviews for the given branch.
+// It first tries the classic branch protection API and falls back to repository rulesets on 404.
+func (s *service) requiredReviewCount(ctx context.Context, webhook github.RepoSenderGetter, branch string) (int, error) {
+	protection, _, err := s.GetBranchProtection(ctx, webhook, branch)
+	if err != nil {
+		var apiErr *gogithub.ErrorResponse
+		if !errors.As(err, &apiErr) || apiErr.Response.StatusCode != http.StatusNotFound {
+			return 0, fmt.Errorf("error getting branch protection: %w", err)
+		}
+		// Branch uses rulesets instead of classic branch protection
+		return s.requiredReviewCountFromRuleset(ctx, webhook, branch)
+	}
+	if rpr := protection.GetRequiredPullRequestReviews(); rpr != nil {
+		return rpr.RequiredApprovingReviewCount, nil
+	}
+	return 1, nil
+}
+
+// requiredReviewCountFromRuleset looks for a pull_request rule in the branch's active rulesets
+// and returns its required approving review count. Defaults to 1 if no rule is found.
+func (s *service) requiredReviewCountFromRuleset(ctx context.Context, webhook github.RepoSenderGetter, branch string) (int, error) {
+	rules, _, err := s.GetRulesForBranch(ctx, webhook, branch)
+	if err != nil {
+		return 0, fmt.Errorf("error getting rules for branch: %w", err)
+	}
+	for _, rule := range rules {
+		if rule.Type == "pull_request" && rule.Parameters != nil {
+			var params gogithub.PullRequestRuleParameters
+			if err := json.Unmarshal(*rule.Parameters, &params); err != nil {
+				return 0, fmt.Errorf("error parsing pull_request rule parameters: %w", err)
+			}
+			return params.RequiredApprovingReviewCount, nil
+		}
+	}
+	return 1, nil
+}
+
 // FindAndAssignReviewers attempts to assign reviewers to the given PR. It returns true if it succeeded
 // All members of the given team are considered after being ranked by current review load.
 // Succeeding in assigning reviewers means that we found and assigned at least enough reviewers to satisfy the main branch protection
@@ -118,11 +156,6 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 	prOwner := pr.GetUser().GetLogin()
 
 	log := middlewares.LoggerFromGHContext(ctx, "github.FindAndAssignReviewers")
-
-	mainProtection, _, err := s.GetBranchProtection(ctx, webhook, mainBranchName)
-	if err != nil {
-		return false, fmt.Errorf("error getting main branch protection: %w", err)
-	}
 
 	allReviewers, err := s.ListAllReviewers(ctx, webhook, pr.GetNumber())
 	if err != nil {
@@ -153,7 +186,10 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 
 	log.Infof("PR has reviewers in team %s: %v", fromTeam, consideredReviewers)
 
-	requiredReviewers := mainProtection.GetRequiredPullRequestReviews().RequiredApprovingReviewCount
+	requiredReviewers, err := s.requiredReviewCount(ctx, webhook, mainBranchName)
+	if err != nil {
+		return false, fmt.Errorf("error getting required reviewer count: %w", err)
+	}
 	if len(consideredReviewers) >= requiredReviewers {
 		log.Infof("PR has enough reviewers: %d / %d", len(consideredReviewers), requiredReviewers)
 		return true, nil
@@ -435,21 +471,11 @@ func (s *service) HasEnoughApprovals(ctx context.Context, webhook github.RepoSen
 	log.Infof("found %d approvals: %+v", len(devReview), devReview)
 
 	mergeBranch := pr.GetBase().GetRef()
-	log.Infof("checking for branch protection on: %q", mergeBranch)
-	protection, _, err := s.GetBranchProtection(ctx, webhook, mergeBranch)
+	requiredReviewers, err := s.requiredReviewCount(ctx, webhook, mergeBranch)
 	if err != nil {
-		return false, fmt.Errorf("error getting branch protection: %w", err)
+		return false, fmt.Errorf("error getting required reviewer count: %w", err)
 	}
-
-	requiredReviewers := 1
-	if requiredPullRequestReviews := protection.GetRequiredPullRequestReviews(); requiredPullRequestReviews != nil {
-		requiredReviewers = requiredPullRequestReviews.RequiredApprovingReviewCount
-		log.Infof("%q branch requires %d reviews", mergeBranch, requiredReviewers)
-	} else {
-		// If there's no protection, we set the required reviewers to 1
-		// To avoid merging without any review.
-		log.Infof("%q branch has no protection, minimum required reviews is 1", mergeBranch)
-	}
+	log.Infof("%q branch requires %d reviews", mergeBranch, requiredReviewers)
 
 	if len(devReview) < requiredReviewers {
 		log.Info("not enough required ACK to add the approved label")

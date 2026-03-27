@@ -36,6 +36,10 @@ func (h *client) GetBranchProtection(ctx context.Context, webhook RepoSenderGett
 	return h.Repositories.GetBranchProtection(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), branch)
 }
 
+func (h *client) GetRulesForBranch(ctx context.Context, webhook RepoSenderGetter, branch string) ([]*github.RepositoryRule, *github.Response, error) {
+	return h.Repositories.GetRulesForBranch(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), branch)
+}
+
 func (h *client) ListReviewers(ctx context.Context, webhook RepoSenderGetter, prNumber int, opts *github.ListOptions) (*github.Reviewers, *github.Response, error) {
 	return h.PullRequests.ListReviewers(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), prNumber, opts)
 }

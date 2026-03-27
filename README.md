@@ -229,7 +229,10 @@ The PR must have no labels other than `dependencies`, `hotfix`, and `Merge 🚀`
 
 ### `auto_review_assign`
 
-When the **Ready for review 👌** label is added, Marvin picks reviewers from the configured team (see `MARVIN_REVIEWERS_TEAMS`). The algorithm assigns people with the smallest current review load (load = total additions across open PRs assigned to them).
+When the **Ready for review 👌** label is added, Marvin picks reviewers from the configured team (see `MARVIN_REVIEWERS_TEAMS`). 
+The algorithm assigns people with the smallest current review load (load = total additions across open PRs assigned to them). 
+The number of reviewers to assign is derived from the branch's required approving review count — 
+Marvin supports both classic branch protection rules and repository rulesets.
 
 ### `update_linear_link`
 
