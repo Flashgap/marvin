@@ -116,8 +116,7 @@ func (s *service) ListAllReviewers(ctx context.Context, webhook github.RepoSende
 func (s *service) requiredReviewCount(ctx context.Context, webhook github.RepoSenderGetter, branch string) (int, error) {
 	protection, _, err := s.GetBranchProtection(ctx, webhook, branch)
 	if err != nil {
-		var apiErr *gogithub.ErrorResponse
-		if !errors.As(err, &apiErr) || apiErr.Response.StatusCode != http.StatusNotFound {
+		if !errors.Is(err, gogithub.ErrBranchNotProtected) {
 			return 0, fmt.Errorf("error getting branch protection: %w", err)
 		}
 		// Branch uses rulesets instead of classic branch protection
