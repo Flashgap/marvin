@@ -170,7 +170,7 @@ func (s *service) OnCheckRun(ctx context.Context, event *gogithub.CheckRunEvent)
 				if errors.Is(err, github.ErrMerge) {
 					log.Errorf("cannot merge PR, cancel merge: %v", err)
 					// Cannot merge, remove the label so user can retry
-					return s.cancelMerge(ctx, event, prNumber)
+					return s.cancelMerge(ctx, event, prNumber, "The PR could not be merged. This is likely due to a merge conflict or a branch protection rule.")
 				}
 				return fmt.Errorf("error during merge: %w", err)
 			}
@@ -252,45 +252,9 @@ func (s *service) checkAndFormatPR(ctx context.Context, webhook pkggithub.RepoSe
 		})
 	}
 
-	parsedPRContent, err := github.ParsePRContents(pr.GetTitle(), pr.GetBody(), pr.GetHead().GetRef(), s.prParserConfig)
-	var comments []string
-
-	if config.CheckLinearLink && errors.Is(err, github.ErrLinearLink) {
-		if !config.UpdateLinearLink || (config.UpdateLinearLink && !parsedPRContent.AddLinearLink) {
-			comments = append(comments, commentMissingLinearURL)
-			log.Warnf("error: %v", github.ErrLinearLink)
-		}
-	}
-
-	if config.CheckTimeSpent && errors.Is(err, github.ErrTimeSpent) {
-		comments = append(comments, commentMissingTimeSpent)
-		log.Warnf("error: %v", github.ErrTimeSpent)
-	}
-
-	if config.CheckDescription && errors.Is(err, github.ErrInvalidDescription) {
-		comments = append(comments, commentWrongDescription)
-		log.Warnf("error: %v", github.ErrInvalidDescription)
-	}
-
-	if config.CheckTitle && errors.Is(err, github.ErrIssueNotFoundInTitle) {
-		// if it's not found and Marvin doesn't add the issue ID, then it's an issue
-		if !config.UpdateTitle || (config.UpdateTitle && !parsedPRContent.AddTitleIssueID) {
-			comments = append(comments, commentInvalidTitle)
-			log.Warnf("error: %v", github.ErrIssueNotFoundInTitle)
-		}
-	}
-
-	if config.AutoMerge {
-		// as the title is used as a commit message, we check the length of it
-		titleToCheck := []rune(parsedPRContent.Title)
-		if config.UpdateTitle {
-			titleToCheck = []rune(parsedPRContent.CleanedTitle)
-		}
-
-		if len(titleToCheck) >= github.CommitTitleSizeLimit {
-			comments = append(comments, fmt.Sprintf(commentTitleTooLong, len(titleToCheck), github.CommitTitleSizeLimit))
-			log.Warn("error: title too long")
-		}
+	comments, parsedPRContent := s.parsePRErrors(pr, config)
+	if len(comments) > 0 {
+		log.Warnf("PR errors found: %v", comments)
 	}
 
 	if config.CheckChangelog && action == pkggithub.EventPullRequestActionSynchronize {
@@ -303,10 +267,11 @@ func (s *service) checkAndFormatPR(ctx context.Context, webhook pkggithub.RepoSe
 		}
 	}
 
-	log.Infof("Parsed contents: %+v\nError: %v\nComments: %+v", parsedPRContent, err, comments)
+	log.Infof("Parsed contents: %+v\nComments: %+v", parsedPRContent, comments)
 
 	// Take actions
 	var errs error
+	var err error
 	if config.AutoAssignee && pr.GetAssignee() == nil {
 		senderLogin := utils.SafeVal(webhook.GetSender().Login)
 		log.Infof("Assigning %s to this PR", senderLogin)
@@ -493,7 +458,19 @@ func (s *service) attemptMerge(ctx context.Context, webhook pkggithub.RepoSender
 		}
 
 		if !ok {
-			return s.cancelMerge(ctx, webhook, pr.GetNumber(), "Marvin's checks isn't ok.")
+			errs, _ := s.parsePRErrors(pr, config)
+			var desc string
+			if len(errs) > 0 {
+				var b strings.Builder
+				fmt.Fprintf(&b, "Marvin's checks failed. Here is why:\n")
+				for _, e := range errs {
+					fmt.Fprintf(&b, "- %s\n", e)
+				}
+				desc = b.String()
+			} else {
+				desc = "Marvin's checks failed."
+			}
+			return s.cancelMerge(ctx, webhook, pr.GetNumber(), desc)
 		}
 	}
 
@@ -668,6 +645,43 @@ func (s *service) notifyChangesRequestedBySlack(ctx context.Context, senderLogin
 	}
 
 	return nil
+}
+
+func (s *service) parsePRErrors(pr *gogithub.PullRequest, config *GitHubRepositoryConfiguration) ([]string, github.PRInfo) {
+	parsedPRContent, err := github.ParsePRContents(pr.GetTitle(), pr.GetBody(), pr.GetHead().GetRef(), s.prParserConfig)
+	var comments []string
+
+	if config.CheckLinearLink && errors.Is(err, github.ErrLinearLink) {
+		if !config.UpdateLinearLink || (config.UpdateLinearLink && !parsedPRContent.AddLinearLink) {
+			comments = append(comments, commentMissingLinearURL)
+		}
+	}
+
+	if config.CheckTimeSpent && errors.Is(err, github.ErrTimeSpent) {
+		comments = append(comments, commentMissingTimeSpent)
+	}
+
+	if config.CheckDescription && errors.Is(err, github.ErrInvalidDescription) {
+		comments = append(comments, commentWrongDescription)
+	}
+
+	if config.CheckTitle && errors.Is(err, github.ErrIssueNotFoundInTitle) {
+		if !config.UpdateTitle || (config.UpdateTitle && !parsedPRContent.AddTitleIssueID) {
+			comments = append(comments, commentInvalidTitle)
+		}
+	}
+
+	if config.AutoMerge {
+		titleToCheck := []rune(parsedPRContent.Title)
+		if config.UpdateTitle {
+			titleToCheck = []rune(parsedPRContent.CleanedTitle)
+		}
+		if len(titleToCheck) >= github.CommitTitleSizeLimit {
+			comments = append(comments, fmt.Sprintf(commentTitleTooLong, len(titleToCheck), github.CommitTitleSizeLimit))
+		}
+	}
+
+	return comments, parsedPRContent
 }
 
 func (s *service) reportCapitalization(ctx context.Context, pr *gogithub.PullRequest) error {
