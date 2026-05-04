@@ -16,7 +16,7 @@ var (
 
 	timeSpentRegex = regexp.MustCompile(`(\d+[.,]?\d*) hour`)
 
-	markdownLineRegex = regexp.MustCompile(`^(\s*[-+*])`)
+	markdownLineRegex = regexp.MustCompile(`^(\s*(?:[-+*]|\d+\.))`)
 	// Regex pattern to match Markdown checkboxes: [ ], [x], [X]
 	removeMarkdownCheckboxesRegex = regexp.MustCompile(`\[([xX\s]?)\]\s*`)
 	htmlCommentRegex              = regexp.MustCompile(`<!--[\s\S]*?-->`)
