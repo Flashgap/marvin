@@ -131,9 +131,11 @@ var _ = Describe("Service tests", func() {
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
 					{Name: utils.Ptr(github.LabelApproved)},
 					{Name: utils.Ptr(github.LabelReadyForReview)},
-				}, nil, nil).Times(2)
+					{Name: utils.Ptr(github.LabelChangesRequired)},
+				}, nil, nil).Times(3)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), reviewEvent, prNumber, []string{github.LabelApproved}).Times(1).Return(nil, nil, nil)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), reviewEvent, prNumber, github.LabelReadyForReview).Times(1).Return(nil, nil)
+				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), reviewEvent, prNumber, github.LabelChangesRequired).Times(1).Return(nil, nil)
 
 				reviews := []*gogithub.PullRequestReview{
 					{

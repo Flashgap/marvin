@@ -227,6 +227,10 @@ func (s *service) OnPullRequestReview(ctx context.Context, event *gogithub.PullR
 					if err = s.githubService.RemoveLabel(ctx, event, pr.GetNumber(), github.LabelReadyForReview); err != nil {
 						return fmt.Errorf("error removing ready for review label: %w", err)
 					}
+
+					if err = s.githubService.RemoveLabel(ctx, event, pr.GetNumber(), github.LabelChangesRequired); err != nil {
+						return fmt.Errorf("error removing changes required label: %w", err)
+					}
 				}
 
 				return s.attemptMerge(ctx, event, pr, config)
