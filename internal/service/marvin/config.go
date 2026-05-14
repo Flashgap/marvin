@@ -15,6 +15,7 @@ type GitHubRepositoryConfiguration struct {
 	AutoChangesRequired bool
 	AutoMerge           bool
 	AutoReviewAssign    bool
+	AutoDraftLabels     bool
 	UpdateTitle         bool
 	CheckTitle          bool
 	CheckDescription    bool
@@ -43,6 +44,10 @@ func withAutoMerge(c *GitHubRepositoryConfiguration) {
 
 func withAutoReviewAssign(c *GitHubRepositoryConfiguration) {
 	c.AutoReviewAssign = true
+}
+
+func withAutoDraftLabels(c *GitHubRepositoryConfiguration) {
+	c.AutoDraftLabels = true
 }
 
 func withUpdateTitle(c *GitHubRepositoryConfiguration) {
@@ -96,6 +101,7 @@ var configToFunc = map[string]optionFunc{
 	"auto_changes_required": withAutoChangesRequired,
 	"auto_merge":            withAutoMerge,
 	"auto_review_assign":    withAutoReviewAssign,
+	"auto_draft_labels":     withAutoDraftLabels,
 	"update_title":          withUpdateTitle,
 	"check_title":           withCheckTitle,
 	"check_description":     withCheckDescription,

@@ -1,15 +1,17 @@
 package github
 
 const (
-	EventPullRequestActionClosed          = "closed"
-	EventPullRequestActionEdited          = "edited"
-	EventPullRequestActionLabeled         = "labeled"
-	EventPullRequestActionOpened          = "opened"
-	EventPullRequestActionReopened        = "reopened"
-	EventPullRequestActionReviewRequested = "review_requested"
-	EventPullRequestActionSynchronize     = "synchronize"
-	EventPullRequestActionUnlabeled       = "unlabeled"
-	PullRequestStateClosed                = "closed"
+	EventPullRequestActionClosed           = "closed"
+	EventPullRequestActionConvertedToDraft = "converted_to_draft"
+	EventPullRequestActionEdited           = "edited"
+	EventPullRequestActionLabeled          = "labeled"
+	EventPullRequestActionOpened           = "opened"
+	EventPullRequestActionReadyForReview   = "ready_for_review"
+	EventPullRequestActionReopened         = "reopened"
+	EventPullRequestActionReviewRequested  = "review_requested"
+	EventPullRequestActionSynchronize      = "synchronize"
+	EventPullRequestActionUnlabeled        = "unlabeled"
+	PullRequestStateClosed                 = "closed"
 
 	EventCheckRunActionCompleted     = "completed"
 	CheckRunStatusCompleted          = "completed"
