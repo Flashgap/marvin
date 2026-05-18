@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 // Github configuration.
 type Github struct {
 	// GithubAppID is the app ID, find it: GitHub app > General
@@ -31,11 +33,18 @@ type Linear struct {
 	// ex: https://linear.app/<workspace-slug>/issue/ENG-123
 	LinearWorkspaceSlug string `envconfig:"LINEAR_WORKSPACE_SLUG" required:"true"`
 
-	// LinearIssuePrefixes is an optional seed/fallback list of issue shorthand prefixes.
-	// At runtime, Marvin fetches the full team list from Linear and refreshes it every hour.
-	// These values are used until the first successful fetch and as a fallback if Linear is unreachable.
+	// LinearIssuePrefixes is the seed/fallback list of issue shorthand prefixes.
+	// If LinearPrefixRefreshInterval is unset, this list is used as-is and never refreshed.
+	// If LinearPrefixRefreshInterval is set, this list seeds the cache until the first successful
+	// fetch and is also used as a fallback if Linear becomes unreachable. It can be left empty in
+	// that mode if you're fine with a brief startup window where no prefixes are known.
 	// ex: ENG,APP,BUG
 	LinearIssuePrefixes []string `envconfig:"LINEAR_ISSUE_PREFIXES"`
+
+	// LinearPrefixRefreshInterval, when set, enables periodic refresh of the team prefix list
+	// from Linear. When unset (zero), the static LinearIssuePrefixes list is used.
+	// ex: 1h, 30m
+	LinearPrefixRefreshInterval time.Duration `envconfig:"LINEAR_PREFIX_REFRESH_INTERVAL"`
 }
 
 // Marvin configuration.

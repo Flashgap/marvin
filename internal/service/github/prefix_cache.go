@@ -11,8 +11,6 @@ import (
 	"github.com/Flashgap/marvin/pkg/logger"
 )
 
-const prefixRefreshInterval = 1 * time.Hour
-
 // PrefixFetcher fetches the current list of Linear team prefixes.
 type PrefixFetcher func(ctx context.Context) ([]string, error)
 
@@ -88,11 +86,12 @@ func (c *PrefixCache) refresh(ctx context.Context) error {
 }
 
 // Start performs an initial fetch (keeping the seed if it fails) and then refreshes the
-// cached prefixes every prefixRefreshInterval until ctx is cancelled.
-func (c *PrefixCache) Start(ctx context.Context) {
+// cached prefixes every interval until ctx is cancelled. If interval is zero or fetcher is nil,
+// no refresh loop is started and the seed values are used as-is.
+func (c *PrefixCache) Start(ctx context.Context, interval time.Duration) {
 	log := logger.WithContext(ctx).WithPrefix("[linear.PrefixCache]")
-	if c.fetcher == nil {
-		log.Info("no fetcher configured; refresh disabled")
+	if c.fetcher == nil || interval <= 0 {
+		log.Infof("refresh disabled; using static prefixes (%d entries)", len(c.load().prefixes))
 		return
 	}
 
@@ -103,7 +102,7 @@ func (c *PrefixCache) Start(ctx context.Context) {
 	}
 
 	go func() {
-		ticker := time.NewTicker(prefixRefreshInterval)
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
