@@ -31,9 +31,11 @@ type Linear struct {
 	// ex: https://linear.app/<workspace-slug>/issue/ENG-123
 	LinearWorkspaceSlug string `envconfig:"LINEAR_WORKSPACE_SLUG" required:"true"`
 
-	// LinearIssuePrefixes is the list of issue shorthand prefixes used by the team.
+	// LinearIssuePrefixes is an optional seed/fallback list of issue shorthand prefixes.
+	// At runtime, Marvin fetches the full team list from Linear and refreshes it every hour.
+	// These values are used until the first successful fetch and as a fallback if Linear is unreachable.
 	// ex: ENG,APP,BUG
-	LinearIssuePrefixes []string `envconfig:"LINEAR_ISSUE_PREFIXES" required:"true"`
+	LinearIssuePrefixes []string `envconfig:"LINEAR_ISSUE_PREFIXES"`
 }
 
 // Marvin configuration.

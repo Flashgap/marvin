@@ -20,6 +20,8 @@ const (
 
 type Client interface {
 	Issue(ctx context.Context, id string) (*Issue, error)
+	// Teams returns the keys (issue prefixes) of all teams in the workspace, including archived ones.
+	Teams(ctx context.Context) ([]string, error)
 }
 
 type client struct {

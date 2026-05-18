@@ -23,42 +23,17 @@ var (
 )
 
 // PRParserConfig holds the runtime configuration needed to parse PR contents.
+// The Prefixes cache provides the Linear workspace slug and the (live) set of
+// team prefixes used to build issue/branch/link regexes.
 type PRParserConfig struct {
-	// WorkspaceSlug is the Linear workspace slug (the path segment in issue URLs).
-	// ex: "my-org" for https://linear.app/my-org/issue/ENG-123
-	WorkspaceSlug string
-	// IssuePrefixes is the list of issue shorthand prefixes used by the team.
-	// ex: ["ENG", "APP", "BUG"]
-	IssuePrefixes []string
+	Prefixes *PrefixCache
 }
 
-func (c PRParserConfig) prefixAlternation() string {
-	quoted := make([]string, len(c.IssuePrefixes))
-	for i, p := range c.IssuePrefixes {
-		quoted[i] = regexp.QuoteMeta(p)
-	}
-	return strings.Join(quoted, "|")
-}
-
-func (c PRParserConfig) titleIssueIDRegex() *regexp.Regexp {
-	return regexp.MustCompile(fmt.Sprintf(`(?i)^(?:%s)(?:\s|-)\d+`, c.prefixAlternation()))
-}
-
-func (c PRParserConfig) branchIDRegex() *regexp.Regexp {
-	return regexp.MustCompile(fmt.Sprintf(`(?i)(?:%s)(?:\s|-)\d+`, c.prefixAlternation()))
-}
-
-func (c PRParserConfig) cleanTitleRegex() *regexp.Regexp {
-	return regexp.MustCompile(fmt.Sprintf(`(?i)(?:(\w+)\s*\/(?:%s)\s*\d+\s*)?`, c.prefixAlternation()))
-}
-
-func (c PRParserConfig) linearLinkRegex() *regexp.Regexp {
-	return regexp.MustCompile(fmt.Sprintf(
-		`(?i)https:\/\/linear\.app\/%s\/issue\/((%s)-\d+)`,
-		regexp.QuoteMeta(c.WorkspaceSlug),
-		c.prefixAlternation(),
-	))
-}
+func (c PRParserConfig) workspaceSlug() string  { return c.Prefixes.WorkspaceSlug() }
+func (c PRParserConfig) titleIssueIDRegex() *regexp.Regexp { return c.Prefixes.load().titleIssueID }
+func (c PRParserConfig) branchIDRegex() *regexp.Regexp    { return c.Prefixes.load().branchID }
+func (c PRParserConfig) cleanTitleRegex() *regexp.Regexp  { return c.Prefixes.load().cleanTitle }
+func (c PRParserConfig) linearLinkRegex() *regexp.Regexp  { return c.Prefixes.load().linearLink }
 
 type PRInfo struct {
 	// Title should be composed by the issue ref
@@ -319,7 +294,7 @@ func LinearLinkFromBranch(branch string, cfg PRParserConfig) (string, string, er
 	}
 
 	issueID := strings.ToUpper(match[0])
-	return fmt.Sprintf("https://linear.app/%s/issue/%s", cfg.WorkspaceSlug, issueID), issueID, nil
+	return fmt.Sprintf("https://linear.app/%s/issue/%s", cfg.workspaceSlug(), issueID), issueID, nil
 }
 
 func RemoveHTMLComments(input string) string {

@@ -55,3 +55,18 @@ func (mr *MockClientMockRecorder) Issue(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Issue", reflect.TypeOf((*MockClient)(nil).Issue), ctx, id)
 }
+
+// Teams mocks base method.
+func (m *MockClient) Teams(ctx context.Context) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Teams", ctx)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Teams indicates an expected call of Teams.
+func (mr *MockClientMockRecorder) Teams(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Teams", reflect.TypeOf((*MockClient)(nil).Teams), ctx)
+}
