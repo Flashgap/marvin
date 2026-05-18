@@ -30,15 +30,8 @@ type PrefixCache struct {
 	snapshot      atomic.Pointer[prefixSnapshot]
 }
 
-// NewStaticPrefixCache returns a cache that never refreshes. Useful for tests and as a fallback.
-func NewStaticPrefixCache(prefixes []string, workspaceSlug string) *PrefixCache {
-	c := &PrefixCache{workspaceSlug: workspaceSlug}
-	c.snapshot.Store(buildPrefixSnapshot(prefixes, workspaceSlug))
-	return c
-}
-
-// NewPrefixCache builds a cache seeded with the given prefixes and refreshed via fetcher.
-// Call Start to begin the background refresh loop.
+// NewPrefixCache builds a cache seeded with the given prefixes. If fetcher is nil (or Start is
+// called with a zero interval), the seed values are used as-is and never refreshed.
 func NewPrefixCache(workspaceSlug string, seed []string, fetcher PrefixFetcher) *PrefixCache {
 	c := &PrefixCache{workspaceSlug: workspaceSlug, fetcher: fetcher}
 	c.snapshot.Store(buildPrefixSnapshot(seed, workspaceSlug))

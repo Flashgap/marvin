@@ -28,7 +28,7 @@ const (
 )
 
 var testPRParserConfig = github.PRParserConfig{
-	Prefixes: github.NewStaticPrefixCache([]string{"ENG", "APP", "BUG", "PRO"}, "your-org"),
+	Prefixes: github.NewPrefixCache("your-org", []string{"ENG", "APP", "BUG", "PRO"}, nil),
 }
 
 func Test(t *testing.T) {
