@@ -28,8 +28,7 @@ const (
 )
 
 var testPRParserConfig = github.PRParserConfig{
-	WorkspaceSlug: "your-org",
-	IssuePrefixes: []string{"ENG", "APP", "BUG", "PRO"},
+	Prefixes: github.NewPrefixCache("your-org", []string{"ENG", "APP", "BUG", "PRO"}, nil),
 }
 
 func Test(t *testing.T) {

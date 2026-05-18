@@ -60,11 +60,14 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		slackClient := slack.NewClient(cfg.SlackBotToken)
 		linearClient := linear.NewClient(ctx, cfg.LinearOAuthToken, cfg.LinearWorkspaceSlug)
 
-		repoConfigs := marvin.GetGitHubRepositoryConfigurations(cfg.Marvin)
-		prParserConfig := github.PRParserConfig{
-			WorkspaceSlug: cfg.LinearWorkspaceSlug,
-			IssuePrefixes: cfg.LinearIssuePrefixes,
+		if cfg.LinearPrefixRefreshInterval <= 0 && len(cfg.LinearIssuePrefixes) == 0 {
+			return fmt.Errorf("either LINEAR_ISSUE_PREFIXES or LINEAR_PREFIX_REFRESH_INTERVAL must be set")
 		}
+
+		repoConfigs := marvin.GetGitHubRepositoryConfigurations(cfg.Marvin)
+		prefixCache := github.NewPrefixCache(cfg.LinearWorkspaceSlug, cfg.LinearIssuePrefixes, linearClient.Teams)
+		prefixCache.Start(ctx, cfg.LinearPrefixRefreshInterval)
+		prParserConfig := github.PRParserConfig{Prefixes: prefixCache}
 		s.MarvinService = marvin.NewService(s.GithubService, s.JiraService, linearClient, slackClient, repoConfigs, prParserConfig)
 	}
 

@@ -43,6 +43,27 @@ type issueQuery struct {
 	} `graphql:"issue(id: $id)"`
 }
 
+type teamsQuery struct {
+	Teams struct {
+		Nodes []struct {
+			Key graphql.String
+		}
+	} `graphql:"teams(includeArchived: $includeArchived)"`
+}
+
+func (c *client) Teams(ctx context.Context) ([]string, error) {
+	var query teamsQuery
+	if err := c.Query(ctx, &query, map[string]any{"includeArchived": graphql.Boolean(true)}); err != nil {
+		return nil, fmt.Errorf("error performing graphQL query: %w", err)
+	}
+
+	keys := make([]string, 0, len(query.Teams.Nodes))
+	for _, node := range query.Teams.Nodes {
+		keys = append(keys, string(node.Key))
+	}
+	return keys, nil
+}
+
 func (c *client) Issue(ctx context.Context, id string) (*Issue, error) {
 	var query issueQuery
 	if err := c.Query(ctx, &query, map[string]any{"id": graphql.String(id)}); err != nil {
