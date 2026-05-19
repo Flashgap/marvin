@@ -11,8 +11,7 @@ import (
 )
 
 var testPRParserConfig = github.PRParserConfig{
-	WorkspaceSlug: "your-org",
-	IssuePrefixes: []string{"ENG", "APP", "BUG", "PRO"},
+	Prefixes: github.NewPrefixCache("your-org", []string{"ENG", "APP", "BUG", "PRO"}, nil),
 }
 
 var _ = Describe("PR Parser tests", func() {
