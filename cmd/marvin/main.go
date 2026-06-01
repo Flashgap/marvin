@@ -14,7 +14,7 @@ import (
 func main() {
 	mainCtx := context.Background()
 	ctx, stop := server.NewServerContext(mainCtx)
-	cfg := marvin.NewConfig()
+	cfg := marvin.NewConfig(ctx)
 	logger.Init(cfg.LoggerConfig())
 	config.PrintConfig(cfg)
 

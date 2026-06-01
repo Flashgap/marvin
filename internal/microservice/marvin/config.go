@@ -20,7 +20,7 @@ type Config struct {
 	config.Marvin
 }
 
-func NewConfig() *Config {
+func NewConfig(ctx context.Context) *Config {
 	cfg := new(Config)
 	if err := envconfig.Process("", cfg); err != nil {
 		logrus.Fatal(err)
@@ -30,7 +30,7 @@ func NewConfig() *Config {
 		logrus.Fatalf("invalid configuration: %v", err)
 	}
 
-	if err := cfg.Base.Load(context.TODO()); err != nil {
+	if err := cfg.Load(ctx); err != nil {
 		logrus.Fatalf("failed to load cloud provider metadata: %v", err)
 	}
 
