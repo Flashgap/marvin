@@ -1,6 +1,8 @@
 package marvin
 
 import (
+	"context"
+
 	"github.com/Flashgap/logrus"
 	"github.com/kelseyhightower/envconfig"
 
@@ -26,6 +28,10 @@ func NewConfig() *Config {
 
 	if err := validate.Struct(cfg); err != nil {
 		logrus.Fatalf("invalid configuration: %v", err)
+	}
+
+	if err := cfg.Base.Load(context.TODO()); err != nil {
+		logrus.Fatalf("failed to load cloud provider metadata: %v", err)
 	}
 
 	return cfg
