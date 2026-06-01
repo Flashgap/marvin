@@ -190,6 +190,26 @@ Marvin is configured entirely through environment variables. Copy `config/local/
 | `InProgressTransitionID` | `GET <JIRA_HOST>/rest/api/latest/issue/<KEY>/transitions` |
 | `DoneTransitionID` | Same endpoint |
 
+### Database (optional)
+
+Marvin can optionally connect to a SQL database (Postgres or MySQL) for future
+long-term memory features. The client is created at startup and disabled when
+`DB_HOST` is empty.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DB_HOST` | Database host. **Empty disables the database client entirely.** | _(empty)_ |
+| `DB_DRIVER` | `postgres` or `mysql`. Required when `DB_HOST` is set. | _(empty)_ |
+| `DB_PORT` | Database port. | `5432` (postgres), `3306` (mysql) |
+| `DB_USER` | Database user. | _(empty)_ |
+| `DB_PASSWORD` | Database password. | _(empty)_ |
+| `DB_NAME` | Database name. | _(empty)_ |
+| `DB_PARAMS` | Driver-specific params, e.g. `sslmode:disable,connect_timeout:5`. | _(empty)_ |
+| `DB_MAX_OPEN_CONNS` | Max open connections. | `25` |
+| `DB_MAX_IDLE_CONNS` | Max idle connections. | `5` |
+| `DB_CONN_MAX_LIFETIME` | Max connection lifetime. | `30m` |
+| `DB_CONN_MAX_IDLE_TIME` | Max connection idle time. | `5m` |
+
 ---
 
 ## PR body format

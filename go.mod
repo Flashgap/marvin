@@ -5,13 +5,16 @@ go 1.26.0
 require (
 	cloud.google.com/go/compute/metadata v0.9.0
 	cloud.google.com/go/errorreporting v0.4.0
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/Flashgap/logrus v1.8.16
 	github.com/bradleyfalzon/ghinstallation/v2 v2.13.0
 	github.com/gin-contrib/cors v1.7.3
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-playground/validator/v10 v10.26.0
+	github.com/go-sql-driver/mysql v1.10.0
 	github.com/google/go-github/v63 v63.0.0
 	github.com/google/uuid v1.6.0
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/onsi/ginkgo/v2 v2.27.1
 	github.com/onsi/gomega v1.38.2
@@ -25,6 +28,7 @@ require (
 require (
 	cloud.google.com/go/auth v0.17.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/bytedance/sonic v1.12.7 // indirect
 	github.com/bytedance/sonic/loader v0.2.3 // indirect
@@ -49,6 +53,9 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.7 // indirect
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect

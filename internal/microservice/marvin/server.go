@@ -127,4 +127,11 @@ func (ms *Server) Close(ctx context.Context) {
 			log.Criticalf("error shutting down error reporting client: %v", err)
 		}
 	}
+
+	// The database client is optional and may be nil.
+	if ms.services.DB != nil {
+		if err := ms.services.DB.Close(); err != nil {
+			log.Criticalf("error shutting down database client: %v", err)
+		}
+	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/Flashgap/marvin/internal/service/github"
 	"github.com/Flashgap/marvin/internal/service/jira"
 	"github.com/Flashgap/marvin/internal/service/marvin"
+	"github.com/Flashgap/marvin/pkg/database"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 	pkgjira "github.com/Flashgap/marvin/pkg/jira"
 	"github.com/Flashgap/marvin/pkg/linear"
@@ -21,6 +22,7 @@ import (
 
 type Services struct {
 	errorClient   *errorreporting.Client
+	DB            database.Client
 	GithubService github.Service
 	JiraService   jira.Service
 	MarvinService marvin.Service
@@ -33,6 +35,14 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 			return fmt.Errorf("cannot init error reporting client: %w", err)
 		}
 		s.errorClient = errorClient
+	}
+
+	if s.DB == nil && cfg.Enabled() {
+		dbClient, err := database.NewClient(ctx, cfg.DatabaseConfig())
+		if err != nil {
+			return fmt.Errorf("cannot init database client: %w", err)
+		}
+		s.DB = dbClient
 	}
 
 	if s.GithubService == nil {
