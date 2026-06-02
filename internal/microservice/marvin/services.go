@@ -9,9 +9,12 @@ import (
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	gogithub "github.com/google/go-github/v63/github"
 
+	"github.com/Flashgap/marvin/internal/migrations"
 	"github.com/Flashgap/marvin/internal/service/github"
 	"github.com/Flashgap/marvin/internal/service/jira"
+	"github.com/Flashgap/marvin/internal/service/lock"
 	"github.com/Flashgap/marvin/internal/service/marvin"
+	slacksvc "github.com/Flashgap/marvin/internal/service/slack"
 	"github.com/Flashgap/marvin/pkg/database"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 	pkgjira "github.com/Flashgap/marvin/pkg/jira"
@@ -23,9 +26,11 @@ import (
 type Services struct {
 	errorClient   *errorreporting.Client
 	DB            database.Client
+	SlackService  slacksvc.Service
 	GithubService github.Service
 	JiraService   jira.Service
 	MarvinService marvin.Service
+	LockService   lock.Service
 }
 
 func (s *Services) initialize(ctx context.Context, cfg *Config) error {
@@ -43,6 +48,22 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 			return fmt.Errorf("cannot init database client: %w", err)
 		}
 		s.DB = dbClient
+	}
+
+	// One Slack client shared across services. The thin pkg/slack client is
+	// wrapped once in the higher-level slack service so future commands have a
+	// single integration point.
+	slackClient := slack.NewClient(cfg.SlackBotToken)
+	if s.SlackService == nil {
+		s.SlackService = slacksvc.NewService(slackClient)
+	}
+
+	if s.LockService == nil && s.DB != nil {
+		lockSvc, err := lock.NewService(ctx, s.DB, s.SlackService, migrations.FS)
+		if err != nil {
+			return fmt.Errorf("cannot init lock service: %w", err)
+		}
+		s.LockService = lockSvc
 	}
 
 	if s.GithubService == nil {
@@ -67,7 +88,6 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 	}
 
 	if s.MarvinService == nil {
-		slackClient := slack.NewClient(cfg.SlackBotToken)
 		linearClient := linear.NewClient(ctx, cfg.LinearOAuthToken, cfg.LinearWorkspaceSlug)
 
 		if cfg.LinearPrefixRefreshInterval <= 0 && len(cfg.LinearIssuePrefixes) == 0 {

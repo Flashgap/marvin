@@ -24,4 +24,7 @@ const (
 	Linear         = "linear"   // Linear controller route
 	LinearLogin    = "login"    // Sub path of Linear
 	LinearCallback = "callback" // Sub path of Linear
+
+	Slack     = "slack" // Slack controller route
+	SlackLock = "lock"  // Sub path of Slack — handles the /lock slash command
 )

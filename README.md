@@ -210,6 +210,48 @@ long-term memory features. The client is created at startup and disabled when
 | `DB_CONN_MAX_LIFETIME` | Max connection lifetime. | `30m` |
 | `DB_CONN_MAX_IDLE_TIME` | Max connection idle time. | `5m` |
 
+#### Migrations (Atlas)
+
+Schema changes live as versioned SQL files under `internal/migrations/<driver>/`,
+managed by [Atlas](https://atlasgo.io/). Marvin applies pending migrations at
+startup whenever the database is enabled — there is nothing to run manually in
+production.
+
+To author a new migration locally:
+
+```bash
+# Install the Atlas CLI: https://atlasgo.io/getting-started
+make migrate-diff driver=postgres name=add_something
+make migrate-diff driver=mysql    name=add_something   # keep both in lockstep
+```
+
+The `make migrate-diff` target also re-runs `make migrate-hash`, which
+regenerates the `atlas.sum` integrity file in each driver subdirectory.
+
+### Slack `/lock` slash command (optional)
+
+A PwnBot-style game: anyone who finds a colleague's laptop unlocked types
+`/lock @theirhandle` from the unlocked laptop. The caller (= the victim, since
+the command is being sent from their Slack) loses a point, the mentioned user
+(= the finder) gains one. The victim later receives a DM from Marvin telling
+them what happened. Calling `/lock` with no argument shows an ephemeral
+leaderboard (top 3 / bottom 3).
+
+The endpoint is **gated on the database**: without `DB_HOST`, requests return
+`501 Not Implemented`.
+
+**Slack app configuration**
+- Add a slash command with the request URL `https://<your-marvin>/marvin/_webhook/slack/lock`.
+- Turn on **"Escape channels, users, and links"** — Marvin parses the
+  `<@U12345|handle>` form Slack sends with that setting enabled.
+- Bot token scopes: `chat:write`, `im:write`, `users:read`.
+
+**Env vars**
+
+| Variable | Description |
+|----------|-------------|
+| `MARVIN_SLACK_SIGNING_SECRET` | Slack app signing secret used to verify the `X-Slack-Signature` header. Required outside dev. |
+
 ---
 
 ## PR body format

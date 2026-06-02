@@ -137,7 +137,7 @@ var _ = Describe("Client (sqlmock)", func() {
 		Expect(err).ToNot(HaveOccurred())
 		mock.ExpectPing()
 
-		c := newClientFromDB(db)
+		c := NewTestClient(db, DriverPostgres)
 		Expect(c.Ping(ctx)).To(Succeed())
 		Expect(c.DB()).To(BeIdenticalTo(db))
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
@@ -148,7 +148,7 @@ var _ = Describe("Client (sqlmock)", func() {
 		Expect(err).ToNot(HaveOccurred())
 		mock.ExpectClose()
 
-		c := newClientFromDB(db)
+		c := NewTestClient(db, DriverPostgres)
 		Expect(c.Close()).To(Succeed())
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})

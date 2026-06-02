@@ -12,10 +12,12 @@ import (
 var (
 	ErrOpenConversation = errors.New("error opening conversation")
 	ErrPostMessage      = errors.New("error posting message")
+	ErrGetUser          = errors.New("error fetching user")
 )
 
 type Client interface {
 	SendMessage(ctx context.Context, userID, message string) error
+	GetUser(ctx context.Context, userID string) (*slack.User, error)
 }
 
 type slackClient struct {
@@ -38,4 +40,12 @@ func (s *slackClient) SendMessage(ctx context.Context, userID, message string) e
 		return fmt.Errorf("%w: %w", ErrPostMessage, err)
 	}
 	return nil
+}
+
+func (s *slackClient) GetUser(ctx context.Context, userID string) (*slack.User, error) {
+	u, err := s.GetUserInfoContext(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrGetUser, err)
+	}
+	return u, nil
 }

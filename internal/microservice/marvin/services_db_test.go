@@ -8,6 +8,7 @@ import (
 	"github.com/Flashgap/marvin/internal/microservice/marvin"
 	"github.com/Flashgap/marvin/internal/service/github"
 	mock_jira "github.com/Flashgap/marvin/internal/service/jira/mock"
+	mock_lock "github.com/Flashgap/marvin/internal/service/lock/mock"
 	mock_marvin "github.com/Flashgap/marvin/internal/service/marvin/mock"
 	mock_database "github.com/Flashgap/marvin/pkg/database/mock"
 	mock_github "github.com/Flashgap/marvin/pkg/github/mock"
@@ -33,6 +34,7 @@ var _ = Describe("Services database wiring", func() {
 		dbMock := mock_database.NewMockClient(mockCtrl)
 		services := &marvin.Services{
 			DB:            dbMock,
+			LockService:   mock_lock.NewMockService(mockCtrl), // skip lock service construction (Migrate call)
 			MarvinService: mock_marvin.NewMockService(mockCtrl),
 			GithubService: github.NewService(mock_github.NewMockClient(mockCtrl)),
 			JiraService:   mock_jira.NewMockService(mockCtrl),

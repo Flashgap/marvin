@@ -22,6 +22,11 @@ type Github struct {
 type Slack struct {
 	// SlackBotToken holds the secret for the Slack bot allowing services to talk as a Slack app
 	SlackBotToken string `envconfig:"MARVIN_SLACK_BOT_TOKEN" required:"true" secret:"true"`
+
+	// SlackSigningSecret authenticates inbound slash-command requests using
+	// the X-Slack-Signature HMAC scheme. Required to enable the /lock command;
+	// when empty (and not in dev), inbound requests are rejected.
+	SlackSigningSecret string `envconfig:"MARVIN_SLACK_SIGNING_SECRET" secret:"true"`
 }
 
 // Linear configuration.

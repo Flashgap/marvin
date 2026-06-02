@@ -12,8 +12,10 @@ package mock_database
 import (
 	context "context"
 	sql "database/sql"
+	fs "io/fs"
 	reflect "reflect"
 
+	database "github.com/Flashgap/marvin/pkg/database"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -67,6 +69,48 @@ func (m *MockClient) DB() *sql.DB {
 func (mr *MockClientMockRecorder) DB() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DB", reflect.TypeOf((*MockClient)(nil).DB))
+}
+
+// Dialect mocks base method.
+func (m *MockClient) Dialect() database.Dialect {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Dialect")
+	ret0, _ := ret[0].(database.Dialect)
+	return ret0
+}
+
+// Dialect indicates an expected call of Dialect.
+func (mr *MockClientMockRecorder) Dialect() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Dialect", reflect.TypeOf((*MockClient)(nil).Dialect))
+}
+
+// Driver mocks base method.
+func (m *MockClient) Driver() database.Driver {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Driver")
+	ret0, _ := ret[0].(database.Driver)
+	return ret0
+}
+
+// Driver indicates an expected call of Driver.
+func (mr *MockClientMockRecorder) Driver() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Driver", reflect.TypeOf((*MockClient)(nil).Driver))
+}
+
+// Migrate mocks base method.
+func (m *MockClient) Migrate(ctx context.Context, arg1 fs.FS) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Migrate", ctx, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Migrate indicates an expected call of Migrate.
+func (mr *MockClientMockRecorder) Migrate(ctx, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Migrate", reflect.TypeOf((*MockClient)(nil).Migrate), ctx, arg1)
 }
 
 // Ping mocks base method.
