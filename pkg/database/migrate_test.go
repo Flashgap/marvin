@@ -26,14 +26,14 @@ var _ = Describe("applyMigrations", func() {
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		// 0001 is already applied.
-		mock.ExpectQuery("SELECT version FROM marvin_schema_migrations").
+		mock.ExpectQuery(`SELECT .*version.* FROM .*marvin_schema_migrations`).
 			WillReturnRows(sqlmock.NewRows([]string{"version"}).AddRow("0001_init"))
 
 		// 0002 applies in a single tx with both statements.
 		mock.ExpectBegin()
 		mock.ExpectExec("CREATE TABLE b").WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec("CREATE TABLE c").WillReturnResult(sqlmock.NewResult(0, 0))
-		mock.ExpectExec("INSERT INTO marvin_schema_migrations").
+		mock.ExpectExec(`INSERT INTO .*marvin_schema_migrations`).
 			WithArgs("0002_more").
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
@@ -53,7 +53,7 @@ var _ = Describe("applyMigrations", func() {
 
 		mock.ExpectExec("CREATE TABLE IF NOT EXISTS marvin_schema_migrations").
 			WillReturnResult(sqlmock.NewResult(0, 0))
-		mock.ExpectQuery("SELECT version FROM marvin_schema_migrations").
+		mock.ExpectQuery(`SELECT .*version.* FROM .*marvin_schema_migrations`).
 			WillReturnRows(sqlmock.NewRows([]string{"version"}).AddRow("0001_init"))
 
 		Expect(applyMigrations(ctx, db, DriverPostgres, mfs)).To(Succeed())

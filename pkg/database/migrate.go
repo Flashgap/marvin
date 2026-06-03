@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"ariga.io/atlas/sql/migrate"
+	"github.com/doug-martin/goqu/v9"
 )
 
 // migrationsTable is the bookkeeping table that records which Atlas migration
@@ -43,7 +44,7 @@ func applyMigrations(ctx context.Context, db *sql.DB, driver Driver, mfs fs.FS) 
 		return err
 	}
 
-	applied, err := loadAppliedVersions(ctx, db)
+	applied, err := loadAppliedVersions(ctx, db, driver)
 	if err != nil {
 		return err
 	}
@@ -83,8 +84,16 @@ func ensureMigrationsTable(ctx context.Context, db *sql.DB, driver Driver) error
 	return nil
 }
 
-func loadAppliedVersions(ctx context.Context, db *sql.DB) (map[string]struct{}, error) {
-	rows, err := db.QueryContext(ctx, fmt.Sprintf("SELECT version FROM %s", migrationsTable))
+func loadAppliedVersions(ctx context.Context, db *sql.DB, driver Driver) (map[string]struct{}, error) {
+	q, _, err := goqu.Dialect(string(driver)).
+		From(migrationsTable).
+		Select("version").
+		Prepared(true).
+		ToSQL()
+	if err != nil {
+		return nil, fmt.Errorf("migrate: building select: %w", err)
+	}
+	rows, err := db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("migrate: reading applied versions: %w", err)
 	}
@@ -121,14 +130,18 @@ func applyFile(ctx context.Context, db *sql.DB, driver Driver, version string, s
 		}
 	}
 
-	// migrationsTable is a package constant and the placeholder is dialect-derived;
-	// the only user-supplied value (version) is passed as a parameter below.
-	insert := fmt.Sprintf( //nolint:gosec // G201: no user input in the format string
-		"INSERT INTO %s (version, applied_at) VALUES (%s, NOW())",
-		migrationsTable,
-		dialectFor(driver).Placeholder(1),
-	)
-	if _, err := tx.ExecContext(ctx, insert, version); err != nil {
+	insert, args, err := goqu.Dialect(string(driver)).
+		Insert(migrationsTable).
+		Prepared(true).
+		Rows(goqu.Record{
+			"version":    version,
+			"applied_at": goqu.L("NOW()"),
+		}).
+		ToSQL()
+	if err != nil {
+		return fmt.Errorf("building insert: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, insert, args...); err != nil {
 		return fmt.Errorf("recording version: %w", err)
 	}
 

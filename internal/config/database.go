@@ -45,8 +45,8 @@ type Database struct {
 	DBConnMaxIdleTime time.Duration `envconfig:"DB_CONN_MAX_IDLE_TIME" default:"5m"`
 }
 
-// Enabled reports whether the database client should be initialized.
-func (c Database) Enabled() bool {
+// DBEnabled reports whether the database client should be initialized.
+func (c Database) DBEnabled() bool {
 	return c.DBHost != ""
 }
 

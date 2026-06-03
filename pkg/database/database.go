@@ -12,10 +12,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/doug-martin/goqu/v9"
+
 	// Driver registrations. Both drivers are always linked in; the runtime
 	// configuration selects which one is used.
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	// goqu dialect registrations. The package's blank imports register the
+	// dialects in init(), making them accessible via goqu.Dialect("postgres") /
+	// goqu.Dialect("mysql").
+	_ "github.com/doug-martin/goqu/v9/dialect/mysql"
+	_ "github.com/doug-martin/goqu/v9/dialect/postgres"
 )
 
 // Driver identifies a supported SQL driver.
@@ -35,8 +43,10 @@ type Client interface {
 	DB() *sql.DB
 	// Driver returns the configured driver.
 	Driver() Driver
-	// Dialect returns the driver-specific SQL dialect (placeholders, UPSERTs).
-	Dialect() Dialect
+	// Builder returns a dialect-aware goqu builder for composing SQL.
+	// Callers should chain `.Prepared(true)` before `.ToSQL()` to get
+	// parameterized queries (goqu inlines literals by default).
+	Builder() *goqu.DialectWrapper
 	// Ping verifies the connection is alive.
 	Ping(ctx context.Context) error
 	// Migrate applies any pending Atlas-formatted SQL migrations embedded under
@@ -112,7 +122,10 @@ func NewTestClient(db *sql.DB, driver Driver) Client {
 
 func (c *client) DB() *sql.DB                    { return c.db }
 func (c *client) Driver() Driver                 { return c.driver }
-func (c *client) Dialect() Dialect               { return dialectFor(c.driver) }
+func (c *client) Builder() *goqu.DialectWrapper {
+	d := goqu.Dialect(string(c.driver))
+	return &d
+}
 func (c *client) Ping(ctx context.Context) error { return c.db.PingContext(ctx) }
 func (c *client) Close() error                   { return c.db.Close() }
 

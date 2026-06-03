@@ -42,7 +42,7 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		s.errorClient = errorClient
 	}
 
-	if s.DB == nil && cfg.Enabled() {
+	if s.DB == nil && cfg.DBEnabled() {
 		dbClient, err := database.NewClient(ctx, cfg.DatabaseConfig())
 		if err != nil {
 			return fmt.Errorf("cannot init database client: %w", err)

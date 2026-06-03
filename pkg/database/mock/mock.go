@@ -16,6 +16,7 @@ import (
 	reflect "reflect"
 
 	database "github.com/Flashgap/marvin/pkg/database"
+	goqu "github.com/doug-martin/goqu/v9"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -41,6 +42,20 @@ func NewMockClient(ctrl *gomock.Controller) *MockClient {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
+}
+
+// Builder mocks base method.
+func (m *MockClient) Builder() *goqu.DialectWrapper {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Builder")
+	ret0, _ := ret[0].(*goqu.DialectWrapper)
+	return ret0
+}
+
+// Builder indicates an expected call of Builder.
+func (mr *MockClientMockRecorder) Builder() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Builder", reflect.TypeOf((*MockClient)(nil).Builder))
 }
 
 // Close mocks base method.
@@ -69,20 +84,6 @@ func (m *MockClient) DB() *sql.DB {
 func (mr *MockClientMockRecorder) DB() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DB", reflect.TypeOf((*MockClient)(nil).DB))
-}
-
-// Dialect mocks base method.
-func (m *MockClient) Dialect() database.Dialect {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Dialect")
-	ret0, _ := ret[0].(database.Dialect)
-	return ret0
-}
-
-// Dialect indicates an expected call of Dialect.
-func (mr *MockClientMockRecorder) Dialect() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Dialect", reflect.TypeOf((*MockClient)(nil).Dialect))
 }
 
 // Driver mocks base method.

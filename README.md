@@ -210,6 +210,10 @@ long-term memory features. The client is created at startup and disabled when
 | `DB_CONN_MAX_LIFETIME` | Max connection lifetime. | `30m` |
 | `DB_CONN_MAX_IDLE_TIME` | Max connection idle time. | `5m` |
 
+Marvin composes its SQL through [goqu](https://github.com/doug-martin/goqu), so
+services build dialect-agnostic query expressions and `pkg/database` renders
+them for the configured driver.
+
 #### Migrations (Atlas)
 
 Schema changes live as versioned SQL files under `internal/migrations/<driver>/`,

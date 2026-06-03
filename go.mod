@@ -9,6 +9,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/Flashgap/logrus v1.8.16
 	github.com/bradleyfalzon/ghinstallation/v2 v2.13.0
+	github.com/doug-martin/goqu/v9 v9.19.0
 	github.com/gin-contrib/cors v1.7.3
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-playground/validator/v10 v10.26.0

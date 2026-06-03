@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	lock "github.com/Flashgap/marvin/internal/service/lock"
+	slack "github.com/slack-go/slack"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -57,16 +58,16 @@ func (mr *MockServiceMockRecorder) Leaderboard(ctx any) *gomock.Call {
 }
 
 // Lock mocks base method.
-func (m *MockService) Lock(ctx context.Context, payload lock.SlashPayload) (*lock.Response, error) {
+func (m *MockService) Lock(ctx context.Context, cmd slack.SlashCommand) (*lock.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Lock", ctx, payload)
+	ret := m.ctrl.Call(m, "Lock", ctx, cmd)
 	ret0, _ := ret[0].(*lock.Response)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Lock indicates an expected call of Lock.
-func (mr *MockServiceMockRecorder) Lock(ctx, payload any) *gomock.Call {
+func (mr *MockServiceMockRecorder) Lock(ctx, cmd any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lock", reflect.TypeOf((*MockService)(nil).Lock), ctx, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lock", reflect.TypeOf((*MockService)(nil).Lock), ctx, cmd)
 }

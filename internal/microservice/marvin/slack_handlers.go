@@ -1,56 +1,43 @@
 package marvin
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gin-gonic/gin/binding"
+	"github.com/slack-go/slack"
 
 	"github.com/Flashgap/marvin/internal/service/lock"
-	apperrors "github.com/Flashgap/marvin/internal/web/errors"
+	weberrors "github.com/Flashgap/marvin/internal/web/errors"
+	stderror "github.com/Flashgap/marvin/pkg/stderr"
 )
-
-// slackSlashCommand is the subset of Slack's slash-command form payload that
-// the lock controller cares about.
-type slackSlashCommand struct {
-	UserID   string `form:"user_id"`
-	UserName string `form:"user_name"`
-	Text     string `form:"text"`
-}
 
 func (ctrl *Controller) lockHandler(c *gin.Context) {
 	if ctrl.lockService == nil {
-		c.AbortWithStatusJSON(http.StatusNotImplemented, apperrors.GenericNotImplementedError)
+		c.AbortWithStatusJSON(http.StatusNotImplemented, weberrors.GenericNotImplementedError)
 		return
 	}
 
-	var cmd slackSlashCommand
-	if !ctrl.Bind(c, &cmd, binding.Form) {
+	cmd, err := slack.SlashCommandParse(c.Request)
+	if err != nil {
+		ctrl.Error(c, fmt.Errorf("%w: parsing slash command: %w", stderror.ErrParsing, err))
 		return
 	}
+	cmd.Text = strings.TrimSpace(cmd.Text)
 
-	payload := lock.SlashPayload{
-		UserID:   cmd.UserID,
-		UserName: cmd.UserName,
-		Text:     strings.TrimSpace(cmd.Text),
-	}
-
-	var (
-		resp *lock.Response
-		err  error
-	)
-	if payload.Text == "" {
+	var resp *lock.Response
+	if cmd.Text == "" {
 		resp, err = ctrl.lockService.Leaderboard(c.Request.Context())
 	} else {
-		resp, err = ctrl.lockService.Lock(c.Request.Context(), payload)
+		resp, err = ctrl.lockService.Lock(c.Request.Context(), cmd)
 	}
 	if ctrl.Error(c, err) {
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"response_type": string(resp.Type),
+		"response_type": resp.Type,
 		"text":          resp.Text,
 	})
 }

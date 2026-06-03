@@ -7,6 +7,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/slack-go/slack"
 	"go.uber.org/mock/gomock"
 
 	"github.com/Flashgap/marvin/internal/microservice/marvin"
@@ -60,8 +61,8 @@ var _ = Describe("POST /marvin/_webhook/slack/lock", func() {
 		mockCtrl := gomock.NewController(GinkgoT())
 		mockLock := mock_lock.NewMockService(mockCtrl)
 		mockLock.EXPECT().
-			Lock(gomock.Any(), lock.SlashPayload{UserID: "UVICTIM", UserName: "victim", Text: "<@UFINDER|finder>"}).
-			Return(&lock.Response{Type: lock.ResponseEphemeral, Text: "ok"}, nil)
+			Lock(gomock.Any(), slack.SlashCommand{UserID: "UVICTIM", UserName: "victim", Text: "<@UFINDER|finder>"}).
+			Return(&lock.Response{Type: slack.ResponseTypeEphemeral, Text: "ok"}, nil)
 
 		env := buildLockTest(ctx, mockLock)
 		rec := env.ServeHTTPRequest(http.MethodPost, path, slackFormHeaders,
@@ -77,7 +78,7 @@ var _ = Describe("POST /marvin/_webhook/slack/lock", func() {
 	It("dispatches to Leaderboard when text is empty", func(ctx SpecContext) {
 		mockCtrl := gomock.NewController(GinkgoT())
 		mockLock := mock_lock.NewMockService(mockCtrl)
-		mockLock.EXPECT().Leaderboard(gomock.Any()).Return(&lock.Response{Type: lock.ResponseEphemeral, Text: "top..."}, nil)
+		mockLock.EXPECT().Leaderboard(gomock.Any()).Return(&lock.Response{Type: slack.ResponseTypeEphemeral, Text: "top..."}, nil)
 
 		env := buildLockTest(ctx, mockLock)
 		rec := env.ServeHTTPRequest(http.MethodPost, path, slackFormHeaders,

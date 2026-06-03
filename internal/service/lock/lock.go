@@ -4,31 +4,16 @@ package lock
 import (
 	"context"
 	"errors"
-)
 
-// ResponseType matches Slack's response_type field but is defined here so the
-// service stays free of HTTP/Slack JSON knowledge. The controller maps it on
-// the wire.
-type ResponseType string
-
-const (
-	ResponseEphemeral ResponseType = "ephemeral"
-	ResponseInChannel ResponseType = "in_channel"
+	"github.com/slack-go/slack"
 )
 
 // Response is the domain payload returned to whoever ran the slash command.
+// Type carries Slack's response_type value — callers should use
+// slack.ResponseTypeEphemeral / slack.ResponseTypeInChannel from slack-go.
 type Response struct {
-	Type ResponseType
+	Type string
 	Text string
-}
-
-// SlashPayload is the subset of Slack's slash-command form we care about.
-// The caller (UserID) is the victim of the prank; Text contains the mention
-// of the finder, e.g. "<@U12345|alice>".
-type SlashPayload struct {
-	UserID   string
-	UserName string
-	Text     string
 }
 
 // Validation sentinels — translated into ephemeral Response values internally.
@@ -44,9 +29,9 @@ var (
 // SlackService, runs migrations at construction, and performs all business
 // logic for the /lock command.
 type Service interface {
-	// Lock applies the point change parsed from payload.Text (the finder).
-	// The caller (payload.UserID) is the victim.
-	Lock(ctx context.Context, payload SlashPayload) (*Response, error)
+	// Lock applies the point change parsed from cmd.Text (the finder mention).
+	// The caller (cmd.UserID) is the victim.
+	Lock(ctx context.Context, cmd slack.SlashCommand) (*Response, error)
 	// Leaderboard returns the top-3 / bottom-3 view as an ephemeral Response.
 	Leaderboard(ctx context.Context) (*Response, error)
 }
