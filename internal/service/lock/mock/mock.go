@@ -13,7 +13,6 @@ import (
 	context "context"
 	reflect "reflect"
 
-	lock "github.com/Flashgap/marvin/internal/service/lock"
 	slack "github.com/slack-go/slack"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -43,10 +42,10 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // Leaderboard mocks base method.
-func (m *MockService) Leaderboard(ctx context.Context) (*lock.Response, error) {
+func (m *MockService) Leaderboard(ctx context.Context) (*slack.Msg, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Leaderboard", ctx)
-	ret0, _ := ret[0].(*lock.Response)
+	ret0, _ := ret[0].(*slack.Msg)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -58,10 +57,10 @@ func (mr *MockServiceMockRecorder) Leaderboard(ctx any) *gomock.Call {
 }
 
 // Lock mocks base method.
-func (m *MockService) Lock(ctx context.Context, cmd slack.SlashCommand) (*lock.Response, error) {
+func (m *MockService) Lock(ctx context.Context, cmd slack.SlashCommand) (*slack.Msg, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Lock", ctx, cmd)
-	ret0, _ := ret[0].(*lock.Response)
+	ret0, _ := ret[0].(*slack.Msg)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

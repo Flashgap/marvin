@@ -52,7 +52,7 @@ func newServiceUnchecked(db database.Client, slackSvc slacksvc.Service) Service 
 	return &service{db: db, slack: slackSvc}
 }
 
-func (s *service) Lock(ctx context.Context, cmd slack.SlashCommand) (*Response, error) {
+func (s *service) Lock(ctx context.Context, cmd slack.SlashCommand) (*slack.Msg, error) {
 	log := logger.WithContext(ctx).WithPrefix("[lock.Lock]")
 
 	finderID, finderInlineName, ok := parseMention(cmd.Text)
@@ -232,7 +232,7 @@ func (s *service) readPoints(ctx context.Context, userID string) (int, error) {
 	return pts, nil
 }
 
-func (s *service) Leaderboard(ctx context.Context) (*Response, error) {
+func (s *service) Leaderboard(ctx context.Context) (*slack.Msg, error) {
 	top, err := s.queryLeaderboard(ctx, goqu.C("points").Desc())
 	if err != nil {
 		return nil, err
@@ -317,6 +317,6 @@ func parseMention(text string) (id, inlineName string, ok bool) {
 	return m[1], m[2], true
 }
 
-func ephemeral(text string) *Response {
-	return &Response{Type: slack.ResponseTypeEphemeral, Text: text}
+func ephemeral(text string) *slack.Msg {
+	return &slack.Msg{ResponseType: slack.ResponseTypeEphemeral, Text: text}
 }

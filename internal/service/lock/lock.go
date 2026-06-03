@@ -8,15 +8,7 @@ import (
 	"github.com/slack-go/slack"
 )
 
-// Response is the domain payload returned to whoever ran the slash command.
-// Type carries Slack's response_type value — callers should use
-// slack.ResponseTypeEphemeral / slack.ResponseTypeInChannel from slack-go.
-type Response struct {
-	Type string
-	Text string
-}
-
-// Validation sentinels — translated into ephemeral Response values internally.
+// Validation sentinels — translated into ephemeral slack.Msg values internally.
 // External callers don't see them.
 var (
 	ErrInvalidMention = errors.New("invalid mention")
@@ -27,11 +19,12 @@ var (
 
 // Service is the controller's single dependency. It owns the DB pool and the
 // SlackService, runs migrations at construction, and performs all business
-// logic for the /lock command.
+// logic for the /lock command. Both methods return a slack.Msg ready to be
+// serialized as the slash-command response (controller writes it as JSON).
 type Service interface {
 	// Lock applies the point change parsed from cmd.Text (the finder mention).
 	// The caller (cmd.UserID) is the victim.
-	Lock(ctx context.Context, cmd slack.SlashCommand) (*Response, error)
-	// Leaderboard returns the top-3 / bottom-3 view as an ephemeral Response.
-	Leaderboard(ctx context.Context) (*Response, error)
+	Lock(ctx context.Context, cmd slack.SlashCommand) (*slack.Msg, error)
+	// Leaderboard returns the top-3 / bottom-3 view as an ephemeral message.
+	Leaderboard(ctx context.Context) (*slack.Msg, error)
 }

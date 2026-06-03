@@ -8,7 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/slack-go/slack"
 
-	"github.com/Flashgap/marvin/internal/service/lock"
 	weberrors "github.com/Flashgap/marvin/internal/web/errors"
 	stderror "github.com/Flashgap/marvin/pkg/stderr"
 )
@@ -26,7 +25,7 @@ func (ctrl *Controller) lockHandler(c *gin.Context) {
 	}
 	cmd.Text = strings.TrimSpace(cmd.Text)
 
-	var resp *lock.Response
+	var resp *slack.Msg
 	if cmd.Text == "" {
 		resp, err = ctrl.lockService.Leaderboard(c.Request.Context())
 	} else {
@@ -36,8 +35,5 @@ func (ctrl *Controller) lockHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"response_type": resp.Type,
-		"text":          resp.Text,
-	})
+	c.JSON(http.StatusOK, resp)
 }

@@ -62,31 +62,31 @@ var _ = Describe("POST /marvin/_webhook/slack/lock", func() {
 		mockLock := mock_lock.NewMockService(mockCtrl)
 		mockLock.EXPECT().
 			Lock(gomock.Any(), slack.SlashCommand{UserID: "UVICTIM", UserName: "victim", Text: "<@UFINDER|finder>"}).
-			Return(&lock.Response{Type: slack.ResponseTypeEphemeral, Text: "ok"}, nil)
+			Return(&slack.Msg{ResponseType: slack.ResponseTypeEphemeral, Text: "ok"}, nil)
 
 		env := buildLockTest(ctx, mockLock)
 		rec := env.ServeHTTPRequest(http.MethodPost, path, slackFormHeaders,
 			form(map[string]string{"user_id": "UVICTIM", "user_name": "victim", "text": "<@UFINDER|finder>"}),
 			http.StatusOK)
 
-		var body map[string]string
+		var body slack.Msg
 		Expect(json.Unmarshal(rec.Body.Bytes(), &body)).To(Succeed())
-		Expect(body["response_type"]).To(Equal("ephemeral"))
-		Expect(body["text"]).To(Equal("ok"))
+		Expect(body.ResponseType).To(Equal(slack.ResponseTypeEphemeral))
+		Expect(body.Text).To(Equal("ok"))
 	})
 
 	It("dispatches to Leaderboard when text is empty", func(ctx SpecContext) {
 		mockCtrl := gomock.NewController(GinkgoT())
 		mockLock := mock_lock.NewMockService(mockCtrl)
-		mockLock.EXPECT().Leaderboard(gomock.Any()).Return(&lock.Response{Type: slack.ResponseTypeEphemeral, Text: "top..."}, nil)
+		mockLock.EXPECT().Leaderboard(gomock.Any()).Return(&slack.Msg{ResponseType: slack.ResponseTypeEphemeral, Text: "top..."}, nil)
 
 		env := buildLockTest(ctx, mockLock)
 		rec := env.ServeHTTPRequest(http.MethodPost, path, slackFormHeaders,
 			form(map[string]string{"user_id": "UVICTIM", "user_name": "victim", "text": ""}),
 			http.StatusOK)
 
-		var body map[string]string
+		var body slack.Msg
 		Expect(json.Unmarshal(rec.Body.Bytes(), &body)).To(Succeed())
-		Expect(body["text"]).To(Equal("top..."))
+		Expect(body.Text).To(Equal("top..."))
 	})
 })

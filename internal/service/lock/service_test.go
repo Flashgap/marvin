@@ -49,7 +49,7 @@ var _ = Describe("Lock", func() {
 
 		resp, err := svc.Lock(ctx, slack.SlashCommand{UserID: "UVICTIM", Text: "alice"})
 		Expect(err).ToNot(HaveOccurred())
-		Expect(resp.Type).To(Equal(slack.ResponseTypeEphemeral))
+		Expect(resp.ResponseType).To(Equal(slack.ResponseTypeEphemeral))
 		Expect(resp.Text).To(ContainSubstring("Usage"))
 	})
 
@@ -103,7 +103,7 @@ var _ = Describe("Lock", func() {
 
 		resp, err := svc.Lock(ctx, slack.SlashCommand{UserID: "UVICTIM", UserName: "victim", Text: "<@UFINDER|finder>"})
 		Expect(err).ToNot(HaveOccurred())
-		Expect(resp.Type).To(Equal(slack.ResponseTypeEphemeral))
+		Expect(resp.ResponseType).To(Equal(slack.ResponseTypeEphemeral))
 		Expect(resp.Text).To(ContainSubstring("you: -3"))
 		Expect(resp.Text).To(ContainSubstring("<@UFINDER>: 7"))
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
@@ -139,7 +139,7 @@ var _ = Describe("Leaderboard", func() {
 
 		resp, err := svc.Leaderboard(ctx)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(resp.Type).To(Equal(slack.ResponseTypeEphemeral))
+		Expect(resp.ResponseType).To(Equal(slack.ResponseTypeEphemeral))
 		Expect(resp.Text).To(ContainSubstring("*Top 3*"))
 		Expect(resp.Text).To(ContainSubstring("@alice — 5"))
 		Expect(resp.Text).To(ContainSubstring("*Bottom 3*"))
