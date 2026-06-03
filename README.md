@@ -29,6 +29,7 @@ Every feature is opt-in and enabled per repository via the `MARVIN_REPOSITORIES`
 | Feature | Description |
 |---------|-------------|
 | `auto_assignee` | Assigns the PR opener as assignee if none is set |
+| `auto_draft_labels` | Automatically manages *Work in progress* and *Ready for review* labels based on GitHub draft state |
 | `auto_review_assign` | Requests reviewers from a configured team when the *Ready for review* label is added |
 | `auto_approve` | Adds the *Approved* label and removes *Ready for review* once enough approvals are in |
 | `auto_changes_required` | Adds the *Changes required* label and notifies via Slack when a review requests changes |
@@ -299,6 +300,16 @@ When the **Ready for review 👌** label is added, Marvin picks reviewers from t
 The algorithm assigns people with the smallest current review load (load = total additions across open PRs assigned to them). 
 The number of reviewers to assign is derived from the branch's required approving review count — 
 Marvin supports both classic branch protection rules and repository rulesets.
+
+### `auto_draft_labels`
+
+Automatically manages the **Work in progress ⏳** and **Ready for review 👌** labels based on GitHub's native draft state transitions:
+
+- When a PR is opened as draft or converted to draft → adds **Work in progress ⏳**
+- When a PR is converted to draft and already has **Ready for review 👌** → removes **Ready for review 👌**
+- When the *Ready for review* button is pressed (draft → ready) → removes **Work in progress ⏳**, adds **Ready for review 👌**, runs PR checks, and triggers `auto_review_assign` if enabled
+
+Non-draft PRs opened normally are not affected by this automation.
 
 ### `update_linear_link`
 

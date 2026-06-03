@@ -823,4 +823,187 @@ blabla
 			Expect(svc.OnPullRequest(ctx, &prEvent)).To(Succeed())
 		})
 	})
+
+	Context("Auto draft labels", func() {
+		prNumber := 600
+
+		getDraftEvent := func(action string, draft bool) gogithub.PullRequestEvent {
+			return gogithub.PullRequestEvent{
+				Action: utils.Ptr(action),
+				Repo: &gogithub.Repository{
+					Name: utils.Ptr(repoName),
+				},
+				Sender: &gogithub.User{
+					Name: utils.Ptr("mx-test"),
+				},
+				PullRequest: &gogithub.PullRequest{
+					State:  utils.Ptr("open"),
+					Title:  utils.Ptr("my title"),
+					Number: utils.Ptr(prNumber),
+					Draft:  utils.Ptr(draft),
+					Head: &gogithub.PullRequestBranch{
+						Ref: utils.Ptr("mybranch"),
+						SHA: utils.Ptr("mybranch"),
+					},
+				},
+			}
+		}
+
+		When("PR is opened as draft", func() {
+			It("should add the Work in progress label when AutoDraftLabels is enabled", func(ctx SpecContext) {
+				cfg := marvin.GitHubRepositoryConfiguration{
+					AutoDraftLabels: true,
+				}
+				cfgs := marvin.GitHubRepositoryConfigurations{
+					repoName: &cfg,
+				}
+
+				prEvent := getDraftEvent(pkggithub.EventPullRequestActionOpened, true)
+
+				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
+					{Name: utils.Ptr(github.LabelWorkInProgress)},
+				}, nil, nil).Times(1)
+				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelWorkInProgress}).Return(nil, nil, nil).Times(1)
+
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				err := svc.OnPullRequest(ctx, &prEvent)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should do nothing when AutoDraftLabels is disabled", func(ctx SpecContext) {
+				cfg := marvin.GitHubRepositoryConfiguration{}
+				cfgs := marvin.GitHubRepositoryConfigurations{
+					repoName: &cfg,
+				}
+
+				prEvent := getDraftEvent(pkggithub.EventPullRequestActionOpened, true)
+
+				// No mocks expected; current behavior ignores draft PRs
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				err := svc.OnPullRequest(ctx, &prEvent)
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+
+		When("PR is opened as non-draft", func() {
+			It("should not add labels and should run normal checks", func(ctx SpecContext) {
+				cfg := marvin.GitHubRepositoryConfiguration{
+					AutoDraftLabels: true,
+				}
+				cfgs := marvin.GitHubRepositoryConfigurations{
+					repoName: &cfg,
+				}
+
+				prEvent := getDraftEvent(pkggithub.EventPullRequestActionOpened, false)
+				prEvent.PullRequest.Labels = []*gogithub.Label{
+					{Name: utils.Ptr(github.LabelHotfix)},
+				}
+
+				mockGithub.EXPECT().CreateCheckRun(gomock.Any(), gomock.Any(), gogithub.CreateCheckRunOptions{
+					Name:       marvin.CheckName,
+					HeadSHA:    "mybranch",
+					Status:     utils.Ptr(pkggithub.CheckRunStatusCompleted),
+					Conclusion: utils.Ptr("success"),
+					Output: &gogithub.CheckRunOutput{
+						Title:   utils.Ptr("Hotfix PR"),
+						Summary: utils.Ptr("This is a hotfix PR, Marvin's checks are bypassed."),
+					},
+				}).Times(1)
+
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				err := svc.OnPullRequest(ctx, &prEvent)
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+
+		When("PR is converted to draft", func() {
+			It("should add Work in progress and remove Ready for review", func(ctx SpecContext) {
+				cfg := marvin.GitHubRepositoryConfiguration{
+					AutoDraftLabels: true,
+				}
+				cfgs := marvin.GitHubRepositoryConfigurations{
+					repoName: &cfg,
+				}
+
+				prEvent := getDraftEvent(pkggithub.EventPullRequestActionConvertedToDraft, true)
+
+				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
+					{Name: utils.Ptr(github.LabelWorkInProgress)},
+					{Name: utils.Ptr(github.LabelReadyForReview)},
+				}, nil, nil).Times(2)
+				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelWorkInProgress}).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelReadyForReview).Return(nil, nil).Times(1)
+
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				err := svc.OnPullRequest(ctx, &prEvent)
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+
+		When("PR is marked as ready for review", func() {
+			It("should remove Work in progress, add Ready for review, run checks and assign reviewers", func(ctx SpecContext) {
+				cfg := marvin.GitHubRepositoryConfiguration{
+					AutoDraftLabels:  true,
+					AutoReviewAssign: true,
+					ReviewersTeam:    "my-team",
+				}
+				cfgs := marvin.GitHubRepositoryConfigurations{
+					repoName: &cfg,
+				}
+
+				prEvent := getDraftEvent(pkggithub.EventPullRequestActionReadyForReview, false)
+				prEvent.PullRequest.Labels = []*gogithub.Label{
+					{Name: utils.Ptr(github.LabelHotfix)},
+				}
+
+				protection := &gogithub.Protection{
+					RequiredPullRequestReviews: &gogithub.PullRequestReviewsEnforcement{
+						RequiredApprovingReviewCount: 1,
+					},
+				}
+
+				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
+					{Name: utils.Ptr(github.LabelWorkInProgress)},
+					{Name: utils.Ptr(github.LabelReadyForReview)},
+				}, nil, nil).Times(2)
+				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelWorkInProgress).Return(nil, nil).Times(1)
+				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelReadyForReview}).Return(nil, nil, nil).Times(1)
+				// checkAndFormatPR (hotfix path)
+				mockGithub.EXPECT().CreateCheckRun(gomock.Any(), gomock.Any(), gogithub.CreateCheckRunOptions{
+					Name:       marvin.CheckName,
+					HeadSHA:    "mybranch",
+					Status:     utils.Ptr(pkggithub.CheckRunStatusCompleted),
+					Conclusion: utils.Ptr("success"),
+					Output: &gogithub.CheckRunOutput{
+						Title:   utils.Ptr("Hotfix PR"),
+						Summary: utils.Ptr("This is a hotfix PR, Marvin's checks are bypassed."),
+					},
+				}).Times(1)
+				// FindAndAssignReviewers
+				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Return(protection, nil, nil).Times(1)
+				mockGithub.EXPECT().ListReviews(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().ListReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(&gogithub.Reviewers{}, nil, nil).Times(1)
+				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "my-team", gomock.Any()).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, nil).Times(1)
+
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				err := svc.OnPullRequest(ctx, &prEvent)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should do nothing when AutoDraftLabels is disabled", func(ctx SpecContext) {
+				cfg := marvin.GitHubRepositoryConfiguration{}
+				cfgs := marvin.GitHubRepositoryConfigurations{
+					repoName: &cfg,
+				}
+
+				prEvent := getDraftEvent(pkggithub.EventPullRequestActionReadyForReview, false)
+
+				// No mocks expected; falls through to default case
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				err := svc.OnPullRequest(ctx, &prEvent)
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+	})
 })

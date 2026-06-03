@@ -90,6 +90,14 @@ func (s *service) OnPullRequest(ctx context.Context, event *gogithub.PullRequest
 	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnPullRequest")
 	log.Infof("Got a pull request webhook with action %q", action)
 
+	// Handle draft/ready-for-review transitions before the WIP guard so that
+	// draft PRs can be labeled before IsWorkInProgress drops the event.
+	if handled, err := s.handleDraftTransition(ctx, event, pr, config); err != nil {
+		return err
+	} else if handled {
+		return nil
+	}
+
 	// Do nothing on closed PRs (unless it's the actual closed event) and WIPs
 	if (pr.GetState() == pkggithub.PullRequestStateClosed && action != pkggithub.EventPullRequestActionClosed) ||
 		github.IsWorkInProgress(pr) {
@@ -129,6 +137,56 @@ func (s *service) OnPullRequest(ctx context.Context, event *gogithub.PullRequest
 	}
 
 	return nil
+}
+
+// handleDraftTransition manages the "action:Work in progress" and "action:Ready for review"
+// labels based on GitHub's native draft state transitions. It returns true when the event
+// was fully handled and no further processing is required.
+func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.PullRequestEvent, pr *gogithub.PullRequest, config *GitHubRepositoryConfiguration) (bool, error) {
+	if !config.AutoDraftLabels {
+		return false, nil
+	}
+
+	action := event.GetAction()
+
+	switch action {
+	case pkggithub.EventPullRequestActionOpened, pkggithub.EventPullRequestActionReopened:
+		if !pr.GetDraft() {
+			return false, nil
+		}
+		return true, s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelWorkInProgress)
+	case pkggithub.EventPullRequestActionConvertedToDraft:
+		var errs error
+		if err := s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelWorkInProgress); err != nil {
+			errs = errors.Join(errs, err)
+		}
+		if err := s.githubService.RemoveLabel(ctx, event, pr.GetNumber(), github.LabelReadyForReview); err != nil {
+			errs = errors.Join(errs, err)
+		}
+		return true, errs
+	case pkggithub.EventPullRequestActionReadyForReview:
+		var errs error
+		if err := s.githubService.RemoveLabel(ctx, event, pr.GetNumber(), github.LabelWorkInProgress); err != nil {
+			errs = errors.Join(errs, err)
+		}
+		if err := s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelReadyForReview); err != nil {
+			errs = errors.Join(errs, err)
+		}
+		if errs != nil {
+			return true, errs
+		}
+		if err := s.checkAndFormatPR(ctx, event, action, pr, config, false); err != nil {
+			return true, err
+		}
+		if config.AutoReviewAssign {
+			if _, err := s.githubService.FindAndAssignReviewers(ctx, event, pr, config.ReviewersTeam); err != nil {
+				return true, err
+			}
+		}
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func (s *service) OnCheckRun(ctx context.Context, event *gogithub.CheckRunEvent) error {
