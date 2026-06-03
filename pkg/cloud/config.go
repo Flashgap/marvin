@@ -65,7 +65,7 @@ func (c *Config) Load(ctx context.Context) error {
 		c.Region = localFakeGCloudRegion
 		c.Service = uuid.NewString()
 	case EnvironmentKubernetes:
-		return c.loadGoogleMetadata(ctx)
+		c.loadGoogleMetadata(ctx) // Best effort, if we're on a K8s not on GCP, it's OK to have empty metadata.
 	default:
 		panic(fmt.Sprintf("Unknown environment: %s", c.Environment))
 	}

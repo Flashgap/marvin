@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	gomysql "github.com/go-sql-driver/mysql"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -127,6 +128,25 @@ var _ = Describe("buildDSN", func() {
 			_, dsn, err := buildDSN(cfg)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(dsn).To(Equal("marvin@tcp(db.example.com:3306)/marvin"))
+		})
+
+		It("escapes a password containing DSN delimiter characters", func() {
+			cfg := Config{
+				Driver:   DriverMySQL,
+				Host:     "db.example.com",
+				User:     "marvin",
+				Password: "p@ss:wo/rd?&!",
+				Database: "marvin",
+			}
+			_, dsn, err := buildDSN(cfg)
+			Expect(err).ToNot(HaveOccurred())
+			// The driver's own parser must round-trip the same fields back.
+			parsed, perr := gomysql.ParseDSN(dsn)
+			Expect(perr).ToNot(HaveOccurred())
+			Expect(parsed.User).To(Equal("marvin"))
+			Expect(parsed.Passwd).To(Equal("p@ss:wo/rd?&!"))
+			Expect(parsed.Addr).To(Equal("db.example.com:3306"))
+			Expect(parsed.DBName).To(Equal("marvin"))
 		})
 	})
 })

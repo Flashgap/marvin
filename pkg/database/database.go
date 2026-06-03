@@ -6,17 +6,16 @@ import (
 	"database/sql"
 	"fmt"
 	"io/fs"
-	"net/url"
+	"net"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/doug-martin/goqu/v9"
+	gomysql "github.com/go-sql-driver/mysql"
 
-	// Driver registrations. Both drivers are always linked in; the runtime
-	// configuration selects which one is used.
-	_ "github.com/go-sql-driver/mysql"
+	// pgx is blank-imported to register its database/sql driver.
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	// goqu dialect registrations. The package's blank imports register the
@@ -198,36 +197,22 @@ func pgQuote(v string) string {
 	return "'" + escaped + "'"
 }
 
-// mysqlDSN builds a go-sql-driver/mysql DSN:
-//
-//	user:password@tcp(host:port)/dbname?k=v&...
+// mysqlDSN builds a go-sql-driver/mysql DSN via the driver's own Config so
+// special characters in user, password, host, or params are escaped correctly.
 func mysqlDSN(cfg Config, port int) string {
-	var b strings.Builder
-	b.WriteString(cfg.User)
-	if cfg.Password != "" {
-		b.WriteByte(':')
-		b.WriteString(cfg.Password)
-	}
-	b.WriteString("@tcp(")
-	b.WriteString(cfg.Host)
-	b.WriteByte(':')
-	b.WriteString(strconv.Itoa(port))
-	b.WriteString(")/")
-	b.WriteString(cfg.Database)
-
-	keys := sortedKeys(cfg.Params)
-	if len(keys) > 0 {
-		b.WriteByte('?')
-		for i, k := range keys {
-			if i > 0 {
-				b.WriteByte('&')
-			}
-			b.WriteString(url.QueryEscape(k))
-			b.WriteByte('=')
-			b.WriteString(url.QueryEscape(cfg.Params[k]))
+	c := gomysql.NewConfig()
+	c.User = cfg.User
+	c.Passwd = cfg.Password
+	c.Net = "tcp"
+	c.Addr = net.JoinHostPort(cfg.Host, strconv.Itoa(port))
+	c.DBName = cfg.Database
+	if len(cfg.Params) > 0 {
+		c.Params = make(map[string]string, len(cfg.Params))
+		for k, v := range cfg.Params {
+			c.Params[k] = v
 		}
 	}
-	return b.String()
+	return c.FormatDSN()
 }
 
 func sortedKeys(m map[string]string) []string {
