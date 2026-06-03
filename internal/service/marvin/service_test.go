@@ -19,7 +19,7 @@ import (
 	mock_github "github.com/Flashgap/marvin/pkg/github/mock"
 	"github.com/Flashgap/marvin/pkg/linear"
 	mock_linear "github.com/Flashgap/marvin/pkg/linear/mock"
-	mock_slack "github.com/Flashgap/marvin/pkg/slack/mock"
+	mock_slack "github.com/Flashgap/marvin/internal/service/slack/mock"
 	"github.com/Flashgap/marvin/pkg/utils"
 )
 
@@ -41,14 +41,14 @@ var _ = Describe("Service tests", func() {
 	var mockCtrl *gomock.Controller
 	var mockGithub *mock_github.MockClient
 	var githubService github.Service
-	var mockSlack *mock_slack.MockClient
+	var mockSlack *mock_slack.MockService
 	var mockLinear *mock_linear.MockClient
 	var mockJira *mock_jira.MockService
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockGithub = mock_github.NewMockClient(mockCtrl)
-		mockSlack = mock_slack.NewMockClient(mockCtrl)
+		mockSlack = mock_slack.NewMockService(mockCtrl)
 		mockLinear = mock_linear.NewMockClient(mockCtrl)
 		githubService = github.NewService(mockGithub)
 		mockJira = mock_jira.NewMockService(mockCtrl)
@@ -776,7 +776,7 @@ blabla
 					},
 				}
 
-				mockSlack.EXPECT().SendMessage(gomock.Any(), "U1234W5678", gomock.Any()).Return(nil).Times(1)
+				mockSlack.EXPECT().SendDM(gomock.Any(), "U1234W5678", gomock.Any()).Return(nil).Times(1)
 				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())

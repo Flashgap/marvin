@@ -50,12 +50,11 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		s.DB = dbClient
 	}
 
-	// One Slack client shared across services. The thin pkg/slack client is
-	// wrapped once in the higher-level slack service so future commands have a
-	// single integration point.
-	slackClient := slack.NewClient(cfg.SlackBotToken)
+	// SlackService is the single integration point for Slack. It wraps the
+	// thin pkg/slack client and is shared across every service that needs to
+	// talk to Slack (currently MarvinService and LockService).
 	if s.SlackService == nil {
-		s.SlackService = slacksvc.NewService(slackClient)
+		s.SlackService = slacksvc.NewService(slack.NewClient(cfg.SlackBotToken))
 	}
 
 	if s.LockService == nil && s.DB != nil {
@@ -98,7 +97,7 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		prefixCache := github.NewPrefixCache(cfg.LinearWorkspaceSlug, cfg.LinearIssuePrefixes, linearClient.Teams)
 		prefixCache.Start(ctx, cfg.LinearPrefixRefreshInterval)
 		prParserConfig := github.PRParserConfig{Prefixes: prefixCache}
-		s.MarvinService = marvin.NewService(s.GithubService, s.JiraService, linearClient, slackClient, repoConfigs, prParserConfig)
+		s.MarvinService = marvin.NewService(s.GithubService, s.JiraService, linearClient, s.SlackService, repoConfigs, prParserConfig)
 	}
 
 	return nil
