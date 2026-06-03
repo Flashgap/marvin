@@ -187,9 +187,11 @@ func (s *service) upsertPoints(ctx context.Context, tx *sql.Tx, userID, name str
 		}).
 		OnConflict(goqu.DoUpdate("slack_user_id", goqu.Record{
 			"slack_user_name": name,
-			// `points = points + delta` — portable across postgres + mysql.
-			// Avoids EXCLUDED.points (postgres-only) and VALUES(points) (mysql-only).
-			"points":     goqu.L("? + ?", goqu.C("points"), delta),
+			// `lock_users.points + delta` — the table-qualified identifier
+			// disambiguates the existing row from the incoming one. Postgres
+			// rejects an unqualified "points" here as ambiguous with
+			// EXCLUDED.points; MySQL also accepts the qualified form.
+			"points":     goqu.L("? + ?", goqu.I("lock_users.points"), delta),
 			"updated_at": goqu.L("NOW()"),
 		})).
 		ToSQL()
