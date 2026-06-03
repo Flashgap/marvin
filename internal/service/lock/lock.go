@@ -3,24 +3,18 @@ package lock
 
 import (
 	"context"
-	"errors"
 
 	"github.com/slack-go/slack"
-)
-
-// Validation sentinels — translated into ephemeral slack.Msg values internally.
-// External callers don't see them.
-var (
-	ErrInvalidMention = errors.New("invalid mention")
-	ErrSelfLock       = errors.New("self-lock")
-	ErrTargetIsBot    = errors.New("target is a bot")
-	ErrTooSoon        = errors.New("cooldown")
 )
 
 // Service is the controller's single dependency. It owns the DB pool and the
 // SlackService, runs migrations at construction, and performs all business
 // logic for the /lock command. Both methods return a slack.Msg ready to be
 // serialized as the slash-command response (controller writes it as JSON).
+//
+// Validation outcomes (self-lock, bot target, cooldown, malformed mention) are
+// returned as ephemeral slack.Msg values with a nil error — only genuine
+// failures (DB outage, Slack API error) surface through the error return.
 type Service interface {
 	// Lock applies the point change parsed from cmd.Text (the finder mention).
 	// The caller (cmd.UserID) is the victim.

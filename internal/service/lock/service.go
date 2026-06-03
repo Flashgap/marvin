@@ -91,7 +91,7 @@ func (s *service) Lock(ctx context.Context, cmd slack.SlashCommand) (*slack.Msg,
 	if recent, err := s.hasRecentEvent(ctx, victimID, finderID); err != nil {
 		return nil, err
 	} else if recent {
-		return ephemeral("You just got locked by this person. Give it a moment."), nil
+		return ephemeral("You just locked this person. Give it a moment."), nil
 	}
 
 	victimPts, finderPts, err := s.applyLock(ctx, victimID, victimName, finderID, finderName)
