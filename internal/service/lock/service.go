@@ -36,6 +36,12 @@ type service struct {
 // NewService applies pending migrations and wires the lock service. A non-nil
 // db is required; pass migrations via mfs (typically internal/migrations.FS).
 func NewService(ctx context.Context, db database.Client, slackSvc slacksvc.Service, mfs fs.FS) (Service, error) {
+	if db == nil {
+		return nil, fmt.Errorf("lock: database client is required")
+	}
+	if slackSvc == nil {
+		return nil, fmt.Errorf("lock: slack service is required")
+	}
 	if err := db.Migrate(ctx, mfs); err != nil {
 		return nil, fmt.Errorf("lock: applying migrations: %w", err)
 	}

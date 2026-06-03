@@ -4,7 +4,7 @@
 // driver name.
 //
 // To author a new migration, install the Atlas CLI and run
-// `make migrate-diff name=<short_description>` from the repository root.
+// `make migrate-diff driver=<postgres|mysql> name=<short_description>` from the repository root.
 package migrations
 
 import "embed"

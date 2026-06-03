@@ -85,7 +85,7 @@ func ensureMigrationsTable(ctx context.Context, db *sql.DB, driver Driver) error
 }
 
 func loadAppliedVersions(ctx context.Context, db *sql.DB, driver Driver) (map[string]struct{}, error) {
-	q, _, err := goqu.Dialect(string(driver)).
+	q, args, err := goqu.Dialect(string(driver)).
 		From(migrationsTable).
 		Select("version").
 		Prepared(true).
@@ -93,7 +93,7 @@ func loadAppliedVersions(ctx context.Context, db *sql.DB, driver Driver) (map[st
 	if err != nil {
 		return nil, fmt.Errorf("migrate: building select: %w", err)
 	}
-	rows, err := db.QueryContext(ctx, q)
+	rows, err := db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("migrate: reading applied versions: %w", err)
 	}
