@@ -40,7 +40,7 @@ func parseXCloudTraceContext(t string) (string, string) {
 // LogContextMiddleware sets context keys from generic request information, and logs response statuses
 func LogContextMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.FullPath() == "/health" {
+		if c.FullPath() == "/health" || c.FullPath() == "/_probes/readiness" || c.FullPath() == "/_probes/liveness" {
 			return
 		}
 		// Set all necessary context values for the request

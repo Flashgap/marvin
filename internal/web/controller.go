@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	apperrors "github.com/Flashgap/marvin/internal/web/errors"
+	"github.com/Flashgap/marvin/pkg/logger"
 	stderror "github.com/Flashgap/marvin/pkg/stderr"
 	"github.com/Flashgap/marvin/pkg/utils"
 )
@@ -45,6 +46,7 @@ type BaseController struct {
 
 // Error is a shorthand to set Gin error if not nil and abort. Returns true if err != nil.
 func (*BaseController) Error(c *gin.Context, err error) bool {
+	log := logger.WithContext(c).WithPrefix("[BaseController.Error]")
 	// Catch nil is not nil apperrors.
 	var errMsg *apperrors.ErrorMessage
 	if errors.As(err, &errMsg) && errMsg == nil { // nolint:revive // intended
@@ -52,6 +54,7 @@ func (*BaseController) Error(c *gin.Context, err error) bool {
 	}
 
 	if err != nil {
+		log.Error(err)
 		_ = c.Error(err)
 		c.Abort()
 		return true
