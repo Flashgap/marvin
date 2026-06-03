@@ -18,6 +18,7 @@ type Config struct {
 	config.Slack
 	config.Linear
 	config.Marvin
+	config.Database
 }
 
 func NewConfig(ctx context.Context) *Config {

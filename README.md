@@ -190,6 +190,72 @@ Marvin is configured entirely through environment variables. Copy `config/local/
 | `InProgressTransitionID` | `GET <JIRA_HOST>/rest/api/latest/issue/<KEY>/transitions` |
 | `DoneTransitionID` | Same endpoint |
 
+### Database (optional)
+
+Marvin can optionally connect to a SQL database (Postgres or MySQL) for future
+long-term memory features. The client is created at startup and disabled when
+`DB_HOST` is empty.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DB_HOST` | Database host. **Empty disables the database client entirely.** | _(empty)_ |
+| `DB_DRIVER` | `postgres` or `mysql`. Required when `DB_HOST` is set. | _(empty)_ |
+| `DB_PORT` | Database port. | `5432` (postgres), `3306` (mysql) |
+| `DB_USER` | Database user. | _(empty)_ |
+| `DB_PASSWORD` | Database password. | _(empty)_ |
+| `DB_NAME` | Database name. | _(empty)_ |
+| `DB_PARAMS` | Driver-specific params, e.g. `sslmode:disable,connect_timeout:5`. | _(empty)_ |
+| `DB_MAX_OPEN_CONNS` | Max open connections. | `25` |
+| `DB_MAX_IDLE_CONNS` | Max idle connections. | `5` |
+| `DB_CONN_MAX_LIFETIME` | Max connection lifetime. | `30m` |
+| `DB_CONN_MAX_IDLE_TIME` | Max connection idle time. | `5m` |
+
+Marvin composes its SQL through [goqu](https://github.com/doug-martin/goqu), so
+services build dialect-agnostic query expressions and `pkg/database` renders
+them for the configured driver.
+
+#### Migrations (Atlas)
+
+Schema changes live as versioned SQL files under `internal/migrations/<driver>/`,
+managed by [Atlas](https://atlasgo.io/). Marvin applies pending migrations at
+startup whenever the database is enabled — there is nothing to run manually in
+production.
+
+To author a new migration locally:
+
+```bash
+# Install the Atlas CLI: https://atlasgo.io/getting-started
+make migrate-diff driver=postgres name=add_something
+make migrate-diff driver=mysql    name=add_something   # keep both in lockstep
+```
+
+The `make migrate-diff` target also re-runs `make migrate-hash`, which
+regenerates the `atlas.sum` integrity file in each driver subdirectory.
+
+### Slack `/lock` slash command (optional)
+
+A PwnBot-style game: anyone who finds a colleague's laptop unlocked types
+`/lock @theirhandle` from the unlocked laptop. The caller (= the victim, since
+the command is being sent from their Slack) loses a point, the mentioned user
+(= the finder) gains one. The victim later receives a DM from Marvin telling
+them what happened. Calling `/lock` with no argument shows an ephemeral
+leaderboard (top 3 / bottom 3).
+
+The endpoint is **gated on the database**: without `DB_HOST`, requests return
+`501 Not Implemented`.
+
+**Slack app configuration**
+- Add a slash command with the request URL `https://<your-marvin>/marvin/_webhook/slack/lock`.
+- Turn on **"Escape channels, users, and links"** — Marvin parses the
+  `<@U12345|handle>` form Slack sends with that setting enabled.
+- Bot token scopes: `chat:write`, `im:write`, `users:read`.
+
+**Env vars**
+
+| Variable | Description |
+|----------|-------------|
+| `MARVIN_SLACK_SIGNING_SECRET` | Slack app signing secret used to verify the `X-Slack-Signature` header. Required outside dev. |
+
 ---
 
 ## PR body format

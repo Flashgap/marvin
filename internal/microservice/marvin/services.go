@@ -9,9 +9,13 @@ import (
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	gogithub "github.com/google/go-github/v63/github"
 
+	"github.com/Flashgap/marvin/internal/migrations"
 	"github.com/Flashgap/marvin/internal/service/github"
 	"github.com/Flashgap/marvin/internal/service/jira"
+	"github.com/Flashgap/marvin/internal/service/lock"
 	"github.com/Flashgap/marvin/internal/service/marvin"
+	slacksvc "github.com/Flashgap/marvin/internal/service/slack"
+	"github.com/Flashgap/marvin/pkg/database"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 	pkgjira "github.com/Flashgap/marvin/pkg/jira"
 	"github.com/Flashgap/marvin/pkg/linear"
@@ -21,9 +25,12 @@ import (
 
 type Services struct {
 	errorClient   *errorreporting.Client
+	DB            database.Client
+	SlackService  slacksvc.Service
 	GithubService github.Service
 	JiraService   jira.Service
 	MarvinService marvin.Service
+	LockService   lock.Service
 }
 
 func (s *Services) initialize(ctx context.Context, cfg *Config) error {
@@ -33,6 +40,29 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 			return fmt.Errorf("cannot init error reporting client: %w", err)
 		}
 		s.errorClient = errorClient
+	}
+
+	if s.DB == nil && cfg.DBEnabled() {
+		dbClient, err := database.NewClient(ctx, cfg.DatabaseConfig())
+		if err != nil {
+			return fmt.Errorf("cannot init database client: %w", err)
+		}
+		s.DB = dbClient
+	}
+
+	// SlackService is the single integration point for Slack. It wraps the
+	// thin pkg/slack client and is shared across every service that needs to
+	// talk to Slack (currently MarvinService and LockService).
+	if s.SlackService == nil {
+		s.SlackService = slacksvc.NewService(slack.NewClient(cfg.SlackBotToken))
+	}
+
+	if s.LockService == nil && s.DB != nil {
+		lockSvc, err := lock.NewService(ctx, s.DB, s.SlackService, migrations.FS)
+		if err != nil {
+			return fmt.Errorf("cannot init lock service: %w", err)
+		}
+		s.LockService = lockSvc
 	}
 
 	if s.GithubService == nil {
@@ -57,7 +87,6 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 	}
 
 	if s.MarvinService == nil {
-		slackClient := slack.NewClient(cfg.SlackBotToken)
 		linearClient := linear.NewClient(ctx, cfg.LinearOAuthToken, cfg.LinearWorkspaceSlug)
 
 		if cfg.LinearPrefixRefreshInterval <= 0 && len(cfg.LinearIssuePrefixes) == 0 {
@@ -68,7 +97,7 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		prefixCache := github.NewPrefixCache(cfg.LinearWorkspaceSlug, cfg.LinearIssuePrefixes, linearClient.Teams)
 		prefixCache.Start(ctx, cfg.LinearPrefixRefreshInterval)
 		prParserConfig := github.PRParserConfig{Prefixes: prefixCache}
-		s.MarvinService = marvin.NewService(s.GithubService, s.JiraService, linearClient, slackClient, repoConfigs, prParserConfig)
+		s.MarvinService = marvin.NewService(s.GithubService, s.JiraService, linearClient, s.SlackService, repoConfigs, prParserConfig)
 	}
 
 	return nil

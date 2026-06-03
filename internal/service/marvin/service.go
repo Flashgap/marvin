@@ -12,9 +12,9 @@ import (
 	"github.com/Flashgap/marvin/internal/middlewares"
 	"github.com/Flashgap/marvin/internal/service/github"
 	"github.com/Flashgap/marvin/internal/service/jira"
+	slacksvc "github.com/Flashgap/marvin/internal/service/slack"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 	"github.com/Flashgap/marvin/pkg/linear"
-	"github.com/Flashgap/marvin/pkg/slack"
 	"github.com/Flashgap/marvin/pkg/utils"
 )
 
@@ -53,7 +53,7 @@ type service struct {
 	githubService  github.Service
 	jiraService    jira.Service
 	linearClient   linear.Client
-	slackClient    slack.Client
+	slackService   slacksvc.Service
 	repoConfigs    GitHubRepositoryConfigurations
 	prParserConfig github.PRParserConfig
 }
@@ -62,7 +62,7 @@ func NewService(
 	githubService github.Service,
 	jiraService jira.Service,
 	linearClient linear.Client,
-	slackClient slack.Client,
+	slackService slacksvc.Service,
 	repoConfigs GitHubRepositoryConfigurations,
 	prParserConfig github.PRParserConfig,
 ) Service {
@@ -70,7 +70,7 @@ func NewService(
 		githubService:  githubService,
 		jiraService:    jiraService,
 		linearClient:   linearClient,
-		slackClient:    slackClient,
+		slackService:   slackService,
 		repoConfigs:    repoConfigs,
 		prParserConfig: prParserConfig,
 	}
@@ -625,7 +625,7 @@ func (s *service) notifyReviewRequestBySlack(ctx context.Context, pr *gogithub.P
 
 		msg := fmt.Sprintf("You've been assigned to PR #%d\n%s\n%s", pr.GetNumber(), pr.GetTitle(), pr.GetHTMLURL())
 
-		if err := s.slackClient.SendMessage(ctx, slackID, msg); err != nil {
+		if err := s.slackService.SendDM(ctx, slackID, msg); err != nil {
 			return fmt.Errorf("error sending slack message: %w", err)
 		}
 	}
@@ -643,7 +643,7 @@ func (s *service) notifyChangesRequestedBySlack(ctx context.Context, senderLogin
 
 		msg := fmt.Sprintf("%s requested changes to your PR #%d\n%s\n%s", senderLogin, pr.GetNumber(), pr.GetTitle(), pr.GetHTMLURL())
 
-		if err := s.slackClient.SendMessage(ctx, slackID, msg); err != nil {
+		if err := s.slackService.SendDM(ctx, slackID, msg); err != nil {
 			return fmt.Errorf("error sending slack message: %w", err)
 		}
 	}

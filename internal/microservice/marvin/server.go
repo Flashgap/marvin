@@ -114,7 +114,7 @@ func (ms *Server) initializeRouter() {
 // initializeControllers initializes all HTTP controllers.
 func (ms *Server) initializeControllers() {
 	ms.ctrls = []web.Controller{
-		NewController(ms.cfg, ms.services.MarvinService),
+		NewController(ms.cfg, ms.services.MarvinService, ms.services.LockService),
 	}
 }
 
@@ -125,6 +125,13 @@ func (ms *Server) Close(ctx context.Context) {
 	if ms.services.errorClient != nil {
 		if err := ms.services.errorClient.Close(); err != nil {
 			log.Criticalf("error shutting down error reporting client: %v", err)
+		}
+	}
+
+	// The database client is optional and may be nil.
+	if ms.services.DB != nil {
+		if err := ms.services.DB.Close(); err != nil {
+			log.Criticalf("error shutting down database client: %v", err)
 		}
 	}
 }
