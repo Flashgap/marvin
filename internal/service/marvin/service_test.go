@@ -1189,6 +1189,56 @@ blabla
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
+
+			It("tags the PR author instead of the sender when the label was applied by a bot", func(ctx SpecContext) {
+				cfg := marvin.GitHubRepositoryConfiguration{
+					RequireAIReview:  true,
+					AutoReviewAssign: true,
+					ReviewersTeam:    "my-team",
+				}
+				cfgs := marvin.GitHubRepositoryConfigurations{
+					repoName: &cfg,
+				}
+
+				prEvent := getLabeledEvent([]*gogithub.Label{
+					{Name: utils.Ptr(github.LabelReadyForReview)},
+				})
+				prEvent.Sender = &gogithub.User{
+					Login: utils.Ptr("some-automation[bot]"),
+					Type:  utils.Ptr("Bot"),
+				}
+				prEvent.PullRequest.User = &gogithub.User{Login: utils.Ptr("dana")}
+
+				// aiReviewGatePassed: no AI review found on the current commit
+				mockGithub.EXPECT().ListReviews(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return([]*gogithub.PullRequestReview{
+					{
+						User:     &gogithub.User{Login: utils.Ptr("alice")},
+						State:    utils.Ptr(pkggithub.PullRequestReviewStateChangesRequested),
+						CommitID: utils.Ptr("some-older-sha"),
+					},
+				}, nil, nil).Times(1)
+
+				// gate blocked: revert to WIP and comment, tagging the PR author (not the bot sender)
+				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
+					{Name: utils.Ptr(github.LabelReadyForReview)},
+					{Name: utils.Ptr(github.LabelWorkInProgress)},
+				}, nil, nil).Times(2)
+				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelReadyForReview).Return(nil, nil).Times(1)
+				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelWorkInProgress}).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), prNumber, &gogithub.IssueComment{
+					Body: utils.Ptr("Hey @dana, this repository requires an AI review before a human reviewer is assigned. Please request an AI review and wait for it to complete on the latest commit, then re-apply the *Ready for review* label."),
+				}).Return(nil, nil, nil).Times(1)
+
+				// FindAndAssignReviewers must NOT run since the gate is blocked
+				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				err := svc.OnPullRequest(ctx, &prEvent)
+				Expect(err).ToNot(HaveOccurred())
+			})
 		})
 	})
 

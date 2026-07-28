@@ -12,7 +12,7 @@ import (
 // DefaultAIReviewerLogins lists known AI code-review bot logins recognized out of the box by
 // require_ai_review and auto_changes_required, using their exact GitHub review-author login.
 // GetGitHubRepositoryConfigurations merges this with org-specific bots configured via the
-// MARVIN_AI_REVIEWER_LOGINS env var (config.Marvin.MarvinAIReviewerLogins) into
+// MARVIN_AI_REVIEWER_LOGINS env var (the MarvinAIReviewerLogins field on config.Marvin) into
 // GitHubRepositoryConfiguration.AIReviewerLogins.
 var DefaultAIReviewerLogins = []string{"coderabbitai[bot]", "graphite-app[bot]", "copilot-pull-request-reviewer[bot]"}
 

@@ -455,6 +455,14 @@ func (s *service) aiReviewGatePassed(ctx context.Context, webhook pkggithub.Repo
 
 	log.Info("require_ai_review is enabled and no AI review was found on the current commit, blocking reviewer assignment")
 
+	// Tag whoever triggered this (they're the one who just tried to move the PR to ready), unless
+	// that's a bot/automation account that can't act on an @-mention, in which case fall back to
+	// the PR author.
+	notifyLogin := webhook.GetSender().GetLogin()
+	if webhook.GetSender().GetType() == "Bot" {
+		notifyLogin = pr.GetUser().GetLogin()
+	}
+
 	var errs error
 	if err := s.githubService.RemoveLabel(ctx, webhook, pr.GetNumber(), github.LabelReadyForReview); err != nil {
 		errs = errors.Join(errs, err)
@@ -463,7 +471,7 @@ func (s *service) aiReviewGatePassed(ctx context.Context, webhook pkggithub.Repo
 		errs = errors.Join(errs, err)
 	}
 	if _, _, err := s.githubService.CreatePRComment(ctx, webhook, pr.GetNumber(), &gogithub.IssueComment{
-		Body: utils.Ptr(fmt.Sprintf(commentRequireAIReview, webhook.GetSender().GetLogin())),
+		Body: utils.Ptr(fmt.Sprintf(commentRequireAIReview, notifyLogin)),
 	}); err != nil {
 		errs = errors.Join(errs, err)
 	}
