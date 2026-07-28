@@ -157,7 +157,7 @@ Marvin is configured entirely through environment variables. Copy `config/local/
 | `MARVIN_REPOSITORIES` | Comma-separated list of `repo:feature1;feature2` | `my-repo:auto_merge;check_title,other-repo:slack_notify` |
 | `MARVIN_REVIEWERS_TEAMS` | Comma-separated `repo:team-slug` for `auto_review_assign` | `my-repo:backend` |
 | `MARVIN_GITHUB_TO_SLACK` | Comma-separated `github-handle:slack-user-id` for Slack DMs | `octocat:U012345678` |
-| `MARVIN_AI_REVIEWER_LOGINS` | Comma-separated extra AI-reviewer bot logins recognized by `require_ai_review` and `auto_changes_required`, in addition to the built-in `coderabbitai`/`graphite-app` (case-insensitive substring match) | `my-custom-ai-bot` |
+| `MARVIN_AI_REVIEWER_LOGINS` | Comma-separated extra AI-reviewer bot logins recognized by `require_ai_review` and `auto_changes_required`, in addition to the built-in `coderabbitai[bot]`/`graphite-app[bot]`/`copilot-pull-request-reviewer[bot]` (exact, case-insensitive match) | `my-custom-ai-bot[bot]` |
 
 ### Linear (required for Linear features)
 
@@ -318,14 +318,14 @@ Non-draft PRs opened normally are not affected by this automation.
 Manages the *Changes required* label lifecycle:
 
 - When a review requests changes, Marvin adds the *Changes required* label and notifies via Slack (see `slack_notify`).
-- When the *Ready for review* label is re-applied while *Changes required* is still present, Marvin removes *Changes required* and re-requests a review from the human reviewers whose latest review requested changes — excluding recognized AI reviewer bots (default: `coderabbitai`, `graphite-app`, extendable via `MARVIN_AI_REVIEWER_LOGINS`).
+- When the *Ready for review* label is re-applied while *Changes required* is still present, Marvin removes *Changes required* and re-requests a review from the human reviewers whose latest review requested changes — excluding recognized AI reviewer bots (default: `coderabbitai[bot]`, `graphite-app[bot]`, `copilot-pull-request-reviewer[bot]`, extendable via `MARVIN_AI_REVIEWER_LOGINS`).
 - If the repository also has `require_ai_review` and `auto_review_assign` enabled, this swap waits for the AI-review gate to pass first, so a re-request never fires ahead of the AI review check.
 
 ### `require_ai_review`
 
 Gates `auto_review_assign` behind AI-reviewer confirmation:
 
-- When the *Ready for review* label is added (manually, or via the native draft → ready transition), Marvin checks whether a recognized AI reviewer bot (default: `coderabbitai`, `graphite-app`, extendable via `MARVIN_AI_REVIEWER_LOGINS`) has already submitted a review for the PR's current HEAD commit.
+- When the *Ready for review* label is added (manually, or via the native draft → ready transition), Marvin checks whether a recognized AI reviewer bot (default: `coderabbitai[bot]`, `graphite-app[bot]`, `copilot-pull-request-reviewer[bot]`, extendable via `MARVIN_AI_REVIEWER_LOGINS`) has already submitted a review for the PR's current HEAD commit.
 - If not, Marvin removes *Ready for review*, re-adds *Work in progress*, comments asking the author to request an AI review, and does **not** assign a human reviewer.
 - If an AI review is found, `auto_review_assign` proceeds as normal.
 

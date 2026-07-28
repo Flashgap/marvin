@@ -67,9 +67,10 @@ type Marvin struct {
 	MarvinGithubToSlack map[string]string `envconfig:"MARVIN_GITHUB_TO_SLACK"`
 
 	// MarvinAIReviewerLogins extends the built-in list of AI code-review bot logins
-	// (coderabbitai, graphite-app) recognized by require_ai_review. Matches are a
-	// case-insensitive substring match against the review author's GitHub login.
-	// ex: my-custom-ai-bot
+	// (coderabbitai[bot], graphite-app[bot], copilot-pull-request-reviewer[bot]) recognized by
+	// require_ai_review. Matches are an exact, case-insensitive match against the review author's
+	// GitHub login.
+	// ex: my-custom-ai-bot[bot]
 	MarvinAIReviewerLogins []string `envconfig:"MARVIN_AI_REVIEWER_LOGINS"`
 }
 
