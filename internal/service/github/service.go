@@ -43,6 +43,8 @@ type Service interface {
 	HasCheckRunSucceeded(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, checkName string) (bool, error)
 	AreAllCheckRunsDone(ctx context.Context, webhook github.RepoSenderGetter, prNumber int) (bool, error)
 	HasEnoughApprovals(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest) (bool, error)
+	HasAIReviewed(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, extraAILogins []string) (bool, error)
+	ReRequestChangesRequested(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, extraAILogins []string) ([]string, error)
 }
 
 type service struct {
@@ -480,4 +482,83 @@ func (s *service) HasEnoughApprovals(ctx context.Context, webhook github.RepoSen
 	}
 
 	return true, nil
+}
+
+// HasAIReviewed returns true if a known AI-review bot (see IsAIReviewerLogin) has submitted a
+// review for the PR's current HEAD commit.
+func (s *service) HasAIReviewed(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, extraAILogins []string) (bool, error) {
+	log := middlewares.LoggerFromGHContext(ctx, "github.HasAIReviewed")
+
+	headSHA := pr.GetHead().GetSHA()
+
+	var found bool
+	err := github.ConsumePaginatedResource(github.MaxPerPage, func(opts *gogithub.ListOptions) (*gogithub.Response, bool, error) {
+		reviews, res, err := s.ListReviews(ctx, webhook, pr.GetNumber(), opts)
+		if err != nil {
+			return nil, false, fmt.Errorf("error listing reviews: %w", err)
+		}
+
+		for _, review := range reviews {
+			login := review.GetUser().GetLogin()
+			if IsAIReviewerLogin(login, extraAILogins) && review.GetCommitID() == headSHA {
+				log.Infof("found AI review from %s on commit %s", login, headSHA)
+				found = true
+				return res, false, nil
+			}
+		}
+
+		return res, true, nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("error listing paginated reviews: %w", err)
+	}
+
+	return found, nil
+}
+
+// ReRequestChangesRequested finds reviewers whose latest review on the PR requested changes and
+// re-requests their review. It returns the logins that were re-requested.
+func (s *service) ReRequestChangesRequested(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, extraAILogins []string) ([]string, error) {
+	log := middlewares.LoggerFromGHContext(ctx, "github.ReRequestChangesRequested")
+
+	reviews := make([]*gogithub.PullRequestReview, 0, github.MaxPerPage)
+	err := github.ConsumePaginatedResource(github.MaxPerPage, func(opts *gogithub.ListOptions) (*gogithub.Response, bool, error) {
+		r, res, err := s.ListReviews(ctx, webhook, pr.GetNumber(), opts)
+		if err != nil {
+			return nil, false, fmt.Errorf("error listing reviews: %w", err)
+		}
+		reviews = append(reviews, r...)
+		return res, true, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error listing all reviews: %w", err)
+	}
+
+	// The list of reviews returns in chronological order; track the latest state per reviewer.
+	latestState := make(map[string]string)
+	for _, review := range reviews {
+		login := review.GetUser().GetLogin()
+		if IsAIReviewerLogin(login, extraAILogins) {
+			continue
+		}
+		latestState[login] = review.GetState()
+	}
+
+	toReRequest := make([]string, 0, len(latestState))
+	for login, state := range latestState {
+		if strings.EqualFold(state, github.PullRequestReviewStateChangesRequested) {
+			toReRequest = append(toReRequest, login)
+		}
+	}
+
+	if len(toReRequest) == 0 {
+		return nil, nil
+	}
+
+	log.Infof("re-requesting review from: %v", toReRequest)
+	if _, _, err = s.RequestReviewers(ctx, webhook, pr.GetNumber(), toReRequest); err != nil {
+		return nil, fmt.Errorf("error re-requesting reviewers: %w", err)
+	}
+
+	return toReRequest, nil
 }

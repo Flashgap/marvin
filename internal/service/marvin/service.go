@@ -34,6 +34,7 @@ I removed this label, please add it back when the PR is ready to be merged!`
 	commentCheckTimeSpent         = "Hey @%s, you added the merge label but you might forgot to update the time spent. Please take a look at it."
 	commentErrorsToFix            = "Hey @%s, thanks for your PR! It contains some errors to fix:\n %s"
 	commentNotEnoughReviewers     = "Hey @%s, I didn't find enough reviewers for your PR. Please take a look at it!"
+	commentRequireAIReview        = "Hey @%s, this repository requires an AI review before a human reviewer is assigned. Please request an AI review and wait for it to complete on the latest commit, then re-apply the *Ready for review* label."
 	commentReadyToMerge           = "Hey @%s, your PR is ready to be merged."
 	commentInvalidTitle           = "Invalid PR title, should contain Linear ticket and Linear ticket should be in PR"
 	commentMissingLinearURL       = "Invalid PR, should contain Linear url."
@@ -179,8 +180,14 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 			return true, err
 		}
 		if config.AutoReviewAssign {
-			if _, err := s.githubService.FindAndAssignReviewers(ctx, event, pr, config.ReviewersTeam); err != nil {
+			proceed, err := s.aiReviewGatePassed(ctx, event, pr, config)
+			if err != nil {
 				return true, err
+			}
+			if proceed {
+				if _, err := s.githubService.FindAndAssignReviewers(ctx, event, pr, config.ReviewersTeam); err != nil {
+					return true, err
+				}
 			}
 		}
 		return true, nil
@@ -427,6 +434,43 @@ func (s *service) checkAndFormatPR(ctx context.Context, webhook pkggithub.RepoSe
 	return errs
 }
 
+// aiReviewGatePassed returns true if reviewer assignment should proceed. When RequireAIReview is
+// disabled it always returns true. When enabled, it checks whether a known AI reviewer has already
+// reviewed the PR's current HEAD commit; if not, it reverts the PR to Work in progress, removes the
+// Ready for review label, and comments explaining why, then returns false.
+func (s *service) aiReviewGatePassed(ctx context.Context, webhook pkggithub.RepoSenderGetter, pr *gogithub.PullRequest, config *GitHubRepositoryConfiguration) (bool, error) {
+	if !config.RequireAIReview {
+		return true, nil
+	}
+
+	log := middlewares.LoggerFromGHContext(ctx, "marvin.aiReviewGatePassed")
+
+	reviewed, err := s.githubService.HasAIReviewed(ctx, webhook, pr, config.AIReviewerLogins)
+	if err != nil {
+		return false, fmt.Errorf("error checking for AI review: %w", err)
+	}
+	if reviewed {
+		return true, nil
+	}
+
+	log.Info("require_ai_review is enabled and no AI review was found on the current commit, blocking reviewer assignment")
+
+	var errs error
+	if err := s.githubService.RemoveLabel(ctx, webhook, pr.GetNumber(), github.LabelReadyForReview); err != nil {
+		errs = errors.Join(errs, err)
+	}
+	if err := s.githubService.AddLabel(ctx, webhook, pr.GetNumber(), github.LabelWorkInProgress); err != nil {
+		errs = errors.Join(errs, err)
+	}
+	if _, _, err := s.githubService.CreatePRComment(ctx, webhook, pr.GetNumber(), &gogithub.IssueComment{
+		Body: utils.Ptr(fmt.Sprintf(commentRequireAIReview, webhook.GetSender().GetLogin())),
+	}); err != nil {
+		errs = errors.Join(errs, err)
+	}
+
+	return false, errs
+}
+
 func (s *service) labelActions(ctx context.Context, webhook pkggithub.RepoSenderGetter, pr *gogithub.PullRequest, addedLabel *gogithub.Label, config *GitHubRepositoryConfiguration) error {
 	var err error
 
@@ -435,20 +479,44 @@ func (s *service) labelActions(ctx context.Context, webhook pkggithub.RepoSender
 
 	switch {
 	case pkggithub.IsLabel(addedLabel, github.LabelReadyForReview):
+		hasChangesRequired := pkggithub.IsLabelInList(pr.Labels, github.LabelChangesRequired)
+
 		if config.AutoReviewAssign {
-			success, err := s.githubService.FindAndAssignReviewers(ctx, webhook, pr, config.ReviewersTeam)
+			proceed, err := s.aiReviewGatePassed(ctx, webhook, pr, config)
 			if err != nil {
 				return err
 			}
-			if !success {
-				log.Info("didn't get enough reviewers to request")
-				if _, _, err := s.githubService.CreatePRComment(ctx, webhook, pr.GetNumber(), &gogithub.IssueComment{
-					Body: utils.Ptr(
-						fmt.Sprintf(commentNotEnoughReviewers, webhook.GetSender().GetLogin()),
-					),
-				}); err != nil {
-					return fmt.Errorf("cannot add comment to ask for reviewers: %w", err)
+			if proceed {
+				if config.AutoChangesRequired && hasChangesRequired {
+					if err := s.githubService.RemoveLabel(ctx, webhook, pr.GetNumber(), github.LabelChangesRequired); err != nil {
+						return fmt.Errorf("error removing changes required label: %w", err)
+					}
+					if _, err := s.githubService.ReRequestChangesRequested(ctx, webhook, pr, config.AIReviewerLogins); err != nil {
+						return fmt.Errorf("error re-requesting reviewers: %w", err)
+					}
 				}
+
+				success, err := s.githubService.FindAndAssignReviewers(ctx, webhook, pr, config.ReviewersTeam)
+				if err != nil {
+					return err
+				}
+				if !success {
+					log.Info("didn't get enough reviewers to request")
+					if _, _, err := s.githubService.CreatePRComment(ctx, webhook, pr.GetNumber(), &gogithub.IssueComment{
+						Body: utils.Ptr(
+							fmt.Sprintf(commentNotEnoughReviewers, webhook.GetSender().GetLogin()),
+						),
+					}); err != nil {
+						return fmt.Errorf("cannot add comment to ask for reviewers: %w", err)
+					}
+				}
+			}
+		} else if config.AutoChangesRequired && hasChangesRequired {
+			if err := s.githubService.RemoveLabel(ctx, webhook, pr.GetNumber(), github.LabelChangesRequired); err != nil {
+				return fmt.Errorf("error removing changes required label: %w", err)
+			}
+			if _, err := s.githubService.ReRequestChangesRequested(ctx, webhook, pr, config.AIReviewerLogins); err != nil {
+				return fmt.Errorf("error re-requesting reviewers: %w", err)
 			}
 		}
 	case pkggithub.IsLabel(addedLabel, github.LabelMerge):

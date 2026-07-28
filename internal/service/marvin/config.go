@@ -27,6 +27,8 @@ type GitHubRepositoryConfiguration struct {
 	UpdateLinearLink    bool
 	SlackNotify         bool
 	AutoCapReport       bool
+	RequireAIReview     bool
+	AIReviewerLogins    []string
 	GithubToSlack       map[string]string
 }
 
@@ -94,6 +96,10 @@ func withAutoCapReport(c *GitHubRepositoryConfiguration) {
 	c.AutoCapReport = true
 }
 
+func withRequireAIReview(c *GitHubRepositoryConfiguration) {
+	c.RequireAIReview = true
+}
+
 type optionFunc func(c *GitHubRepositoryConfiguration)
 
 var configToFunc = map[string]optionFunc{
@@ -113,6 +119,7 @@ var configToFunc = map[string]optionFunc{
 	"auto_assignee":         withAutoAssignee,
 	"slack_notify":          withSlackNotify,
 	"auto_cap_report":       withAutoCapReport,
+	"require_ai_review":     withRequireAIReview,
 }
 
 // GitHubRepositoryConfigurations maps the repository with its configuration to enable/disable features
@@ -142,6 +149,9 @@ func GetGitHubRepositoryConfigurations(cfg config.Marvin) GitHubRepositoryConfig
 		}
 		if repoConfig.SlackNotify {
 			repoConfig.GithubToSlack = cfg.MarvinGithubToSlack
+		}
+		if repoConfig.RequireAIReview || repoConfig.AutoChangesRequired {
+			repoConfig.AIReviewerLogins = cfg.MarvinAIReviewerLogins
 		}
 
 		config.PrintConfig(repoConfig)

@@ -65,6 +65,12 @@ type Marvin struct {
 	// MarvinGithubToSlack is a mapping of GitHub handles to Slack IDs
 	// ex: octocat:U043AC1234,bob:U043BC1234
 	MarvinGithubToSlack map[string]string `envconfig:"MARVIN_GITHUB_TO_SLACK"`
+
+	// MarvinAIReviewerLogins extends the built-in list of AI code-review bot logins
+	// (coderabbitai, graphite-app) recognized by require_ai_review. Matches are a
+	// case-insensitive substring match against the review author's GitHub login.
+	// ex: my-custom-ai-bot
+	MarvinAIReviewerLogins []string `envconfig:"MARVIN_AI_REVIEWER_LOGINS"`
 }
 
 // Jira configuration.
