@@ -9,6 +9,13 @@ import (
 	"github.com/Flashgap/marvin/pkg/utils/maputil"
 )
 
+// DefaultAIReviewerLogins lists known AI code-review bot logins recognized out of the box by
+// require_ai_review and auto_changes_required, using their exact GitHub review-author login.
+// GetGitHubRepositoryConfigurations merges this with org-specific bots configured via the
+// MARVIN_AI_REVIEWER_LOGINS env var (config.Marvin.MarvinAIReviewerLogins) into
+// GitHubRepositoryConfiguration.AIReviewerLogins.
+var DefaultAIReviewerLogins = []string{"coderabbitai[bot]", "graphite-app[bot]", "copilot-pull-request-reviewer[bot]"}
+
 type GitHubRepositoryConfiguration struct {
 	ReviewersTeam       string
 	AutoApprove         bool
@@ -151,7 +158,9 @@ func GetGitHubRepositoryConfigurations(cfg config.Marvin) GitHubRepositoryConfig
 			repoConfig.GithubToSlack = cfg.MarvinGithubToSlack
 		}
 		if repoConfig.RequireAIReview || repoConfig.AutoChangesRequired {
-			repoConfig.AIReviewerLogins = cfg.MarvinAIReviewerLogins
+			repoConfig.AIReviewerLogins = make([]string, 0, len(DefaultAIReviewerLogins)+len(cfg.MarvinAIReviewerLogins))
+			repoConfig.AIReviewerLogins = append(repoConfig.AIReviewerLogins, DefaultAIReviewerLogins...)
+			repoConfig.AIReviewerLogins = append(repoConfig.AIReviewerLogins, cfg.MarvinAIReviewerLogins...)
 		}
 
 		config.PrintConfig(repoConfig)

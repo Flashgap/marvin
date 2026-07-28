@@ -1047,6 +1047,7 @@ blabla
 					AutoDraftLabels:  true,
 					AutoReviewAssign: true,
 					RequireAIReview:  true,
+					AIReviewerLogins: marvin.DefaultAIReviewerLogins,
 					ReviewersTeam:    "my-team",
 				}
 				cfgs := marvin.GitHubRepositoryConfigurations{
@@ -1223,6 +1224,7 @@ blabla
 			It("removes Changes required and re-requests the human reviewers whose latest review requested changes", func(ctx SpecContext) {
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoChangesRequired: true,
+					AIReviewerLogins:    marvin.DefaultAIReviewerLogins,
 				}
 				cfgs := marvin.GitHubRepositoryConfigurations{
 					repoName: &cfg,

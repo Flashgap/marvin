@@ -8,8 +8,18 @@ import (
 	"github.com/Flashgap/marvin/internal/service/marvin"
 )
 
+var _ = Describe("DefaultAIReviewerLogins", func() {
+	It("lists the known AI reviewer bot logins", func() {
+		Expect(marvin.DefaultAIReviewerLogins).To(ConsistOf(
+			"coderabbitai[bot]",
+			"graphite-app[bot]",
+			"copilot-pull-request-reviewer[bot]",
+		))
+	})
+})
+
 var _ = Describe("GetGitHubRepositoryConfigurations", func() {
-	It("enables RequireAIReview and carries the configured AI reviewer logins", func() {
+	It("enables RequireAIReview and carries the default AI reviewer logins plus the configured ones", func() {
 		cfg := config.Marvin{
 			MarvinRepositories:     map[string]string{repoName: "require_ai_review"},
 			MarvinAIReviewerLogins: []string{"my-custom-bot"},
@@ -19,7 +29,7 @@ var _ = Describe("GetGitHubRepositoryConfigurations", func() {
 
 		Expect(configs).To(HaveKey(repoName))
 		Expect(configs[repoName].RequireAIReview).To(BeTrue())
-		Expect(configs[repoName].AIReviewerLogins).To(Equal([]string{"my-custom-bot"}))
+		Expect(configs[repoName].AIReviewerLogins).To(Equal(append(append([]string{}, marvin.DefaultAIReviewerLogins...), "my-custom-bot")))
 	})
 
 	It("leaves AIReviewerLogins empty when require_ai_review is not enabled", func() {

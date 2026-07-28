@@ -43,8 +43,8 @@ type Service interface {
 	HasCheckRunSucceeded(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, checkName string) (bool, error)
 	AreAllCheckRunsDone(ctx context.Context, webhook github.RepoSenderGetter, prNumber int) (bool, error)
 	HasEnoughApprovals(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest) (bool, error)
-	HasAIReviewed(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, extraAILogins []string) (bool, error)
-	ReRequestChangesRequested(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, extraAILogins []string) ([]string, error)
+	HasAIReviewed(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, aiLogins []string) (bool, error)
+	ReRequestChangesRequested(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, aiLogins []string) ([]string, error)
 }
 
 type service struct {
@@ -486,7 +486,7 @@ func (s *service) HasEnoughApprovals(ctx context.Context, webhook github.RepoSen
 
 // HasAIReviewed returns true if a known AI-review bot (see IsAIReviewerLogin) has submitted a
 // review for the PR's current HEAD commit.
-func (s *service) HasAIReviewed(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, extraAILogins []string) (bool, error) {
+func (s *service) HasAIReviewed(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, aiLogins []string) (bool, error) {
 	log := middlewares.LoggerFromGHContext(ctx, "github.HasAIReviewed")
 
 	headSHA := pr.GetHead().GetSHA()
@@ -500,7 +500,7 @@ func (s *service) HasAIReviewed(ctx context.Context, webhook github.RepoSenderGe
 
 		for _, review := range reviews {
 			login := review.GetUser().GetLogin()
-			if IsAIReviewerLogin(login, extraAILogins) && review.GetCommitID() == headSHA {
+			if IsAIReviewerLogin(login, aiLogins) && review.GetCommitID() == headSHA {
 				log.Infof("found AI review from %s on commit %s", login, headSHA)
 				found = true
 				return res, false, nil
@@ -518,7 +518,7 @@ func (s *service) HasAIReviewed(ctx context.Context, webhook github.RepoSenderGe
 
 // ReRequestChangesRequested finds reviewers whose latest review on the PR requested changes and
 // re-requests their review. It returns the logins that were re-requested.
-func (s *service) ReRequestChangesRequested(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, extraAILogins []string) ([]string, error) {
+func (s *service) ReRequestChangesRequested(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, aiLogins []string) ([]string, error) {
 	log := middlewares.LoggerFromGHContext(ctx, "github.ReRequestChangesRequested")
 
 	reviews := make([]*gogithub.PullRequestReview, 0, github.MaxPerPage)
@@ -538,7 +538,7 @@ func (s *service) ReRequestChangesRequested(ctx context.Context, webhook github.
 	latestState := make(map[string]string)
 	for _, review := range reviews {
 		login := review.GetUser().GetLogin()
-		if IsAIReviewerLogin(login, extraAILogins) {
+		if IsAIReviewerLogin(login, aiLogins) {
 			continue
 		}
 		latestState[login] = review.GetState()
