@@ -9,6 +9,13 @@ import (
 	"github.com/Flashgap/marvin/pkg/utils/maputil"
 )
 
+// DefaultAIReviewerLogins lists known AI code-review bot logins recognized out of the box by
+// require_ai_review and auto_changes_required, using their exact GitHub review-author login.
+// GetGitHubRepositoryConfigurations merges this with org-specific bots configured via the
+// MARVIN_AI_REVIEWER_LOGINS env var (the MarvinAIReviewerLogins field on config.Marvin) into
+// GitHubRepositoryConfiguration.AIReviewerLogins.
+var DefaultAIReviewerLogins = []string{"coderabbitai[bot]", "graphite-app[bot]", "copilot-pull-request-reviewer[bot]"}
+
 type GitHubRepositoryConfiguration struct {
 	ReviewersTeam       string
 	AutoApprove         bool
@@ -27,6 +34,8 @@ type GitHubRepositoryConfiguration struct {
 	UpdateLinearLink    bool
 	SlackNotify         bool
 	AutoCapReport       bool
+	RequireAIReview     bool
+	AIReviewerLogins    []string
 	GithubToSlack       map[string]string
 }
 
@@ -94,6 +103,10 @@ func withAutoCapReport(c *GitHubRepositoryConfiguration) {
 	c.AutoCapReport = true
 }
 
+func withRequireAIReview(c *GitHubRepositoryConfiguration) {
+	c.RequireAIReview = true
+}
+
 type optionFunc func(c *GitHubRepositoryConfiguration)
 
 var configToFunc = map[string]optionFunc{
@@ -113,6 +126,7 @@ var configToFunc = map[string]optionFunc{
 	"auto_assignee":         withAutoAssignee,
 	"slack_notify":          withSlackNotify,
 	"auto_cap_report":       withAutoCapReport,
+	"require_ai_review":     withRequireAIReview,
 }
 
 // GitHubRepositoryConfigurations maps the repository with its configuration to enable/disable features
@@ -142,6 +156,11 @@ func GetGitHubRepositoryConfigurations(cfg config.Marvin) GitHubRepositoryConfig
 		}
 		if repoConfig.SlackNotify {
 			repoConfig.GithubToSlack = cfg.MarvinGithubToSlack
+		}
+		if repoConfig.RequireAIReview || repoConfig.AutoChangesRequired {
+			repoConfig.AIReviewerLogins = make([]string, 0, len(DefaultAIReviewerLogins)+len(cfg.MarvinAIReviewerLogins))
+			repoConfig.AIReviewerLogins = append(repoConfig.AIReviewerLogins, DefaultAIReviewerLogins...)
+			repoConfig.AIReviewerLogins = append(repoConfig.AIReviewerLogins, cfg.MarvinAIReviewerLogins...)
 		}
 
 		config.PrintConfig(repoConfig)
