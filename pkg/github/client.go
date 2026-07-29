@@ -60,10 +60,6 @@ func (h *client) GetCommit(ctx context.Context, webhook RepoSenderGetter, sha st
 	return h.Repositories.GetCommit(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), sha, opts)
 }
 
-func (h *client) CompareCommits(ctx context.Context, webhook RepoSenderGetter, base, head string, opts *github.ListOptions) (*github.CommitsComparison, *github.Response, error) {
-	return h.Repositories.CompareCommits(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), base, head, opts)
-}
-
 func (h *client) CreateCheckRun(ctx context.Context, webhook RepoSenderGetter, opts github.CreateCheckRunOptions) (*github.CheckRun, *github.Response, error) {
 	return h.Checks.CreateCheckRun(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), opts)
 }

@@ -74,22 +74,6 @@ func (mr *MockClientMockRecorder) AddPRLabels(ctx, webhook, prNumber, labels any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPRLabels", reflect.TypeOf((*MockClient)(nil).AddPRLabels), ctx, webhook, prNumber, labels)
 }
 
-// CompareCommits mocks base method.
-func (m *MockClient) CompareCommits(ctx context.Context, webhook github.RepoSenderGetter, base, head string, opts *github0.ListOptions) (*github0.CommitsComparison, *github0.Response, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CompareCommits", ctx, webhook, base, head, opts)
-	ret0, _ := ret[0].(*github0.CommitsComparison)
-	ret1, _ := ret[1].(*github0.Response)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// CompareCommits indicates an expected call of CompareCommits.
-func (mr *MockClientMockRecorder) CompareCommits(ctx, webhook, base, head, opts any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompareCommits", reflect.TypeOf((*MockClient)(nil).CompareCommits), ctx, webhook, base, head, opts)
-}
-
 // CreateCheckRun mocks base method.
 func (m *MockClient) CreateCheckRun(ctx context.Context, webhook github.RepoSenderGetter, opts github0.CreateCheckRunOptions) (*github0.CheckRun, *github0.Response, error) {
 	m.ctrl.T.Helper()

@@ -15,9 +15,8 @@ import (
 var _ = Describe("HasAIReviewed", func() {
 	const (
 		prNumber = 94
-		baseRef  = "master"
 		headSHA  = "3323bd58" // merge commit of master into the branch
-		oldSHA   = "2d0f2707" // the commit CodeRabbit actually reviewed
+		oldSHA   = "2d0f2707" // an earlier commit CodeRabbit reviewed
 	)
 	aiLogins := []string{"coderabbitai[bot]"}
 
@@ -28,19 +27,6 @@ var _ = Describe("HasAIReviewed", func() {
 		pr         *gogithub.PullRequest
 		event      *gogithub.PullRequestEvent
 	)
-
-	// files builds a CompareCommits result from filename->blobSHA pairs.
-	files := func(pairs map[string]string) *gogithub.CommitsComparison {
-		out := make([]*gogithub.CommitFile, 0, len(pairs))
-		for name, sha := range pairs {
-			out = append(out, &gogithub.CommitFile{
-				Filename: utils.Ptr(name),
-				Status:   utils.Ptr("modified"),
-				SHA:      utils.Ptr(sha),
-			})
-		}
-		return &gogithub.CommitsComparison{Files: out}
-	}
 
 	review := func(login, commitID string) *gogithub.PullRequestReview {
 		return &gogithub.PullRequestReview{
@@ -56,7 +42,6 @@ var _ = Describe("HasAIReviewed", func() {
 		pr = &gogithub.PullRequest{
 			Number: utils.Ptr(prNumber),
 			Head:   &gogithub.PullRequestBranch{SHA: utils.Ptr(headSHA)},
-			Base:   &gogithub.PullRequestBranch{Ref: utils.Ptr(baseRef)},
 		}
 		event = &gogithub.PullRequestEvent{
 			Repo:        &gogithub.Repository{Name: utils.Ptr("infra"), Owner: &gogithub.User{Login: utils.Ptr("hector-finance")}},
@@ -66,11 +51,10 @@ var _ = Describe("HasAIReviewed", func() {
 
 	AfterEach(func() { mockCtrl.Finish() })
 
-	When("an AI review lands exactly on HEAD", func() {
-		It("passes without any commit comparison", func(ctx SpecContext) {
+	When("an AI review exists on HEAD", func() {
+		It("passes", func(ctx SpecContext) {
 			mockClient.EXPECT().ListReviews(gomock.Any(), event, prNumber, gomock.Any()).
 				Return([]*gogithub.PullRequestReview{review("coderabbitai[bot]", headSHA)}, nil, nil)
-			// No CompareCommits expected on the fast path.
 
 			ok, err := svc.HasAIReviewed(ctx, event, pr, aiLogins)
 			Expect(err).NotTo(HaveOccurred())
@@ -78,17 +62,10 @@ var _ = Describe("HasAIReviewed", func() {
 		})
 	})
 
-	When("HEAD is a base-branch merge with no new branch changes", func() {
-		It("passes because the branch diff is unchanged since the AI review", func(ctx SpecContext) {
-			branchDiff := map[string]string{"main.go": "blobAAA", "go.mod": "blobBBB"}
-
+	When("an AI review exists but only on an earlier commit", func() {
+		It("still passes (we only require a review to have happened once)", func(ctx SpecContext) {
 			mockClient.EXPECT().ListReviews(gomock.Any(), event, prNumber, gomock.Any()).
 				Return([]*gogithub.PullRequestReview{review("coderabbitai[bot]", oldSHA)}, nil, nil)
-			// Same branch diff (identical file blobs) at HEAD and at the reviewed commit.
-			mockClient.EXPECT().CompareCommits(gomock.Any(), event, baseRef, headSHA, gomock.Any()).
-				Return(files(branchDiff), nil, nil)
-			mockClient.EXPECT().CompareCommits(gomock.Any(), event, baseRef, oldSHA, gomock.Any()).
-				Return(files(branchDiff), nil, nil)
 
 			ok, err := svc.HasAIReviewed(ctx, event, pr, aiLogins)
 			Expect(err).NotTo(HaveOccurred())
@@ -96,14 +73,10 @@ var _ = Describe("HasAIReviewed", func() {
 		})
 	})
 
-	When("new branch code was pushed after the AI review", func() {
-		It("blocks because the branch diff differs from the reviewed commit", func(ctx SpecContext) {
+	When("only humans have reviewed", func() {
+		It("blocks", func(ctx SpecContext) {
 			mockClient.EXPECT().ListReviews(gomock.Any(), event, prNumber, gomock.Any()).
-				Return([]*gogithub.PullRequestReview{review("coderabbitai[bot]", oldSHA)}, nil, nil)
-			mockClient.EXPECT().CompareCommits(gomock.Any(), event, baseRef, headSHA, gomock.Any()).
-				Return(files(map[string]string{"main.go": "blobNEW", "go.mod": "blobBBB"}), nil, nil)
-			mockClient.EXPECT().CompareCommits(gomock.Any(), event, baseRef, oldSHA, gomock.Any()).
-				Return(files(map[string]string{"main.go": "blobAAA", "go.mod": "blobBBB"}), nil, nil)
+				Return([]*gogithub.PullRequestReview{review("some-human", oldSHA)}, nil, nil)
 
 			ok, err := svc.HasAIReviewed(ctx, event, pr, aiLogins)
 			Expect(err).NotTo(HaveOccurred())
@@ -111,10 +84,10 @@ var _ = Describe("HasAIReviewed", func() {
 		})
 	})
 
-	When("no AI reviewer has reviewed at all", func() {
-		It("blocks without comparing commits", func(ctx SpecContext) {
+	When("there are no reviews at all", func() {
+		It("blocks", func(ctx SpecContext) {
 			mockClient.EXPECT().ListReviews(gomock.Any(), event, prNumber, gomock.Any()).
-				Return([]*gogithub.PullRequestReview{review("some-human", oldSHA)}, nil, nil)
+				Return([]*gogithub.PullRequestReview{}, nil, nil)
 
 			ok, err := svc.HasAIReviewed(ctx, event, pr, aiLogins)
 			Expect(err).NotTo(HaveOccurred())
