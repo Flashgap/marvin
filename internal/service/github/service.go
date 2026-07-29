@@ -345,11 +345,13 @@ func (s *service) UpdateAndMergePR(ctx context.Context, webhook github.RepoSende
 	log.Infof("got this description: %q", prDescription)
 	commitTitle, commitDescription := TitleOrDescriptionWithPRNumber(pr.GetTitle(), prDescription, pr.GetNumber())
 	log.Infof("merging PR, title: %q description: %q", commitTitle, commitDescription)
-	if _, _, err = s.MergePR(ctx, webhook, pr.GetNumber(), commitDescription, &gogithub.PullRequestOptions{
+	if res, _, err := s.MergePR(ctx, webhook, pr.GetNumber(), commitDescription, &gogithub.PullRequestOptions{
 		CommitTitle: commitTitle,
 		MergeMethod: "squash",
 	}); err != nil {
 		return fmt.Errorf("%w: %w", ErrMerge, err)
+	} else if !res.GetMerged() {
+		return fmt.Errorf("%w: %s", ErrMerge, res.GetMessage())
 	}
 
 	return nil
@@ -484,14 +486,25 @@ func (s *service) HasEnoughApprovals(ctx context.Context, webhook github.RepoSen
 	return true, nil
 }
 
-// HasAIReviewed returns true if a known AI-review bot (see IsAIReviewerLogin) has submitted a
-// review for the PR's current HEAD commit.
+// HasAIReviewed returns true if a known AI-review bot (see IsAIReviewerLogin) has reviewed the code
+// that the PR currently contributes.
+//
+// The naive check "is there an AI review whose commit_id == HEAD?" is too strict: an AI reviewer
+// (e.g. CodeRabbit) legitimately declines to produce a new review on a commit that adds no
+// reviewable branch changes — most commonly a merge of the base branch, which advances HEAD without
+// touching the PR's own diff. To avoid re-blocking those, we treat an AI review as still valid when
+// the PR's branch diff (the three-dot diff against the base branch) is identical between the
+// reviewed commit and HEAD.
 func (s *service) HasAIReviewed(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, aiLogins []string) (bool, error) {
 	log := middlewares.LoggerFromGHContext(ctx, "github.HasAIReviewed")
 
 	headSHA := pr.GetHead().GetSHA()
+	baseRef := pr.GetBase().GetRef()
 
-	var found bool
+	// Collect the distinct commits reviewed by an AI reviewer. Fast-path an exact HEAD match so the
+	// common case (AI reviewed the latest commit) costs no extra API calls.
+	reviewedSHAs := make([]string, 0)
+	seen := make(map[string]struct{})
 	err := github.ConsumePaginatedResource(github.MaxPerPage, func(opts *gogithub.ListOptions) (*gogithub.Response, bool, error) {
 		reviews, res, err := s.ListReviews(ctx, webhook, pr.GetNumber(), opts)
 		if err != nil {
@@ -499,12 +512,18 @@ func (s *service) HasAIReviewed(ctx context.Context, webhook github.RepoSenderGe
 		}
 
 		for _, review := range reviews {
-			login := review.GetUser().GetLogin()
-			if IsAIReviewerLogin(login, aiLogins) && review.GetCommitID() == headSHA {
-				log.Infof("found AI review from %s on commit %s", login, headSHA)
-				found = true
-				return res, false, nil
+			if !IsAIReviewerLogin(review.GetUser().GetLogin(), aiLogins) {
+				continue
 			}
+			sha := review.GetCommitID()
+			if sha == "" {
+				continue
+			}
+			if _, ok := seen[sha]; ok {
+				continue
+			}
+			seen[sha] = struct{}{}
+			reviewedSHAs = append(reviewedSHAs, sha)
 		}
 
 		return res, true, nil
@@ -513,7 +532,61 @@ func (s *service) HasAIReviewed(ctx context.Context, webhook github.RepoSenderGe
 		return false, fmt.Errorf("error listing paginated reviews: %w", err)
 	}
 
-	return found, nil
+	if _, ok := seen[headSHA]; ok {
+		log.Infof("found AI review on HEAD commit %s", headSHA)
+		return true, nil
+	}
+	if len(reviewedSHAs) == 0 {
+		return false, nil
+	}
+
+	// No AI review lands exactly on HEAD. Fall back to comparing the PR's branch diff: if an
+	// AI-reviewed commit produces the same branch diff as HEAD, HEAD only advanced by changes that
+	// bring in the base branch (e.g. a merge commit) and the review still covers the PR's own code.
+	headDiff, err := s.prBranchDiffSignature(ctx, webhook, baseRef, headSHA)
+	if err != nil {
+		return false, fmt.Errorf("error computing HEAD branch diff: %w", err)
+	}
+
+	for _, sha := range reviewedSHAs {
+		reviewedDiff, err := s.prBranchDiffSignature(ctx, webhook, baseRef, sha)
+		if err != nil {
+			return false, fmt.Errorf("error computing branch diff for reviewed commit %s: %w", sha, err)
+		}
+		if reviewedDiff == headDiff {
+			log.Infof("AI review on commit %s still covers HEAD %s (PR branch diff unchanged since review)", sha, headSHA)
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// prBranchDiffSignature returns a stable signature of the PR's branch diff at commit sha: the set of
+// files changed relative to the base branch (three-dot diff), each keyed by filename, status and
+// blob SHA. Two commits with the same signature contribute identical code to the PR, so a review of
+// one covers the other. The blob SHA (rather than the textual patch) makes the comparison robust to
+// context-line churn caused by unrelated base-branch changes.
+func (s *service) prBranchDiffSignature(ctx context.Context, webhook github.RepoSenderGetter, baseRef, sha string) (string, error) {
+	files := make([]string, 0)
+	err := github.ConsumePaginatedResource(github.MaxPerPage, func(opts *gogithub.ListOptions) (*gogithub.Response, bool, error) {
+		cmp, res, err := s.CompareCommits(ctx, webhook, baseRef, sha, opts)
+		if err != nil {
+			return nil, false, fmt.Errorf("error comparing %s...%s: %w", baseRef, sha, err)
+		}
+		for _, f := range cmp.Files {
+			files = append(files, fmt.Sprintf("%s\x00%s\x00%s", f.GetFilename(), f.GetStatus(), f.GetSHA()))
+		}
+		return res, true, nil
+	})
+	if err != nil {
+		return "", err
+	}
+
+	// CompareCommits returns files in a stable order, but sort defensively so pagination boundaries
+	// or API ordering never affect the signature.
+	sort.Strings(files)
+	return strings.Join(files, "\n"), nil
 }
 
 // ReRequestChangesRequested finds reviewers whose latest review on the PR requested changes and

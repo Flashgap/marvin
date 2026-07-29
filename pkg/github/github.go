@@ -18,6 +18,7 @@ type Client interface {
 	ListCheckRunsForRef(ctx context.Context, webhook RepoSenderGetter, ref string, opts *github.ListCheckRunsOptions) (*github.ListCheckRunsResults, *github.Response, error)
 	PR(ctx context.Context, webhook RepoSenderGetter, number int) (*github.PullRequest, *github.Response, error)
 	GetCommit(ctx context.Context, webhook RepoSenderGetter, sha string, opts *github.ListOptions) (*github.RepositoryCommit, *github.Response, error)
+	CompareCommits(ctx context.Context, webhook RepoSenderGetter, base, head string, opts *github.ListOptions) (*github.CommitsComparison, *github.Response, error)
 	CreateCheckRun(ctx context.Context, webhook RepoSenderGetter, opts github.CreateCheckRunOptions) (*github.CheckRun, *github.Response, error)
 	RequestReviewers(ctx context.Context, webhook RepoSenderGetter, prNumber int, reviewers []string) (*github.PullRequest, *github.Response, error)
 	ListPR(ctx context.Context, webhook RepoSenderGetter, opts *github.PullRequestListOptions) ([]*github.PullRequest, *github.Response, error)
