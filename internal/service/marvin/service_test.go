@@ -262,7 +262,7 @@ blabla
 `, prBody)
 
 					prEvent.PullRequest.Body = &prBody
-					mockGithub.EXPECT().MergePR(gomock.Any(), gomock.Any(), gomock.Any(), "- hello world", gomock.Any()).Return(nil, nil, nil)
+					mockGithub.EXPECT().MergePR(gomock.Any(), gomock.Any(), gomock.Any(), "- hello world", gomock.Any()).Return(&gogithub.PullRequestMergeResult{Merged: utils.Ptr(true)}, nil, nil)
 					err := svc.OnPullRequest(ctx, &prEvent)
 					Expect(err).NotTo(HaveOccurred())
 				})
