@@ -138,6 +138,22 @@ func (mr *MockClientMockRecorder) GetBranchProtection(ctx, webhook, branch any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBranchProtection", reflect.TypeOf((*MockClient)(nil).GetBranchProtection), ctx, webhook, branch)
 }
 
+// GetCombinedStatus mocks base method.
+func (m *MockClient) GetCombinedStatus(ctx context.Context, webhook github.RepoSenderGetter, ref string, opts *github0.ListOptions) (*github0.CombinedStatus, *github0.Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCombinedStatus", ctx, webhook, ref, opts)
+	ret0, _ := ret[0].(*github0.CombinedStatus)
+	ret1, _ := ret[1].(*github0.Response)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetCombinedStatus indicates an expected call of GetCombinedStatus.
+func (mr *MockClientMockRecorder) GetCombinedStatus(ctx, webhook, ref, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCombinedStatus", reflect.TypeOf((*MockClient)(nil).GetCombinedStatus), ctx, webhook, ref, opts)
+}
+
 // GetCommit mocks base method.
 func (m *MockClient) GetCommit(ctx context.Context, webhook github.RepoSenderGetter, sha string, opts *github0.ListOptions) (*github0.RepositoryCommit, *github0.Response, error) {
 	m.ctrl.T.Helper()

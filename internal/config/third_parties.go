@@ -72,6 +72,12 @@ type Marvin struct {
 	// GitHub login.
 	// ex: my-custom-ai-bot[bot]
 	MarvinAIReviewerLogins []string `envconfig:"MARVIN_AI_REVIEWER_LOGINS"`
+
+	// MarvinAIReviewStatusContexts extends the built-in list of commit-status contexts (CodeRabbit)
+	// that count as a completed AI review when no formal review is found on the PR. Used by
+	// require_ai_review. Matches are an exact, case-insensitive match against the status context.
+	// ex: MyAIReviewer
+	MarvinAIReviewStatusContexts []string `envconfig:"MARVIN_AI_REVIEW_STATUS_CONTEXTS"`
 }
 
 // Jira configuration.

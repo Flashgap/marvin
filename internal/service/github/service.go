@@ -44,6 +44,7 @@ type Service interface {
 	AreAllCheckRunsDone(ctx context.Context, webhook github.RepoSenderGetter, prNumber int) (bool, error)
 	HasEnoughApprovals(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest) (bool, error)
 	HasAIReviewed(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, aiLogins []string) (bool, error)
+	HasAIReviewStatusSucceeded(ctx context.Context, webhook github.RepoSenderGetter, ref string, contexts []string) (bool, error)
 	ReRequestChangesRequested(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, aiLogins []string) ([]string, error)
 }
 
@@ -516,6 +517,46 @@ func (s *service) HasAIReviewed(ctx context.Context, webhook github.RepoSenderGe
 	})
 	if err != nil {
 		return false, fmt.Errorf("error listing paginated reviews: %w", err)
+	}
+
+	return found, nil
+}
+
+// HasAIReviewStatusSucceeded returns true if a successful commit status whose context matches one of
+// contexts (case-insensitive) is present on ref.
+//
+// This complements HasAIReviewed: some AI reviewers (e.g. CodeRabbit) skip submitting a formal review
+// on trivial or no-op diffs but still publish a success status named after themselves, which is the
+// only completion signal available in that case.
+func (s *service) HasAIReviewStatusSucceeded(ctx context.Context, webhook github.RepoSenderGetter, ref string, contexts []string) (bool, error) {
+	log := middlewares.LoggerFromGHContext(ctx, "github.HasAIReviewStatusSucceeded")
+
+	if len(contexts) == 0 {
+		return false, nil
+	}
+
+	var found bool
+	err := github.ConsumePaginatedResource(github.MaxPerPage, func(opts *gogithub.ListOptions) (*gogithub.Response, bool, error) {
+		combined, res, err := s.GetCombinedStatus(ctx, webhook, ref, opts)
+		if err != nil {
+			return nil, false, fmt.Errorf("error getting combined status: %w", err)
+		}
+
+		for _, status := range combined.Statuses {
+			if status.GetState() != github.CheckRunConclusionSuccess {
+				continue
+			}
+			if IsAIReviewerLogin(status.GetContext(), contexts) {
+				log.Infof("found successful AI review status %q on %s", status.GetContext(), ref)
+				found = true
+				return res, false, nil
+			}
+		}
+
+		return res, true, nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("error listing paginated combined status: %w", err)
 	}
 
 	return found, nil

@@ -33,7 +33,7 @@ Every feature is opt-in and enabled per repository via the `MARVIN_REPOSITORIES`
 | `auto_review_assign` | Requests reviewers from a configured team when the *Ready for review* label is added |
 | `auto_approve` | Adds the *Approved* label and removes *Ready for review* once enough approvals are in |
 | `auto_changes_required` | Adds the *Changes required* label and notifies via Slack when a review requests changes; removes it and re-requests the affected human reviewers when *Ready for review* is re-applied |
-| `require_ai_review` | Blocks `auto_review_assign` until a recognized AI reviewer (CodeRabbit, Graphite, etc.) has reviewed the current commit; reverts to *Work in progress* and comments if triggered early |
+| `require_ai_review` | Blocks `auto_review_assign` until a recognized AI reviewer (CodeRabbit, Graphite, etc.) has reviewed the PR at least once, or reported completion via a success commit status; reverts to *Work in progress* and comments if triggered early |
 | `auto_merge` | Merges the PR (squash) when the *Merge 🚀* label is added and all checks pass |
 | `update_title` | Corrects the PR title format (adds missing issue ID prefix, strips GitHub-generated noise) |
 | `update_linear_link` | Auto-fills the *Fixed issues* section from the git branch name if it's empty |
@@ -158,6 +158,7 @@ Marvin is configured entirely through environment variables. Copy `config/local/
 | `MARVIN_REVIEWERS_TEAMS` | Comma-separated `repo:team-slug` for `auto_review_assign` | `my-repo:backend` |
 | `MARVIN_GITHUB_TO_SLACK` | Comma-separated `github-handle:slack-user-id` for Slack DMs | `octocat:U012345678` |
 | `MARVIN_AI_REVIEWER_LOGINS` | Comma-separated extra AI-reviewer bot logins recognized by `require_ai_review` and `auto_changes_required`, in addition to the built-in `coderabbitai[bot]`/`graphite-app[bot]`/`copilot-pull-request-reviewer[bot]` (exact, case-insensitive match) | `my-custom-ai-bot[bot]` |
+| `MARVIN_AI_REVIEW_STATUS_CONTEXTS` | Comma-separated extra commit-status contexts accepted by `require_ai_review` as a completed AI review when no formal review is found, in addition to the built-in `CodeRabbit` (exact, case-insensitive match on the current HEAD) | `MyAIReviewer` |
 
 ### Linear (required for Linear features)
 
@@ -325,9 +326,10 @@ Manages the *Changes required* label lifecycle:
 
 Gates `auto_review_assign` behind AI-reviewer confirmation:
 
-- When the *Ready for review* label is added (manually, or via the native draft → ready transition), Marvin checks whether a recognized AI reviewer bot (default: `coderabbitai[bot]`, `graphite-app[bot]`, `copilot-pull-request-reviewer[bot]`, extendable via `MARVIN_AI_REVIEWER_LOGINS`) has already submitted a review for the PR's current HEAD commit.
-- If not, Marvin removes *Ready for review*, re-adds *Work in progress*, comments asking the author to request an AI review, and does **not** assign a human reviewer.
-- If an AI review is found, `auto_review_assign` proceeds as normal.
+- When the *Ready for review* label is added (manually, or via the native draft → ready transition), Marvin checks whether a recognized AI reviewer bot (default: `coderabbitai[bot]`, `graphite-app[bot]`, `copilot-pull-request-reviewer[bot]`, extendable via `MARVIN_AI_REVIEWER_LOGINS`) has submitted **at least one** review on the PR. The review does not have to be on the current commit — an AI reviewer legitimately skips re-reviewing commits that add no reviewable changes (e.g. base-branch merges), so we rely on the author to re-request a review when needed.
+- As a fallback, if no formal review is found, Marvin accepts a **successful commit status** whose context matches a known AI reviewer (default: `CodeRabbit`, extendable via `MARVIN_AI_REVIEW_STATUS_CONTEXTS`) on the current HEAD. Some reviewers skip submitting a review on trivial/no-op diffs but still publish this completion status.
+- If neither is found, Marvin removes *Ready for review*, re-adds *Work in progress*, comments asking the author to request an AI review, and does **not** assign a human reviewer.
+- If an AI review (or matching success status) is found, `auto_review_assign` proceeds as normal.
 
 Has no effect unless `auto_review_assign` is also enabled.
 
