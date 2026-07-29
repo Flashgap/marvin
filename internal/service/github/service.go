@@ -44,6 +44,7 @@ type Service interface {
 	AreAllCheckRunsDone(ctx context.Context, webhook github.RepoSenderGetter, prNumber int) (bool, error)
 	HasEnoughApprovals(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest) (bool, error)
 	HasAIReviewed(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, aiLogins []string) (bool, error)
+	HasAIReviewStatusSucceeded(ctx context.Context, webhook github.RepoSenderGetter, ref string, contexts []string) (bool, error)
 	ReRequestChangesRequested(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, aiLogins []string) ([]string, error)
 }
 
@@ -345,11 +346,13 @@ func (s *service) UpdateAndMergePR(ctx context.Context, webhook github.RepoSende
 	log.Infof("got this description: %q", prDescription)
 	commitTitle, commitDescription := TitleOrDescriptionWithPRNumber(pr.GetTitle(), prDescription, pr.GetNumber())
 	log.Infof("merging PR, title: %q description: %q", commitTitle, commitDescription)
-	if _, _, err = s.MergePR(ctx, webhook, pr.GetNumber(), commitDescription, &gogithub.PullRequestOptions{
+	if res, _, err := s.MergePR(ctx, webhook, pr.GetNumber(), commitDescription, &gogithub.PullRequestOptions{
 		CommitTitle: commitTitle,
 		MergeMethod: "squash",
 	}); err != nil {
 		return fmt.Errorf("%w: %w", ErrMerge, err)
+	} else if !res.GetMerged() {
+		return fmt.Errorf("%w: %s", ErrMerge, res.GetMessage())
 	}
 
 	return nil
@@ -484,12 +487,15 @@ func (s *service) HasEnoughApprovals(ctx context.Context, webhook github.RepoSen
 	return true, nil
 }
 
-// HasAIReviewed returns true if a known AI-review bot (see IsAIReviewerLogin) has submitted a
-// review for the PR's current HEAD commit.
+// HasAIReviewed returns true if a known AI-review bot (see IsAIReviewerLogin) has submitted at least
+// one review on the PR.
+//
+// It intentionally does not check which commit was reviewed. An AI reviewer (e.g. CodeRabbit)
+// legitimately declines to re-review commits that add no reviewable changes — most commonly a merge
+// of the base branch — so requiring a review on the exact HEAD commit is too strict. We only require
+// that an AI review happened at least once and rely on the author to request a fresh one when needed.
 func (s *service) HasAIReviewed(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, aiLogins []string) (bool, error) {
 	log := middlewares.LoggerFromGHContext(ctx, "github.HasAIReviewed")
-
-	headSHA := pr.GetHead().GetSHA()
 
 	var found bool
 	err := github.ConsumePaginatedResource(github.MaxPerPage, func(opts *gogithub.ListOptions) (*gogithub.Response, bool, error) {
@@ -500,8 +506,8 @@ func (s *service) HasAIReviewed(ctx context.Context, webhook github.RepoSenderGe
 
 		for _, review := range reviews {
 			login := review.GetUser().GetLogin()
-			if IsAIReviewerLogin(login, aiLogins) && review.GetCommitID() == headSHA {
-				log.Infof("found AI review from %s on commit %s", login, headSHA)
+			if IsAIReviewerLogin(login, aiLogins) {
+				log.Infof("found AI review from %s", login)
 				found = true
 				return res, false, nil
 			}
@@ -511,6 +517,46 @@ func (s *service) HasAIReviewed(ctx context.Context, webhook github.RepoSenderGe
 	})
 	if err != nil {
 		return false, fmt.Errorf("error listing paginated reviews: %w", err)
+	}
+
+	return found, nil
+}
+
+// HasAIReviewStatusSucceeded returns true if a successful commit status whose context matches one of
+// contexts (case-insensitive) is present on ref.
+//
+// This complements HasAIReviewed: some AI reviewers (e.g. CodeRabbit) skip submitting a formal review
+// on trivial or no-op diffs but still publish a success status named after themselves, which is the
+// only completion signal available in that case.
+func (s *service) HasAIReviewStatusSucceeded(ctx context.Context, webhook github.RepoSenderGetter, ref string, contexts []string) (bool, error) {
+	log := middlewares.LoggerFromGHContext(ctx, "github.HasAIReviewStatusSucceeded")
+
+	if len(contexts) == 0 {
+		return false, nil
+	}
+
+	var found bool
+	err := github.ConsumePaginatedResource(github.MaxPerPage, func(opts *gogithub.ListOptions) (*gogithub.Response, bool, error) {
+		combined, res, err := s.GetCombinedStatus(ctx, webhook, ref, opts)
+		if err != nil {
+			return nil, false, fmt.Errorf("error getting combined status: %w", err)
+		}
+
+		for _, status := range combined.Statuses {
+			if status.GetState() != github.CheckRunConclusionSuccess {
+				continue
+			}
+			if IsAIReviewerLogin(status.GetContext(), contexts) {
+				log.Infof("found successful AI review status %q on %s", status.GetContext(), ref)
+				found = true
+				return res, false, nil
+			}
+		}
+
+		return res, true, nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("error listing paginated combined status: %w", err)
 	}
 
 	return found, nil

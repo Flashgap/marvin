@@ -60,6 +60,10 @@ func (h *client) GetCommit(ctx context.Context, webhook RepoSenderGetter, sha st
 	return h.Repositories.GetCommit(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), sha, opts)
 }
 
+func (h *client) GetCombinedStatus(ctx context.Context, webhook RepoSenderGetter, ref string, opts *github.ListOptions) (*github.CombinedStatus, *github.Response, error) {
+	return h.Repositories.GetCombinedStatus(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), ref, opts)
+}
+
 func (h *client) CreateCheckRun(ctx context.Context, webhook RepoSenderGetter, opts github.CreateCheckRunOptions) (*github.CheckRun, *github.Response, error) {
 	return h.Checks.CreateCheckRun(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), opts)
 }

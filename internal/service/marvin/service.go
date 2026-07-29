@@ -453,6 +453,16 @@ func (s *service) aiReviewGatePassed(ctx context.Context, webhook pkggithub.Repo
 		return true, nil
 	}
 
+	// No formal review found. Some AI reviewers skip submitting a review on trivial/no-op diffs but
+	// still publish a success commit status; accept that as evidence of a completed review.
+	statusOK, err := s.githubService.HasAIReviewStatusSucceeded(ctx, webhook, pr.GetHead().GetSHA(), config.AIReviewStatusContexts)
+	if err != nil {
+		return false, fmt.Errorf("error checking for AI review status: %w", err)
+	}
+	if statusOK {
+		return true, nil
+	}
+
 	log.Info("require_ai_review is enabled and no AI review was found on the current commit, blocking reviewer assignment")
 
 	// Tag whoever triggered this (they're the one who just tried to move the PR to ready), unless

@@ -262,7 +262,7 @@ blabla
 `, prBody)
 
 					prEvent.PullRequest.Body = &prBody
-					mockGithub.EXPECT().MergePR(gomock.Any(), gomock.Any(), gomock.Any(), "- hello world", gomock.Any()).Return(nil, nil, nil)
+					mockGithub.EXPECT().MergePR(gomock.Any(), gomock.Any(), gomock.Any(), "- hello world", gomock.Any()).Return(&gogithub.PullRequestMergeResult{Merged: utils.Ptr(true)}, nil, nil)
 					err := svc.OnPullRequest(ctx, &prEvent)
 					Expect(err).NotTo(HaveOccurred())
 				})
@@ -1092,6 +1092,65 @@ blabla
 				// aiReviewGatePassed (finds the AI review) + FindAndAssignReviewers's ListAllReviewers both call ListReviews
 				mockGithub.EXPECT().ListReviews(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(aiReviews, nil, nil).Times(2)
 				// FindAndAssignReviewers
+				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Return(protection, nil, nil).Times(1)
+				mockGithub.EXPECT().ListReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(&gogithub.Reviewers{}, nil, nil).Times(1)
+				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "my-team", gomock.Any()).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, nil).Times(1)
+
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				err := svc.OnPullRequest(ctx, &prEvent)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should assign reviewers when no AI review is found but a CodeRabbit success status is present", func(ctx SpecContext) {
+				cfg := marvin.GitHubRepositoryConfiguration{
+					AutoDraftLabels:        true,
+					AutoReviewAssign:       true,
+					RequireAIReview:        true,
+					AIReviewerLogins:       marvin.DefaultAIReviewerLogins,
+					AIReviewStatusContexts: marvin.DefaultAIReviewStatusContexts,
+					ReviewersTeam:          "my-team",
+				}
+				cfgs := marvin.GitHubRepositoryConfigurations{
+					repoName: &cfg,
+				}
+
+				prEvent := getDraftEvent(pkggithub.EventPullRequestActionReadyForReview, false)
+				prEvent.PullRequest.Labels = []*gogithub.Label{
+					{Name: utils.Ptr(github.LabelHotfix)},
+				}
+
+				protection := &gogithub.Protection{
+					RequiredPullRequestReviews: &gogithub.PullRequestReviewsEnforcement{
+						RequiredApprovingReviewCount: 1,
+					},
+				}
+				// No AI review submitted on the PR (only a human), so the gate falls back to statuses.
+				noAIReviews := []*gogithub.PullRequestReview{
+					{
+						User:     &gogithub.User{Login: utils.Ptr("alice")},
+						State:    utils.Ptr("commented"),
+						CommitID: utils.Ptr("mybranch"),
+					},
+				}
+
+				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
+					{Name: utils.Ptr(github.LabelWorkInProgress)},
+					{Name: utils.Ptr(github.LabelReadyForReview)},
+				}, nil, nil).Times(2)
+				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelWorkInProgress).Return(nil, nil).Times(1)
+				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelReadyForReview}).Return(nil, nil, nil).Times(1)
+				// checkAndFormatPR (hotfix path)
+				mockGithub.EXPECT().CreateCheckRun(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+				// aiReviewGatePassed: HasAIReviewed finds no AI review, then falls back to the status check.
+				mockGithub.EXPECT().ListReviews(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(noAIReviews, nil, nil).Times(2)
+				mockGithub.EXPECT().GetCombinedStatus(gomock.Any(), gomock.Any(), "mybranch", gomock.Any()).Return(&gogithub.CombinedStatus{
+					Statuses: []*gogithub.RepoStatus{
+						{Context: utils.Ptr("CodeRabbit"), State: utils.Ptr("success")},
+					},
+				}, nil, nil).Times(1)
+				// gate passed: reviewer assignment proceeds, and the PR is NOT reverted to WIP.
+				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelReadyForReview).Times(0)
 				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Return(protection, nil, nil).Times(1)
 				mockGithub.EXPECT().ListReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(&gogithub.Reviewers{}, nil, nil).Times(1)
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "my-team", gomock.Any()).Return(nil, nil, nil).Times(1)

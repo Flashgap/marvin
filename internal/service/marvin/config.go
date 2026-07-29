@@ -16,6 +16,12 @@ import (
 // GitHubRepositoryConfiguration.AIReviewerLogins.
 var DefaultAIReviewerLogins = []string{"coderabbitai[bot]", "graphite-app[bot]", "copilot-pull-request-reviewer[bot]"}
 
+// DefaultAIReviewStatusContexts lists commit-status contexts that count as a completed AI review when
+// no formal review is found. Some AI reviewers (e.g. CodeRabbit) skip submitting a review on trivial
+// or no-op diffs but still publish a success status named after themselves. Merged with the
+// MARVIN_AI_REVIEW_STATUS_CONTEXTS env var into GitHubRepositoryConfiguration.AIReviewStatusContexts.
+var DefaultAIReviewStatusContexts = []string{"CodeRabbit"}
+
 type GitHubRepositoryConfiguration struct {
 	ReviewersTeam       string
 	AutoApprove         bool
@@ -34,9 +40,10 @@ type GitHubRepositoryConfiguration struct {
 	UpdateLinearLink    bool
 	SlackNotify         bool
 	AutoCapReport       bool
-	RequireAIReview     bool
-	AIReviewerLogins    []string
-	GithubToSlack       map[string]string
+	RequireAIReview        bool
+	AIReviewerLogins       []string
+	AIReviewStatusContexts []string
+	GithubToSlack          map[string]string
 }
 
 func withAutoApprove(c *GitHubRepositoryConfiguration) {
@@ -161,6 +168,11 @@ func GetGitHubRepositoryConfigurations(cfg config.Marvin) GitHubRepositoryConfig
 			repoConfig.AIReviewerLogins = make([]string, 0, len(DefaultAIReviewerLogins)+len(cfg.MarvinAIReviewerLogins))
 			repoConfig.AIReviewerLogins = append(repoConfig.AIReviewerLogins, DefaultAIReviewerLogins...)
 			repoConfig.AIReviewerLogins = append(repoConfig.AIReviewerLogins, cfg.MarvinAIReviewerLogins...)
+		}
+		if repoConfig.RequireAIReview {
+			repoConfig.AIReviewStatusContexts = make([]string, 0, len(DefaultAIReviewStatusContexts)+len(cfg.MarvinAIReviewStatusContexts))
+			repoConfig.AIReviewStatusContexts = append(repoConfig.AIReviewStatusContexts, DefaultAIReviewStatusContexts...)
+			repoConfig.AIReviewStatusContexts = append(repoConfig.AIReviewStatusContexts, cfg.MarvinAIReviewStatusContexts...)
 		}
 
 		config.PrintConfig(repoConfig)
