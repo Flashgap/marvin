@@ -22,7 +22,6 @@ const (
 	CheckName     = "🤖 Marvin checks"
 	GitHubAppName = "marvin"
 	githubCopilot = "copilot"
-	changelogFile = "CHANGELOG.md"
 
 	timeSpentToCheckAfterCommits   = 3
 	timeSpentToCheckAfterAdditions = 50
@@ -42,7 +41,7 @@ I removed this label, please add it back when the PR is ready to be merged!`
 	commentMissingTimeSpent       = "Invalid PR, should contain time spent."
 	commentWrongDescription       = "Description should only be composed by bullet points."
 	commentTitleTooLong           = "Invalid PR title, it's too long. It contains %d characters, it should be less than %d."
-	commentChanglogNotUpdated     = "PR should update the CHANGELOG.md and contain a reference to this PR."
+	commentChanglogNotUpdated     = "PR should update the %s and contain a reference to this PR."
 
 	// check runs
 	checkRunTitleHotfix   = "Hotfix PR"
@@ -56,6 +55,7 @@ type service struct {
 	linearClient       linear.Client
 	slackService       slacksvc.Service
 	repoConfigProvider RepoConfigProvider
+	legacyConfig       LegacyConfig
 	prParserConfig     github.PRParserConfig
 }
 
@@ -65,6 +65,7 @@ func NewService(
 	linearClient linear.Client,
 	slackService slacksvc.Service,
 	repoConfigProvider RepoConfigProvider,
+	legacyConfig LegacyConfig,
 	prParserConfig github.PRParserConfig,
 ) Service {
 	return &service{
@@ -73,6 +74,7 @@ func NewService(
 		linearClient:       linearClient,
 		slackService:       slackService,
 		repoConfigProvider: repoConfigProvider,
+		legacyConfig:       legacyConfig,
 		prParserConfig:     prParserConfig,
 	}
 }
@@ -85,6 +87,7 @@ func (s *service) OnPullRequest(ctx context.Context, event *gogithub.PullRequest
 		return fmt.Errorf("error loading repository config: %w", err)
 	}
 	if config == nil {
+		s.attemptConfigMigration(ctx, event)
 		return nil
 	}
 
@@ -340,11 +343,11 @@ func (s *service) checkAndFormatPR(ctx context.Context, webhook pkggithub.RepoSe
 	}
 
 	if config.CheckChangelog && action == pkggithub.EventPullRequestActionSynchronize {
-		if ok, err := s.hasChangelogBeenUpdated(ctx, webhook, pr.GetNumber()); err != nil {
+		if ok, err := s.hasChangelogBeenUpdated(ctx, webhook, pr.GetNumber(), config.ChangelogFile); err != nil {
 			return fmt.Errorf("error checking if backlog is updated: %w", err)
 		} else if !ok {
 			// change log not updated, it's an error
-			comments = append(comments, commentChanglogNotUpdated)
+			comments = append(comments, fmt.Sprintf(commentChanglogNotUpdated, config.ChangelogFile))
 			log.Warn("error: changelog not updated")
 		}
 	}
@@ -681,7 +684,7 @@ func (s *service) delayMerge(ctx context.Context, webhook pkggithub.RepoSenderGe
 	return nil
 }
 
-func (s *service) hasChangelogBeenUpdated(ctx context.Context, webhook pkggithub.RepoSenderGetter, prNumber int) (bool, error) {
+func (s *service) hasChangelogBeenUpdated(ctx context.Context, webhook pkggithub.RepoSenderGetter, prNumber int, changelogFile string) (bool, error) {
 	log := middlewares.LoggerFromGHContext(ctx, "marvin.hasChangelogBeenUpdated")
 
 	var changelogUpdated bool

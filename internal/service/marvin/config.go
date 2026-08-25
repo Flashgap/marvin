@@ -22,6 +22,10 @@ var DefaultAIReviewerLogins = []string{"coderabbitai[bot]", "graphite-app[bot]",
 // .marvin.yaml into GitHubRepositoryConfiguration.AIReviewStatusContexts.
 var DefaultAIReviewStatusContexts = []string{"CodeRabbit"}
 
+// DefaultChangelogFile is the changelog path check_changelog validates against when a repository's
+// .marvin.yaml doesn't override it via `check_changelog.file`.
+const DefaultChangelogFile = "CHANGELOG.md"
+
 // PathReviewRule maps a glob pattern (matched against changed file paths, doublestar syntax e.g. "go/**")
 // to the GitHub team that should review matching changes.
 type PathReviewRule struct {
@@ -35,19 +39,22 @@ type GitHubRepositoryConfiguration struct {
 	ReviewRules []PathReviewRule
 	// DefaultTeam is used when no ReviewRules pattern matches any changed file. Declared as
 	// `reviewers.default_team` in .marvin.yaml.
-	DefaultTeam            string
-	AutoApprove            bool
-	AutoChangesRequired    bool
-	AutoMerge              bool
-	AutoReviewAssign       bool
-	AutoDraftLabels        bool
-	UpdateTitle            bool
-	CheckTitle             bool
-	CheckDescription       bool
-	CheckTimeSpent         bool
-	CheckLinearLink        bool
-	CheckLinearProject     bool
-	CheckChangelog         bool
+	DefaultTeam         string
+	AutoApprove         bool
+	AutoChangesRequired bool
+	AutoMerge           bool
+	AutoReviewAssign    bool
+	AutoDraftLabels     bool
+	UpdateTitle         bool
+	CheckTitle          bool
+	CheckDescription    bool
+	CheckTimeSpent      bool
+	CheckLinearLink     bool
+	CheckLinearProject  bool
+	CheckChangelog      bool
+	// ChangelogFile is the path check_changelog validates against. Defaults to DefaultChangelogFile;
+	// overridable per repo via `check_changelog.file` in .marvin.yaml.
+	ChangelogFile          string
 	AutoAssignee           bool
 	UpdateLinearLink       bool
 	SlackNotify            bool

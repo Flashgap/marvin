@@ -30,6 +30,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   PR author cannot edit their own review rules inside the PR being reviewed.
 - `MARVIN_REPO_CONFIG_CACHE_TTL` env var (default `5m`) controls how long a repository's
   `.marvin.yaml` is cached before being re-fetched.
+- **Automatic config migration**: for a repository with no `.marvin.yaml` yet but a legacy
+  `MARVIN_REPOSITORIES` entry, Marvin opens a one-time PR (branch `marvin/add-marvin-yaml-config`)
+  proposing a `.marvin.yaml` generated from that legacy config. `MARVIN_REPOSITORIES` and
+  `MARVIN_REVIEWERS_TEAMS` are kept as deprecated, optional env vars solely to seed this migration
+  PR — they have no other effect and can be unset once every repo has been migrated.
 - Per-repo `ai_review.reviewer_logins` / `ai_review.status_contexts` in `.marvin.yaml`, extending the
   org-wide `MARVIN_AI_REVIEWER_LOGINS` / `MARVIN_AI_REVIEW_STATUS_CONTEXTS` for that repository only.
 

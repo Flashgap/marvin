@@ -31,4 +31,8 @@ type Client interface {
 	MergePR(ctx context.Context, webhook RepoSenderGetter, prNumber int, commitMsg string, opts *github.PullRequestOptions) (*github.PullRequestMergeResult, *github.Response, error)
 	EditPR(ctx context.Context, webhook RepoSenderGetter, prNumber int, body *github.PullRequest) (*github.PullRequest, *github.Response, error)
 	GetFileContent(ctx context.Context, webhook RepoSenderGetter, path string, ref string) (string, *github.Response, error)
+	GetRef(ctx context.Context, webhook RepoSenderGetter, ref string) (*github.Reference, *github.Response, error)
+	CreateRef(ctx context.Context, webhook RepoSenderGetter, ref *github.Reference) (*github.Reference, *github.Response, error)
+	CreateFile(ctx context.Context, webhook RepoSenderGetter, path string, opts *github.RepositoryContentFileOptions) (*github.RepositoryContentResponse, *github.Response, error)
+	CreatePullRequest(ctx context.Context, webhook RepoSenderGetter, newPR *github.NewPullRequest) (*github.PullRequest, *github.Response, error)
 }

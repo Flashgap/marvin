@@ -45,7 +45,7 @@ and a repository with no `.marvin.yaml` has Marvin fully disabled on it.
 | `check_time_spent` | Validates that the *Time spent* section contains a valid float (e.g. `1.5 hours`) |
 | `check_linear_link` | Validates that a Linear issue URL is present and consistent with the title |
 | `check_linear_project` | Validates that the linked Linear issue belongs to a project |
-| `check_changelog` | Validates that `CHANGELOG.md` was updated and references the PR number |
+| `check_changelog` | Validates that the changelog file (`CHANGELOG.md` by default, overridable via `check_changelog.file`) was updated and references the PR number |
 | `slack_notify` | Sends a Slack DM to the reviewer when they are requested |
 | `auto_cap_report` | On merge, creates a Jira task from the Linear issue for capitalization tracking |
 
@@ -296,6 +296,7 @@ features:
   - auto_review_assign
   - check_changelog
   - require_ai_review
+  - slack_notify                # still requires the central MARVIN_GITHUB_TO_SLACK mapping
 
 reviewers:
   default_team: platform        # used when no rule below matches a changed file (optional)
@@ -305,7 +306,8 @@ reviewers:
     - path: "py/**"
       team: data-team
 
-slack_notify: true               # still requires the central MARVIN_GITHUB_TO_SLACK mapping
+check_changelog:
+  file: docs/CHANGELOG.md        # optional, defaults to CHANGELOG.md at the repo root
 
 ai_review:
   reviewer_logins: ["my-custom-ai-bot[bot]"]     # extends the built-in + org-wide defaults, this repo only
@@ -319,6 +321,8 @@ ai_review:
   Marvin requests reviewers from the **union** of every matched team — this is what makes
   `auto_review_assign` work across a monorepo with per-team subtrees. `reviewers.default_team` is
   used as a fallback when no rule matches any changed file.
+- `check_changelog.file` overrides which file `check_changelog` validates against; defaults to
+  `CHANGELOG.md` at the repo root when omitted.
 - An invalid or unparsable `.marvin.yaml` disables Marvin for that repository (fails closed) rather
   than running with a partial configuration; check the Marvin service logs for the parse error.
 

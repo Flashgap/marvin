@@ -109,6 +109,34 @@ reviewers:
 		}))
 	})
 
+	It("defaults ChangelogFile to CHANGELOG.md when check_changelog.file is not set", func() {
+		mockGithub.EXPECT().
+			GetFileContent(gomock.Any(), gomock.Any(), marvin.RepoConfigFileName, defaultBranch).
+			Return("features: [check_changelog]", &gogithub.Response{}, nil).
+			Times(1)
+
+		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
+		cfg, err := provider.Get(context.Background(), webhook)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg.ChangelogFile).To(Equal(marvin.DefaultChangelogFile))
+	})
+
+	It("overrides ChangelogFile from check_changelog.file", func() {
+		mockGithub.EXPECT().
+			GetFileContent(gomock.Any(), gomock.Any(), marvin.RepoConfigFileName, defaultBranch).
+			Return(`
+features: [check_changelog]
+check_changelog:
+  file: docs/CHANGELOG.md
+`, &gogithub.Response{}, nil).
+			Times(1)
+
+		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
+		cfg, err := provider.Get(context.Background(), webhook)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg.ChangelogFile).To(Equal("docs/CHANGELOG.md"))
+	})
+
 	It("disables Marvin for the repository (nil config, no error) when .marvin.yaml is missing", func() {
 		mockGithub.EXPECT().
 			GetFileContent(gomock.Any(), gomock.Any(), marvin.RepoConfigFileName, defaultBranch).

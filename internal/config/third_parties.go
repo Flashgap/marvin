@@ -54,6 +54,18 @@ type Linear struct {
 
 // Marvin configuration.
 type Marvin struct {
+	// Deprecated: MarvinLegacyRepositories only seeds the one-time .marvin.yaml migration PR (see
+	// internal/service/marvin/migration.go) that Marvin opens for a repository it previously had
+	// an entry for here. It no longer has any effect on Marvin's actual per-repository behavior,
+	// which is driven entirely by each repository's own .marvin.yaml. Safe to unset once every
+	// repository has been migrated.
+	// ex: repo-name:auto_merge;auto_assign,other-repo:check_title
+	MarvinLegacyRepositories map[string]string `envconfig:"MARVIN_REPOSITORIES"`
+
+	// Deprecated: migration-only, see MarvinLegacyRepositories.
+	// ex: repo-name:team-name
+	MarvinLegacyReviewersTeams map[string]string `envconfig:"MARVIN_REVIEWERS_TEAMS"`
+
 	// MarvinRepoConfigCacheTTL controls how long a repository's .marvin.yaml file is cached
 	// before being re-fetched from its default branch.
 	// ex: 5m, 30s

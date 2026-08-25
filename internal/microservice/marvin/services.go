@@ -94,10 +94,14 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		}
 
 		repoConfigProvider := marvin.NewRepoConfigProvider(s.GithubService, cfg.Marvin)
+		legacyConfig := marvin.LegacyConfig{
+			Repositories:   cfg.MarvinLegacyRepositories,
+			ReviewersTeams: cfg.MarvinLegacyReviewersTeams,
+		}
 		prefixCache := github.NewPrefixCache(cfg.LinearWorkspaceSlug, cfg.LinearIssuePrefixes, linearClient.Teams)
 		prefixCache.Start(ctx, cfg.LinearPrefixRefreshInterval)
 		prParserConfig := github.PRParserConfig{Prefixes: prefixCache}
-		s.MarvinService = marvin.NewService(s.GithubService, s.JiraService, linearClient, s.SlackService, repoConfigProvider, prParserConfig)
+		s.MarvinService = marvin.NewService(s.GithubService, s.JiraService, linearClient, s.SlackService, repoConfigProvider, legacyConfig, prParserConfig)
 	}
 
 	return nil

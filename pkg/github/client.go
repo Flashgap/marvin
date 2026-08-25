@@ -132,3 +132,24 @@ func (h *client) GetFileContent(ctx context.Context, webhook RepoSenderGetter, p
 
 	return content, res, nil
 }
+
+// GetRef fetches a single git reference, e.g. "refs/heads/main".
+func (h *client) GetRef(ctx context.Context, webhook RepoSenderGetter, ref string) (*github.Reference, *github.Response, error) {
+	return h.Git.GetRef(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), ref)
+}
+
+// CreateRef creates a new git reference (e.g. a branch) pointing at ref.Object.SHA.
+func (h *client) CreateRef(ctx context.Context, webhook RepoSenderGetter, ref *github.Reference) (*github.Reference, *github.Response, error) {
+	return h.Git.CreateRef(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), ref)
+}
+
+// CreateFile creates a new file at path on the branch given in opts.Branch. Fails if a file
+// already exists at that path on the target branch.
+func (h *client) CreateFile(ctx context.Context, webhook RepoSenderGetter, path string, opts *github.RepositoryContentFileOptions) (*github.RepositoryContentResponse, *github.Response, error) {
+	return h.Repositories.CreateFile(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), path, opts)
+}
+
+// CreatePullRequest opens a new pull request.
+func (h *client) CreatePullRequest(ctx context.Context, webhook RepoSenderGetter, newPR *github.NewPullRequest) (*github.PullRequest, *github.Response, error) {
+	return h.PullRequests.Create(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), newPR)
+}

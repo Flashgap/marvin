@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -20,10 +21,14 @@ const RepoConfigFileName = ".marvin.yaml"
 
 // repoConfigFile is the YAML schema of a repository's .marvin.yaml file.
 type repoConfigFile struct {
-	Features  []string       `yaml:"features"`
-	Reviewers *reviewersFile `yaml:"reviewers"`
-	Slack     bool           `yaml:"slack_notify"`
-	AIReview  *aiReviewFile  `yaml:"ai_review"`
+	Features       []string            `yaml:"features"`
+	Reviewers      *reviewersFile      `yaml:"reviewers"`
+	CheckChangelog *checkChangelogFile `yaml:"check_changelog"`
+	AIReview       *aiReviewFile       `yaml:"ai_review"`
+}
+
+type checkChangelogFile struct {
+	File string `yaml:"file"`
 }
 
 type reviewersFile struct {
@@ -137,6 +142,11 @@ func (p *repoConfigProvider) fetch(ctx context.Context, webhook pkggithub.RepoSe
 	repoConfig := &GitHubRepositoryConfiguration{}
 	applyFeatures(repoConfig, file.Features)
 
+	repoConfig.ChangelogFile = DefaultChangelogFile
+	if file.CheckChangelog != nil && file.CheckChangelog.File != "" {
+		repoConfig.ChangelogFile = file.CheckChangelog.File
+	}
+
 	if file.Reviewers != nil {
 		repoConfig.DefaultTeam = file.Reviewers.DefaultTeam
 		for _, rule := range file.Reviewers.Rules {
@@ -155,27 +165,13 @@ func (p *repoConfigProvider) fetch(ctx context.Context, webhook pkggithub.RepoSe
 	}
 
 	if repoConfig.RequireAIReview || repoConfig.AutoChangesRequired {
-		repoConfig.AIReviewerLogins = concatSlices(DefaultAIReviewerLogins, p.orgConfig.MarvinAIReviewerLogins, repoAIReviewerLogins)
+		repoConfig.AIReviewerLogins = slices.Concat(DefaultAIReviewerLogins, p.orgConfig.MarvinAIReviewerLogins, repoAIReviewerLogins)
 	}
 	if repoConfig.RequireAIReview {
-		repoConfig.AIReviewStatusContexts = concatSlices(DefaultAIReviewStatusContexts, p.orgConfig.MarvinAIReviewStatusContexts, repoAIReviewStatusContexts)
+		repoConfig.AIReviewStatusContexts = slices.Concat(DefaultAIReviewStatusContexts, p.orgConfig.MarvinAIReviewStatusContexts, repoAIReviewStatusContexts)
 	}
 
 	config.PrintConfig(repoConfig)
 
 	return repoConfig, nil
-}
-
-func concatSlices(slices ...[]string) []string {
-	total := 0
-	for _, s := range slices {
-		total += len(s)
-	}
-
-	out := make([]string, 0, total)
-	for _, s := range slices {
-		out = append(out, s...)
-	}
-
-	return out
 }
