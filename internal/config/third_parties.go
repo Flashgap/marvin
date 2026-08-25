@@ -54,13 +54,10 @@ type Linear struct {
 
 // Marvin configuration.
 type Marvin struct {
-	// MarvinRepositories the list of repositories where Marvin is enabled with its features
-	// ex: repo-name:auto_merge;auto_assign,another-repo:check_title
-	MarvinRepositories map[string]string `envconfig:"MARVIN_REPOSITORIES" required:"true"`
-
-	// MarvinReviewersTeams is a mapping of repository to their respective owner teams
-	// ex: repo-name:team-name
-	MarvinReviewersTeams map[string]string `envconfig:"MARVIN_REVIEWERS_TEAMS"`
+	// MarvinRepoConfigCacheTTL controls how long a repository's .marvin.yaml file is cached
+	// before being re-fetched from its default branch.
+	// ex: 5m, 30s
+	MarvinRepoConfigCacheTTL time.Duration `envconfig:"MARVIN_REPO_CONFIG_CACHE_TTL" default:"5m"`
 
 	// MarvinGithubToSlack is a mapping of GitHub handles to Slack IDs
 	// ex: octocat:U043AC1234,bob:U043BC1234

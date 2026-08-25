@@ -51,12 +51,12 @@ I removed this label, please add it back when the PR is ready to be merged!`
 )
 
 type service struct {
-	githubService  github.Service
-	jiraService    jira.Service
-	linearClient   linear.Client
-	slackService   slacksvc.Service
-	repoConfigs    GitHubRepositoryConfigurations
-	prParserConfig github.PRParserConfig
+	githubService      github.Service
+	jiraService        jira.Service
+	linearClient       linear.Client
+	slackService       slacksvc.Service
+	repoConfigProvider RepoConfigProvider
+	prParserConfig     github.PRParserConfig
 }
 
 func NewService(
@@ -64,23 +64,26 @@ func NewService(
 	jiraService jira.Service,
 	linearClient linear.Client,
 	slackService slacksvc.Service,
-	repoConfigs GitHubRepositoryConfigurations,
+	repoConfigProvider RepoConfigProvider,
 	prParserConfig github.PRParserConfig,
 ) Service {
 	return &service{
-		githubService:  githubService,
-		jiraService:    jiraService,
-		linearClient:   linearClient,
-		slackService:   slackService,
-		repoConfigs:    repoConfigs,
-		prParserConfig: prParserConfig,
+		githubService:      githubService,
+		jiraService:        jiraService,
+		linearClient:       linearClient,
+		slackService:       slackService,
+		repoConfigProvider: repoConfigProvider,
+		prParserConfig:     prParserConfig,
 	}
 }
 
 // The Marvin Service is a GitHub webhook manager
 
 func (s *service) OnPullRequest(ctx context.Context, event *gogithub.PullRequestEvent) error {
-	config := s.repoConfigs[event.GetRepo().GetName()]
+	config, err := s.repoConfigProvider.Get(ctx, event)
+	if err != nil {
+		return fmt.Errorf("error loading repository config: %w", err)
+	}
 	if config == nil {
 		return nil
 	}
@@ -185,7 +188,11 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 				return true, err
 			}
 			if proceed {
-				if _, err := s.githubService.FindAndAssignReviewers(ctx, event, pr, config.ReviewersTeam); err != nil {
+				reviewTeams, err := s.resolveReviewTeams(ctx, event, pr.GetNumber(), config)
+				if err != nil {
+					return true, err
+				}
+				if _, err := s.githubService.FindAndAssignReviewers(ctx, event, pr, reviewTeams); err != nil {
 					return true, err
 				}
 			}
@@ -197,7 +204,10 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 }
 
 func (s *service) OnCheckRun(ctx context.Context, event *gogithub.CheckRunEvent) error {
-	config := s.repoConfigs[event.GetRepo().GetName()]
+	config, err := s.repoConfigProvider.Get(ctx, event)
+	if err != nil {
+		return fmt.Errorf("error loading repository config: %w", err)
+	}
 	if config == nil || !config.AutoMerge {
 		return nil
 	}
@@ -248,7 +258,10 @@ func (s *service) OnCheckRun(ctx context.Context, event *gogithub.CheckRunEvent)
 }
 
 func (s *service) OnPullRequestReview(ctx context.Context, event *gogithub.PullRequestReviewEvent) error {
-	config := s.repoConfigs[event.GetRepo().GetName()]
+	config, err := s.repoConfigProvider.Get(ctx, event)
+	if err != nil {
+		return fmt.Errorf("error loading repository config: %w", err)
+	}
 	if config == nil {
 		return nil
 	}
@@ -514,7 +527,12 @@ func (s *service) labelActions(ctx context.Context, webhook pkggithub.RepoSender
 					}
 				}
 
-				success, err := s.githubService.FindAndAssignReviewers(ctx, webhook, pr, config.ReviewersTeam)
+				reviewTeams, err := s.resolveReviewTeams(ctx, webhook, pr.GetNumber(), config)
+				if err != nil {
+					return err
+				}
+
+				success, err := s.githubService.FindAndAssignReviewers(ctx, webhook, pr, reviewTeams)
 				if err != nil {
 					return err
 				}

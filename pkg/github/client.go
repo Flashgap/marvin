@@ -111,3 +111,24 @@ func (h *client) MergePR(ctx context.Context, webhook RepoSenderGetter, prNumber
 func (h *client) EditPR(ctx context.Context, webhook RepoSenderGetter, prNumber int, body *github.PullRequest) (*github.PullRequest, *github.Response, error) {
 	return h.PullRequests.Edit(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), prNumber, body)
 }
+
+// GetFileContent returns the decoded content of a single file at the given ref (e.g. a branch name or SHA).
+func (h *client) GetFileContent(ctx context.Context, webhook RepoSenderGetter, path string, ref string) (string, *github.Response, error) {
+	fileContent, _, res, err := h.Repositories.GetContents(
+		ctx,
+		webhook.GetRepo().GetOwner().GetLogin(),
+		webhook.GetRepo().GetName(),
+		path,
+		&github.RepositoryContentGetOptions{Ref: ref},
+	)
+	if err != nil {
+		return "", res, err
+	}
+
+	content, err := fileContent.GetContent()
+	if err != nil {
+		return "", res, err
+	}
+
+	return content, res, nil
+}

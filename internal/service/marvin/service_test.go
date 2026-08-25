@@ -1,6 +1,7 @@
 package marvin_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -61,7 +62,7 @@ var _ = Describe("Service tests", func() {
 		cfg := marvin.GitHubRepositoryConfiguration{
 			AutoApprove: true,
 		}
-		cfgs := marvin.GitHubRepositoryConfigurations{
+		cfgs := marvin.StaticRepoConfigProvider{
 			repoName: &cfg,
 		}
 
@@ -165,7 +166,7 @@ var _ = Describe("Service tests", func() {
 		cfg := marvin.GitHubRepositoryConfiguration{
 			AutoMerge: true,
 		}
-		cfgs := marvin.GitHubRepositoryConfigurations{
+		cfgs := marvin.StaticRepoConfigProvider{
 			repoName: &cfg,
 		}
 
@@ -313,7 +314,7 @@ blabla
 		cfg := marvin.GitHubRepositoryConfiguration{
 			CheckTitle: true,
 		}
-		cfgs := marvin.GitHubRepositoryConfigurations{
+		cfgs := marvin.StaticRepoConfigProvider{
 			repoName: &cfg,
 		}
 
@@ -382,7 +383,7 @@ blabla
 		cfg := marvin.GitHubRepositoryConfiguration{
 			CheckLinearProject: true,
 		}
-		cfgs := marvin.GitHubRepositoryConfigurations{
+		cfgs := marvin.StaticRepoConfigProvider{
 			repoName: &cfg,
 		}
 
@@ -447,12 +448,12 @@ blabla
 	})
 
 	Context("Update title", func() {
-		getSvc := func(hasLinearTitle bool, hasLinearLink bool, hasLinearBranch bool) (marvin.GitHubRepositoryConfigurations, gogithub.PullRequestEvent) {
+		getSvc := func(hasLinearTitle bool, hasLinearLink bool, hasLinearBranch bool) (marvin.StaticRepoConfigProvider, gogithub.PullRequestEvent) {
 			cfg := marvin.GitHubRepositoryConfiguration{
 				CheckTitle:  true,
 				UpdateTitle: true,
 			}
-			cfgs := marvin.GitHubRepositoryConfigurations{
+			cfgs := marvin.StaticRepoConfigProvider{
 				repoName: &cfg,
 			}
 
@@ -590,7 +591,7 @@ blabla
 			CheckLinearLink:  true,
 			UpdateLinearLink: true,
 		}
-		cfgs := marvin.GitHubRepositoryConfigurations{
+		cfgs := marvin.StaticRepoConfigProvider{
 			repoName: &cfg,
 		}
 
@@ -745,7 +746,7 @@ blabla
 			SlackNotify:   true,
 			GithubToSlack: map[string]string{"marvin": "U1234W5678"},
 		}
-		cfgs := marvin.GitHubRepositoryConfigurations{
+		cfgs := marvin.StaticRepoConfigProvider{
 			repoName: &cfg,
 		}
 		When("someone gets assigned to a PR", func() {
@@ -790,7 +791,7 @@ blabla
 				AutoCapReport: true,
 			}
 
-			cfgs := marvin.GitHubRepositoryConfigurations{
+			cfgs := marvin.StaticRepoConfigProvider{
 				repoName: &cfg,
 			}
 
@@ -854,7 +855,7 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoDraftLabels: true,
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -872,7 +873,7 @@ blabla
 
 			It("should do nothing when AutoDraftLabels is disabled", func(ctx SpecContext) {
 				cfg := marvin.GitHubRepositoryConfiguration{}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -890,7 +891,7 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoDraftLabels: true,
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -921,7 +922,7 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoDraftLabels: true,
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -945,9 +946,9 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoDraftLabels:  true,
 					AutoReviewAssign: true,
-					ReviewersTeam:    "my-team",
+					DefaultTeam:      "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -991,14 +992,80 @@ blabla
 				Expect(err).ToNot(HaveOccurred())
 			})
 
+			It("should assign reviewers from the union of every team whose path rule matches a changed file", func(ctx SpecContext) {
+				cfg := marvin.GitHubRepositoryConfiguration{
+					AutoDraftLabels:  true,
+					AutoReviewAssign: true,
+					ReviewRules: []marvin.PathReviewRule{
+						{Pattern: "go/**", Team: "backend-team"},
+						{Pattern: "py/**", Team: "data-team"},
+					},
+				}
+				cfgs := marvin.StaticRepoConfigProvider{
+					repoName: &cfg,
+				}
+
+				prEvent := getDraftEvent(pkggithub.EventPullRequestActionReadyForReview, false)
+				prEvent.PullRequest.Labels = []*gogithub.Label{
+					{Name: utils.Ptr(github.LabelHotfix)},
+				}
+
+				protection := &gogithub.Protection{
+					RequiredPullRequestReviews: &gogithub.PullRequestReviewsEnforcement{
+						RequiredApprovingReviewCount: 2,
+					},
+				}
+
+				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
+					{Name: utils.Ptr(github.LabelWorkInProgress)},
+					{Name: utils.Ptr(github.LabelReadyForReview)},
+				}, nil, nil).Times(2)
+				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelWorkInProgress).Return(nil, nil).Times(1)
+				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelReadyForReview}).Return(nil, nil, nil).Times(1)
+				// checkAndFormatPR (hotfix path)
+				mockGithub.EXPECT().CreateCheckRun(gomock.Any(), gomock.Any(), gogithub.CreateCheckRunOptions{
+					Name:       marvin.CheckName,
+					HeadSHA:    "mybranch",
+					Status:     utils.Ptr(pkggithub.CheckRunStatusCompleted),
+					Conclusion: utils.Ptr("success"),
+					Output: &gogithub.CheckRunOutput{
+						Title:   utils.Ptr("Hotfix PR"),
+						Summary: utils.Ptr("This is a hotfix PR, Marvin's checks are bypassed."),
+					},
+				}).Times(1)
+				// resolveReviewTeams: two changed files, each matching a different rule
+				mockGithub.EXPECT().ListPRFiles(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return([]*gogithub.CommitFile{
+					{Filename: utils.Ptr("go/main.go")},
+					{Filename: utils.Ptr("py/app.py")},
+				}, &gogithub.Response{}, nil).Times(1)
+				// FindAndAssignReviewers, pooling both matched teams
+				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Return(protection, nil, nil).Times(1)
+				mockGithub.EXPECT().ListReviews(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().ListReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(&gogithub.Reviewers{}, nil, nil).Times(1)
+				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "backend-team", gomock.Any()).
+					Return([]*gogithub.User{{Login: utils.Ptr("alice")}}, nil, nil).Times(1)
+				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "data-team", gomock.Any()).
+					Return([]*gogithub.User{{Login: utils.Ptr("bob")}}, nil, nil).Times(1)
+				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).DoAndReturn(
+					func(_ context.Context, _ pkggithub.RepoSenderGetter, _ int, reviewers []string) (*gogithub.PullRequest, *gogithub.Response, error) {
+						Expect(reviewers).To(ConsistOf("alice", "bob"))
+						return nil, nil, nil
+					}).Times(1)
+
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				err := svc.OnPullRequest(ctx, &prEvent)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
 			It("should block reviewer assignment and revert to WIP when require_ai_review is enabled and no AI review is found", func(ctx SpecContext) {
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoDraftLabels:  true,
 					AutoReviewAssign: true,
 					RequireAIReview:  true,
-					ReviewersTeam:    "my-team",
+					DefaultTeam:      "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1048,9 +1115,9 @@ blabla
 					AutoReviewAssign: true,
 					RequireAIReview:  true,
 					AIReviewerLogins: marvin.DefaultAIReviewerLogins,
-					ReviewersTeam:    "my-team",
+					DefaultTeam:      "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1109,9 +1176,9 @@ blabla
 					RequireAIReview:        true,
 					AIReviewerLogins:       marvin.DefaultAIReviewerLogins,
 					AIReviewStatusContexts: marvin.DefaultAIReviewStatusContexts,
-					ReviewersTeam:          "my-team",
+					DefaultTeam:            "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1163,7 +1230,7 @@ blabla
 
 			It("should do nothing when AutoDraftLabels is disabled", func(ctx SpecContext) {
 				cfg := marvin.GitHubRepositoryConfiguration{}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1210,9 +1277,9 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					RequireAIReview:  true,
 					AutoReviewAssign: true,
-					ReviewersTeam:    "my-team",
+					DefaultTeam:      "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1253,9 +1320,9 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					RequireAIReview:  true,
 					AutoReviewAssign: true,
-					ReviewersTeam:    "my-team",
+					DefaultTeam:      "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1335,7 +1402,7 @@ blabla
 					AutoChangesRequired: true,
 					AIReviewerLogins:    marvin.DefaultAIReviewerLogins,
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1375,7 +1442,7 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoChangesRequired: true,
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1416,7 +1483,7 @@ blabla
 
 			It("does nothing when AutoChangesRequired is disabled", func(ctx SpecContext) {
 				cfg := marvin.GitHubRepositoryConfiguration{}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1435,7 +1502,7 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					RequireAIReview: true,
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1462,9 +1529,9 @@ blabla
 					AutoChangesRequired: true,
 					RequireAIReview:     true,
 					AutoReviewAssign:    true,
-					ReviewersTeam:       "my-team",
+					DefaultTeam:         "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 

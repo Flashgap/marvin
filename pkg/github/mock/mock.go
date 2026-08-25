@@ -170,6 +170,22 @@ func (mr *MockClientMockRecorder) GetCommit(ctx, webhook, sha, opts any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCommit", reflect.TypeOf((*MockClient)(nil).GetCommit), ctx, webhook, sha, opts)
 }
 
+// GetFileContent mocks base method.
+func (m *MockClient) GetFileContent(ctx context.Context, webhook github.RepoSenderGetter, path, ref string) (string, *github0.Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFileContent", ctx, webhook, path, ref)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(*github0.Response)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetFileContent indicates an expected call of GetFileContent.
+func (mr *MockClientMockRecorder) GetFileContent(ctx, webhook, path, ref any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFileContent", reflect.TypeOf((*MockClient)(nil).GetFileContent), ctx, webhook, path, ref)
+}
+
 // GetRulesForBranch mocks base method.
 func (m *MockClient) GetRulesForBranch(ctx context.Context, webhook github.RepoSenderGetter, branch string) ([]*github0.RepositoryRule, *github0.Response, error) {
 	m.ctrl.T.Helper()

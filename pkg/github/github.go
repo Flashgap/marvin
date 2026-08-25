@@ -30,4 +30,5 @@ type Client interface {
 	CreatePRComment(ctx context.Context, webhook RepoSenderGetter, prNumber int, body *github.IssueComment) (*github.IssueComment, *github.Response, error)
 	MergePR(ctx context.Context, webhook RepoSenderGetter, prNumber int, commitMsg string, opts *github.PullRequestOptions) (*github.PullRequestMergeResult, *github.Response, error)
 	EditPR(ctx context.Context, webhook RepoSenderGetter, prNumber int, body *github.PullRequest) (*github.PullRequest, *github.Response, error)
+	GetFileContent(ctx context.Context, webhook RepoSenderGetter, path string, ref string) (string, *github.Response, error)
 }

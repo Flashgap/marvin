@@ -8,6 +8,7 @@ require (
 	cloud.google.com/go/errorreporting v0.4.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/Flashgap/logrus v1.8.16
+	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/bradleyfalzon/ghinstallation/v2 v2.13.0
 	github.com/doug-martin/goqu/v9 v9.19.0
 	github.com/gin-contrib/cors v1.7.3
@@ -25,6 +26,7 @@ require (
 	go.uber.org/mock v0.6.0
 	golang.org/x/oauth2 v0.33.0
 	google.golang.org/protobuf v1.36.10
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -92,5 +94,4 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/grpc v1.77.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
