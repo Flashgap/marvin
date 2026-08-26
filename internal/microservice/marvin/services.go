@@ -94,9 +94,10 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		}
 
 		repoConfigProvider := marvin.NewRepoConfigProvider(s.GithubService, cfg.Marvin)
+		// Intentional: sole read site, seeds the one-time .marvin.yaml migration PR (see internal/service/marvin/migration.go).
 		legacyConfig := marvin.LegacyConfig{
-			Repositories:   cfg.MarvinLegacyRepositories,
-			ReviewersTeams: cfg.MarvinLegacyReviewersTeams,
+			Repositories:   cfg.MarvinLegacyRepositories,   //nolint:staticcheck // migration-only seed, see comment above
+			ReviewersTeams: cfg.MarvinLegacyReviewersTeams, //nolint:staticcheck // migration-only seed, see comment above
 		}
 		prefixCache := github.NewPrefixCache(cfg.LinearWorkspaceSlug, cfg.LinearIssuePrefixes, linearClient.Teams)
 		prefixCache.Start(ctx, cfg.LinearPrefixRefreshInterval)

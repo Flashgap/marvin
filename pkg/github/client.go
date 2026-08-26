@@ -113,7 +113,7 @@ func (h *client) EditPR(ctx context.Context, webhook RepoSenderGetter, prNumber 
 }
 
 // GetFileContent returns the decoded content of a single file at the given ref (e.g. a branch name or SHA).
-func (h *client) GetFileContent(ctx context.Context, webhook RepoSenderGetter, path string, ref string) (string, *github.Response, error) {
+func (h *client) GetFileContent(ctx context.Context, webhook RepoSenderGetter, path, ref string) (string, *github.Response, error) {
 	fileContent, _, res, err := h.Repositories.GetContents(
 		ctx,
 		webhook.GetRepo().GetOwner().GetLogin(),
