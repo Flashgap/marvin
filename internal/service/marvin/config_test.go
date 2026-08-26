@@ -54,8 +54,9 @@ var _ = Describe("RepoConfigProvider", func() {
 			Times(1)
 
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
-		cfg, err := provider.Get(context.Background(), webhook)
+		cfg, warning, err := provider.Get(context.Background(), webhook)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(warning).To(BeNil())
 		Expect(cfg.AutoMerge).To(BeTrue())
 	})
 
@@ -66,7 +67,7 @@ var _ = Describe("RepoConfigProvider", func() {
 			Times(1)
 
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{MarvinAIReviewerLogins: []string{"org-bot"}})
-		cfg, err := provider.Get(context.Background(), webhook)
+		cfg, _, err := provider.Get(context.Background(), webhook)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cfg.RequireAIReview).To(BeTrue())
 		Expect(cfg.AIReviewerLogins).To(Equal(append(append(append([]string{}, marvin.DefaultAIReviewerLogins...), "org-bot"), "my-custom-bot")))
@@ -79,7 +80,7 @@ var _ = Describe("RepoConfigProvider", func() {
 			Times(1)
 
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{MarvinAIReviewerLogins: []string{"org-bot"}})
-		cfg, err := provider.Get(context.Background(), webhook)
+		cfg, _, err := provider.Get(context.Background(), webhook)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cfg.RequireAIReview).To(BeFalse())
 		Expect(cfg.AIReviewerLogins).To(BeEmpty())
@@ -100,7 +101,7 @@ reviewers:
 			Times(1)
 
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
-		cfg, err := provider.Get(context.Background(), webhook)
+		cfg, _, err := provider.Get(context.Background(), webhook)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cfg.DefaultTeam).To(Equal("platform"))
 		Expect(cfg.ReviewRules).To(Equal([]marvin.PathReviewRule{
@@ -116,7 +117,7 @@ reviewers:
 			Times(1)
 
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
-		cfg, err := provider.Get(context.Background(), webhook)
+		cfg, _, err := provider.Get(context.Background(), webhook)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cfg.ChangelogFile).To(Equal(marvin.DefaultChangelogFile))
 	})
@@ -132,7 +133,7 @@ check_changelog:
 			Times(1)
 
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
-		cfg, err := provider.Get(context.Background(), webhook)
+		cfg, _, err := provider.Get(context.Background(), webhook)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cfg.ChangelogFile).To(Equal("docs/CHANGELOG.md"))
 	})
@@ -144,33 +145,66 @@ check_changelog:
 			Times(1)
 
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
-		cfg, err := provider.Get(context.Background(), webhook)
+		cfg, warning, err := provider.Get(context.Background(), webhook)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(warning).To(BeNil())
 		Expect(cfg).To(BeNil())
 	})
 
-	It("disables Marvin for the repository (nil config, no error) when .marvin.yaml is invalid YAML", func() {
+	It("falls back to the last known-good config and returns a warning when .marvin.yaml becomes invalid YAML", func() {
+		gomock.InOrder(
+			mockGithub.EXPECT().
+				GetFileContent(gomock.Any(), gomock.Any(), marvin.RepoConfigFileName, defaultBranch).
+				Return("features: [auto_merge]", &gogithub.Response{}, nil).
+				Times(1),
+			mockGithub.EXPECT().
+				GetFileContent(gomock.Any(), gomock.Any(), marvin.RepoConfigFileName, defaultBranch).
+				Return("features: [auto_merge", &gogithub.Response{}, nil).
+				Times(1),
+		)
+
+		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{MarvinRepoConfigCacheTTL: time.Nanosecond})
+
+		good, warning, err := provider.Get(context.Background(), webhook)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(warning).To(BeNil())
+		Expect(good.AutoMerge).To(BeTrue())
+
+		time.Sleep(time.Millisecond)
+
+		cfg, warning, err := provider.Get(context.Background(), webhook)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg).To(Equal(good))
+		Expect(warning).NotTo(BeNil())
+		Expect(warning.UsedFallback).To(BeTrue())
+	})
+
+	It("returns a nil config and a warning (not an error) when .marvin.yaml is invalid YAML on the first fetch", func() {
 		mockGithub.EXPECT().
 			GetFileContent(gomock.Any(), gomock.Any(), marvin.RepoConfigFileName, defaultBranch).
 			Return("features: [auto_merge", &gogithub.Response{}, nil).
 			Times(1)
 
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
-		cfg, err := provider.Get(context.Background(), webhook)
+		cfg, warning, err := provider.Get(context.Background(), webhook)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cfg).To(BeNil())
+		Expect(warning).NotTo(BeNil())
+		Expect(warning.UsedFallback).To(BeFalse())
 	})
 
-	It("returns an error (not a disabled config) on an unexpected fetch failure", func() {
+	It("returns a nil config and a warning (not an error) on an unexpected fetch failure on the first fetch", func() {
 		mockGithub.EXPECT().
 			GetFileContent(gomock.Any(), gomock.Any(), marvin.RepoConfigFileName, defaultBranch).
 			Return("", &gogithub.Response{Response: &http.Response{StatusCode: http.StatusInternalServerError}}, errors.New("boom")).
 			Times(1)
 
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
-		cfg, err := provider.Get(context.Background(), webhook)
-		Expect(err).To(HaveOccurred())
+		cfg, warning, err := provider.Get(context.Background(), webhook)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(cfg).To(BeNil())
+		Expect(warning).NotTo(BeNil())
+		Expect(warning.UsedFallback).To(BeFalse())
 	})
 
 	It("caches the resolved config within the TTL and refetches once it expires", func() {
@@ -181,17 +215,17 @@ check_changelog:
 
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{MarvinRepoConfigCacheTTL: 10 * time.Millisecond})
 
-		_, err := provider.Get(context.Background(), webhook)
+		_, _, err := provider.Get(context.Background(), webhook)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Within TTL: served from cache, no second call yet.
-		_, err = provider.Get(context.Background(), webhook)
+		_, _, err = provider.Get(context.Background(), webhook)
 		Expect(err).NotTo(HaveOccurred())
 
 		time.Sleep(20 * time.Millisecond)
 
 		// TTL expired: refetches.
-		_, err = provider.Get(context.Background(), webhook)
+		_, _, err = provider.Get(context.Background(), webhook)
 		Expect(err).NotTo(HaveOccurred())
 	})
 })

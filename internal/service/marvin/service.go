@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Flashgap/logrus"
 	gogithub "github.com/google/go-github/v63/github"
 
 	"github.com/Flashgap/marvin/internal/middlewares"
@@ -42,6 +43,7 @@ I removed this label, please add it back when the PR is ready to be merged!`
 	commentWrongDescription       = "Description should only be composed by bullet points."
 	commentTitleTooLong           = "Invalid PR title, it's too long. It contains %d characters, it should be less than %d."
 	commentChanglogNotUpdated     = "PR should update the %s and contain a reference to this PR."
+	commentInvalidRepoConfig      = "Hey, I ran into a problem with this repository's %s: %s"
 
 	// check runs
 	checkRunTitleHotfix   = "Hotfix PR"
@@ -82,19 +84,27 @@ func NewService(
 // The Marvin Service is a GitHub webhook manager
 
 func (s *service) OnPullRequest(ctx context.Context, event *gogithub.PullRequestEvent) error {
-	config, err := s.repoConfigProvider.Get(ctx, event)
+	config, warning, err := s.repoConfigProvider.Get(ctx, event)
 	if err != nil {
 		return fmt.Errorf("error loading repository config: %w", err)
 	}
+
+	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnPullRequest")
+
+	if warning != nil {
+		s.reportConfigWarning(ctx, event, event.GetPullRequest().GetNumber(), warning, log)
+	}
+
 	if config == nil {
-		s.attemptConfigMigration(ctx, event)
+		if warning == nil {
+			s.attemptConfigMigration(ctx, event)
+		}
 		return nil
 	}
 
 	action := event.GetAction()
 	pr := event.GetPullRequest()
 
-	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnPullRequest")
 	log.Infof("Got a pull request webhook with action %q", action)
 
 	// Handle draft/ready-for-review transitions before the WIP guard so that
@@ -144,6 +154,19 @@ func (s *service) OnPullRequest(ctx context.Context, event *gogithub.PullRequest
 	}
 
 	return nil
+}
+
+// reportConfigWarning surfaces a non-fatal RepoConfigProvider.Get warning (invalid .marvin.yaml,
+// or a GitHub error while fetching it) both in the logs and as a PR comment, so repo owners notice
+// a broken config without Marvin silently going quiet.
+func (s *service) reportConfigWarning(ctx context.Context, webhook pkggithub.RepoSenderGetter, prNumber int, warning *ConfigWarning, log *logrus.Entry) {
+	log.Warnf("repository config warning: %s", warning.Message)
+
+	if _, _, err := s.githubService.CreatePRComment(ctx, webhook, prNumber, &gogithub.IssueComment{
+		Body: utils.Ptr(fmt.Sprintf(commentInvalidRepoConfig, RepoConfigFileName, warning.Message)),
+	}); err != nil {
+		log.Errorf("error posting repository config warning comment: %v", err)
+	}
 }
 
 // handleDraftTransition manages the "action:Work in progress" and "action:Ready for review"
@@ -207,17 +230,25 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 }
 
 func (s *service) OnCheckRun(ctx context.Context, event *gogithub.CheckRunEvent) error {
-	config, err := s.repoConfigProvider.Get(ctx, event)
+	config, warning, err := s.repoConfigProvider.Get(ctx, event)
 	if err != nil {
 		return fmt.Errorf("error loading repository config: %w", err)
 	}
+
+	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnCheckRun")
+
+	if warning != nil {
+		// No PR number resolved yet at this point (a check run can cover several PRs), so this is
+		// log-only; OnPullRequest/OnPullRequestReview already surface the same warning as a comment.
+		log.Warnf("repository config warning: %s", warning.Message)
+	}
+
 	if config == nil || !config.AutoMerge {
 		return nil
 	}
 
 	action := event.GetAction()
 
-	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnCheckRun")
 	log.Infof("Got a check run webhook with action %q", action)
 
 	switch action {
@@ -261,10 +292,17 @@ func (s *service) OnCheckRun(ctx context.Context, event *gogithub.CheckRunEvent)
 }
 
 func (s *service) OnPullRequestReview(ctx context.Context, event *gogithub.PullRequestReviewEvent) error {
-	config, err := s.repoConfigProvider.Get(ctx, event)
+	config, warning, err := s.repoConfigProvider.Get(ctx, event)
 	if err != nil {
 		return fmt.Errorf("error loading repository config: %w", err)
 	}
+
+	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnPullRequestReview")
+
+	if warning != nil {
+		s.reportConfigWarning(ctx, event, event.GetPullRequest().GetNumber(), warning, log)
+	}
+
 	if config == nil {
 		return nil
 	}
@@ -272,7 +310,6 @@ func (s *service) OnPullRequestReview(ctx context.Context, event *gogithub.PullR
 	action := event.GetAction()
 	pr := event.GetPullRequest()
 
-	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnPullRequestReview")
 	log.Infof("Got a pull request review webhook with action %q and state %q", action, event.GetReview().GetState())
 
 	switch action {

@@ -67,8 +67,7 @@ type Marvin struct {
 	MarvinLegacyReviewersTeams map[string]string `envconfig:"MARVIN_REVIEWERS_TEAMS"`
 
 	// MarvinRepoConfigCacheTTL controls how long a repository's .marvin.yaml file is cached
-	// before being re-fetched from its default branch.
-	// ex: 5m, 30s
+	// before being re-fetched from its default branch (defaults to 5m).
 	MarvinRepoConfigCacheTTL time.Duration `envconfig:"MARVIN_REPO_CONFIG_CACHE_TTL" default:"5m"`
 
 	// MarvinGithubToSlack is a mapping of GitHub handles to Slack IDs
