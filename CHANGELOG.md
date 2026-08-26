@@ -6,8 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [2.0.0] — 2026-08-25
-
 ### ⚠ Breaking changes
 
 - **Removed `MARVIN_REPOSITORIES` and `MARVIN_REVIEWERS_TEAMS` env vars.** Per-repository settings
@@ -19,6 +17,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The `FindAndAssignReviewers` signature (internal `github.Service` interface) changed from a
   single `fromTeam string` to `fromTeams []string`, to support requesting reviewers from more than
   one team on a single PR.
+- **Renamed `MARVIN_REPO_CONFIG_CACHE_TTL` to `MARVIN_REPO_CONFIG_POLL_INTERVAL`** (same default,
+  `5m`). Its meaning changed from a per-repository cache max-age to the interval at which Marvin
+  polls every installed repository's `.marvin.yaml` in the background — see "Changed" below.
 
 ### Added
 
@@ -28,8 +29,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   enabling per-team review ownership within a single monorepo.
 - `.marvin.yaml` is always fetched from a repository's default branch, never from a PR's head, so a
   PR author cannot edit their own review rules inside the PR being reviewed.
-- `MARVIN_REPO_CONFIG_CACHE_TTL` env var (default `5m`) controls how long a repository's
-  `.marvin.yaml` is cached before being re-fetched.
 - **Automatic config migration**: for a repository with no `.marvin.yaml` yet but a legacy
   `MARVIN_REPOSITORIES` entry, Marvin opens a one-time PR (branch `marvin/add-marvin-yaml-config`)
   proposing a `.marvin.yaml` generated from that legacy config. `MARVIN_REPOSITORIES` and
@@ -37,6 +36,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   PR — they have no other effect and can be unset once every repo has been migrated.
 - Per-repo `ai_review.reviewer_logins` / `ai_review.status_contexts` in `.marvin.yaml`, extending the
   org-wide `MARVIN_AI_REVIEWER_LOGINS` / `MARVIN_AI_REVIEW_STATUS_CONTEXTS` for that repository only.
+- If a repository's `.marvin.yaml` fails to load (invalid YAML, or a GitHub API error), Marvin now
+  keeps using the last known-good configuration instead of silently disabling itself, and comments
+  on the pull request explaining what went wrong.
+
+### Changed
+
+- **`.marvin.yaml` is no longer fetched from the webhook request path.** A background poller
+  discovers every repository the GitHub App is installed on and periodically re-reads each one's
+  `.marvin.yaml` (every `MARVIN_REPO_CONFIG_POLL_INTERVAL`); webhook handling only ever reads from
+  that cache. This removes the risk of a slow or unavailable GitHub API call delaying (or timing
+  out) webhook delivery.
 
 ## [1.0.0] — 2026-03-24
 

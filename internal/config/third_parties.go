@@ -66,9 +66,10 @@ type Marvin struct {
 	// ex: repo-name:team-name
 	MarvinLegacyReviewersTeams map[string]string `envconfig:"MARVIN_REVIEWERS_TEAMS"`
 
-	// MarvinRepoConfigCacheTTL controls how long a repository's .marvin.yaml file is cached
-	// before being re-fetched from its default branch (defaults to 5m).
-	MarvinRepoConfigCacheTTL time.Duration `envconfig:"MARVIN_REPO_CONFIG_CACHE_TTL" default:"5m"`
+	// MarvinRepoConfigPollInterval controls how often Marvin re-polls every installed repository's
+	// .marvin.yaml file in the background (defaults to 5m). Webhook handling always reads from
+	// this cache and never fetches .marvin.yaml itself.
+	MarvinRepoConfigPollInterval time.Duration `envconfig:"MARVIN_REPO_CONFIG_POLL_INTERVAL" default:"5m"`
 
 	// MarvinGithubToSlack is a mapping of GitHub handles to Slack IDs
 	// ex: octocat:U043AC1234,bob:U043BC1234

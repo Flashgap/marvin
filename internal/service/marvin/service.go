@@ -84,10 +84,7 @@ func NewService(
 // The Marvin Service is a GitHub webhook manager
 
 func (s *service) OnPullRequest(ctx context.Context, event *gogithub.PullRequestEvent) error {
-	config, warning, err := s.repoConfigProvider.Get(ctx, event)
-	if err != nil {
-		return fmt.Errorf("error loading repository config: %w", err)
-	}
+	config, warning := s.repoConfigProvider.Get(ctx, event)
 
 	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnPullRequest")
 
@@ -230,10 +227,7 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 }
 
 func (s *service) OnCheckRun(ctx context.Context, event *gogithub.CheckRunEvent) error {
-	config, warning, err := s.repoConfigProvider.Get(ctx, event)
-	if err != nil {
-		return fmt.Errorf("error loading repository config: %w", err)
-	}
+	config, warning := s.repoConfigProvider.Get(ctx, event)
 
 	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnCheckRun")
 
@@ -292,10 +286,7 @@ func (s *service) OnCheckRun(ctx context.Context, event *gogithub.CheckRunEvent)
 }
 
 func (s *service) OnPullRequestReview(ctx context.Context, event *gogithub.PullRequestReviewEvent) error {
-	config, warning, err := s.repoConfigProvider.Get(ctx, event)
-	if err != nil {
-		return fmt.Errorf("error loading repository config: %w", err)
-	}
+	config, warning := s.repoConfigProvider.Get(ctx, event)
 
 	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnPullRequestReview")
 

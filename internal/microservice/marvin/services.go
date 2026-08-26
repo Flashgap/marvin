@@ -94,6 +94,7 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		}
 
 		repoConfigProvider := marvin.NewRepoConfigProvider(s.GithubService, cfg.Marvin)
+		repoConfigProvider.Start(ctx, cfg.MarvinRepoConfigPollInterval)
 		// Intentional: sole read site, seeds the one-time .marvin.yaml migration PR (see internal/service/marvin/migration.go).
 		legacyConfig := marvin.LegacyConfig{
 			Repositories:   cfg.MarvinLegacyRepositories,   //nolint:staticcheck // migration-only seed, see comment above

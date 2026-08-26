@@ -153,3 +153,10 @@ func (h *client) CreateFile(ctx context.Context, webhook RepoSenderGetter, path 
 func (h *client) CreatePullRequest(ctx context.Context, webhook RepoSenderGetter, newPR *github.NewPullRequest) (*github.PullRequest, *github.Response, error) {
 	return h.PullRequests.Create(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), newPR)
 }
+
+// ListInstalledRepos lists the repositories accessible to the GitHub App installation this client
+// authenticates as. Requires no permission beyond the "metadata: read" access every installation
+// is granted by default.
+func (h *client) ListInstalledRepos(ctx context.Context, opts *github.ListOptions) (*github.ListRepositories, *github.Response, error) {
+	return h.Apps.ListRepos(ctx, opts)
+}

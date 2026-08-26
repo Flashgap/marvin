@@ -35,4 +35,5 @@ type Client interface {
 	CreateRef(ctx context.Context, webhook RepoSenderGetter, ref *github.Reference) (*github.Reference, *github.Response, error)
 	CreateFile(ctx context.Context, webhook RepoSenderGetter, path string, opts *github.RepositoryContentFileOptions) (*github.RepositoryContentResponse, *github.Response, error)
 	CreatePullRequest(ctx context.Context, webhook RepoSenderGetter, newPR *github.NewPullRequest) (*github.PullRequest, *github.Response, error)
+	ListInstalledRepos(ctx context.Context, opts *github.ListOptions) (*github.ListRepositories, *github.Response, error)
 }

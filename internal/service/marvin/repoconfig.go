@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Flashgap/logrus"
+	gogithub "github.com/google/go-github/v63/github"
 	"gopkg.in/yaml.v3"
 
 	"github.com/Flashgap/marvin/internal/config"
@@ -50,20 +51,29 @@ type aiReviewConfig struct {
 // committed on that repository's default branch, so that repo owners can self-serve their own
 // Marvin settings (including which team reviews which subtree) via a normal PR to their own repo.
 type RepoConfigProvider interface {
-	// Get returns the resolved configuration for the repository targeted by webhook, or nil if the
-	// repository has no .marvin.yaml. A nil configuration means Marvin is disabled for that
+	// Get returns the last-polled configuration for the repository targeted by webhook, or nil if
+	// the repository has no .marvin.yaml. A nil configuration means Marvin is disabled for that
 	// repository: callers must treat it exactly like the "repository not configured" case did
-	// before .marvin.yaml existed, i.e. no-op rather than error.
+	// before .marvin.yaml existed, i.e. no-op rather than error. Get only ever reads from an
+	// in-memory cache maintained by Start: it never calls the GitHub API itself, so it's safe to
+	// call from the webhook request path without risking a slow response or a GitHub outage
+	// breaking webhook delivery.
 	//
-	// If refreshing the config failed (invalid YAML, or a GitHub API error), Get falls back to the
-	// last known-good configuration and returns a non-nil ConfigWarning describing why, so callers
+	// If the last poll of this repository failed (invalid YAML, or a GitHub API error), Get returns
+	// the last known-good configuration alongside a non-nil ConfigWarning describing why, so callers
 	// can surface it (e.g. as a PR comment) instead of silently disabling Marvin on a typo or a
 	// transient GitHub outage. If no known-good configuration exists yet, Get returns a nil
 	// configuration alongside the warning.
-	Get(ctx context.Context, webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning, error)
+	Get(ctx context.Context, webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning)
+
+	// Start performs an initial poll of every repository accessible to the GitHub App installation,
+	// populating the cache Get reads from, then repeats the poll every interval until ctx is
+	// cancelled. If interval is zero, only the initial poll runs. Start blocks until the initial
+	// poll completes.
+	Start(ctx context.Context, interval time.Duration)
 }
 
-// ConfigWarning describes a non-fatal problem encountered while refreshing a repository's
+// ConfigWarning describes a non-fatal problem encountered while polling a repository's
 // .marvin.yaml. It is not a fatal error: RepoConfigProvider.Get always pairs it with a usable
 // (possibly nil) configuration.
 type ConfigWarning struct {
@@ -71,87 +81,154 @@ type ConfigWarning struct {
 	// as a PR comment.
 	Message string
 	// UsedFallback is true when Message describes why the returned configuration is a previously
-	// cached one rather than freshly fetched.
+	// cached one rather than freshly polled.
 	UsedFallback bool
 }
 
 // StaticRepoConfigProvider is a RepoConfigProvider backed by a fixed, pre-resolved map of
-// repository name to configuration, with no fetching or caching. Useful for tests and for any
+// repository name to configuration, with no polling or caching. Useful for tests and for any
 // caller that already has repo configs resolved by other means.
 type StaticRepoConfigProvider map[string]*GitHubRepositoryConfiguration
 
-func (p StaticRepoConfigProvider) Get(_ context.Context, webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning, error) {
-	return p[webhook.GetRepo().GetName()], nil, nil
+func (p StaticRepoConfigProvider) Get(_ context.Context, webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning) {
+	return p[webhook.GetRepo().GetName()], nil
 }
 
+func (p StaticRepoConfigProvider) Start(_ context.Context, _ time.Duration) {}
+
 type repoConfigCacheEntry struct {
-	config    *GitHubRepositoryConfiguration
-	warning   *ConfigWarning
-	fetchedAt time.Time
+	config  *GitHubRepositoryConfiguration
+	warning *ConfigWarning
 }
 
 type repoConfigProvider struct {
 	githubClient pkggithub.Client
 	orgConfig    config.Marvin
-	ttl          time.Duration
 
-	mu    sync.Mutex
+	mu    sync.RWMutex
 	cache map[string]repoConfigCacheEntry
 }
 
-// NewRepoConfigProvider builds a RepoConfigProvider backed by the given GitHub client and cached
-// for orgConfig.MarvinRepoConfigCacheTTL between fetches of a given repository's .marvin.yaml.
+// NewRepoConfigProvider builds a RepoConfigProvider backed by the given GitHub client. Call Start
+// to begin polling; until then, Get returns a nil configuration for every repository.
 func NewRepoConfigProvider(githubClient pkggithub.Client, orgConfig config.Marvin) RepoConfigProvider {
-	ttl := orgConfig.MarvinRepoConfigCacheTTL
-	if ttl <= 0 {
-		ttl = 5 * time.Minute
-	}
-
 	return &repoConfigProvider{
 		githubClient: githubClient,
 		orgConfig:    orgConfig,
-		ttl:          ttl,
 		cache:        make(map[string]repoConfigCacheEntry),
 	}
 }
 
-func (p *repoConfigProvider) Get(ctx context.Context, webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning, error) {
-	repoKey := webhook.GetRepo().GetFullName()
+func (p *repoConfigProvider) Get(_ context.Context, webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning) {
+	p.mu.RLock()
+	entry := p.cache[webhook.GetRepo().GetFullName()]
+	p.mu.RUnlock()
 
-	p.mu.Lock()
-	entry, ok := p.cache[repoKey]
-	p.mu.Unlock()
-	if ok && time.Since(entry.fetchedAt) < p.ttl {
-		return entry.config, entry.warning, nil
+	return entry.config, entry.warning
+}
+
+func (p *repoConfigProvider) Start(ctx context.Context, interval time.Duration) {
+	p.poll(ctx)
+
+	if interval <= 0 {
+		return
 	}
 
-	repoConfig, err := p.fetch(ctx, webhook)
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				logrus.Info("stopping repo config poll loop")
+				return
+			case <-ticker.C:
+				p.poll(ctx)
+			}
+		}
+	}()
+}
+
+// poll refreshes every repository accessible to the GitHub App installation. A repository whose
+// refresh fails keeps its last known-good cached configuration (see pollRepo); a failure to even
+// list the installed repositories leaves the whole cache untouched until the next tick.
+func (p *repoConfigProvider) poll(ctx context.Context) {
+	repos, err := p.listInstalledRepos(ctx)
 	if err != nil {
+		logrus.Errorf("repo config poll: failed to list installed repositories, keeping previous configurations: %v", err)
+		return
+	}
+
+	for _, repo := range repos {
+		p.pollRepo(ctx, repo)
+	}
+
+	logrus.Infof("repo config poll: refreshed %d repositories", len(repos))
+}
+
+func (p *repoConfigProvider) listInstalledRepos(ctx context.Context) ([]*gogithub.Repository, error) {
+	var all []*gogithub.Repository
+	opts := &gogithub.ListOptions{PerPage: pkggithub.MaxPerPage}
+
+	for {
+		result, res, err := p.githubClient.ListInstalledRepos(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+
+		all = append(all, result.Repositories...)
+
+		if res.NextPage == 0 {
+			return all, nil
+		}
+		opts.Page = res.NextPage
+	}
+}
+
+// installedRepoWebhook adapts a *gogithub.Repository from the installation repo listing into a
+// pkggithub.RepoSenderGetter, so the poller can reuse fetch exactly as webhook-triggered lookups
+// do. It carries no sender since polling isn't attributable to any GitHub user.
+type installedRepoWebhook struct {
+	repo *gogithub.Repository
+}
+
+func (w installedRepoWebhook) GetRepo() *gogithub.Repository { return w.repo }
+func (w installedRepoWebhook) GetSender() *gogithub.User      { return nil }
+
+// pollRepo refreshes a single repository's cached configuration. On failure it keeps the
+// previously cached configuration (if any) and attaches a ConfigWarning describing why, so a
+// broken or unreachable .marvin.yaml doesn't silently disable Marvin.
+func (p *repoConfigProvider) pollRepo(ctx context.Context, repo *gogithub.Repository) {
+	webhook := installedRepoWebhook{repo: repo}
+	repoKey := repo.GetFullName()
+
+	repoConfig, err := p.fetch(ctx, webhook)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if err != nil {
+		prev, hadPrev := p.cache[repoKey]
+
 		var warning *ConfigWarning
-		if ok {
-			repoConfig = entry.config
+		if hadPrev {
 			warning = &ConfigWarning{
 				Message:      fmt.Sprintf("failed to refresh %s (%v), using the last known-good configuration", RepoConfigFileName, err),
 				UsedFallback: true,
 			}
+			repoConfig = prev.config
 		} else {
 			warning = &ConfigWarning{
 				Message: fmt.Sprintf("failed to load %s (%v), Marvin is disabled for this repository", RepoConfigFileName, err),
 			}
 		}
 
-		p.mu.Lock()
-		p.cache[repoKey] = repoConfigCacheEntry{config: repoConfig, warning: warning, fetchedAt: time.Now()}
-		p.mu.Unlock()
-
-		return repoConfig, warning, nil
+		logrus.Warnf("%s: %s", repoKey, warning.Message)
+		p.cache[repoKey] = repoConfigCacheEntry{config: repoConfig, warning: warning}
+		return
 	}
 
-	p.mu.Lock()
-	p.cache[repoKey] = repoConfigCacheEntry{config: repoConfig, fetchedAt: time.Now()}
-	p.mu.Unlock()
-
-	return repoConfig, nil, nil
+	p.cache[repoKey] = repoConfigCacheEntry{config: repoConfig}
 }
 
 // fetch always reads .marvin.yaml off the repository's default branch, never off the webhook's PR

@@ -167,7 +167,7 @@ features are on, who reviews what — live in each repo's own `.marvin.yaml` ins
 | `MARVIN_GITHUB_TO_SLACK` | Comma-separated `github-handle:slack-user-id` for Slack DMs | `octocat:U012345678` |
 | `MARVIN_AI_REVIEWER_LOGINS` | Comma-separated extra AI-reviewer bot logins recognized by `require_ai_review` and `auto_changes_required`, in addition to the built-in `coderabbitai[bot]`/`graphite-app[bot]`/`copilot-pull-request-reviewer[bot]` (exact, case-insensitive match). Repos can add their own via `.marvin.yaml`'s `ai_review.reviewer_logins`. | `my-custom-ai-bot[bot]` |
 | `MARVIN_AI_REVIEW_STATUS_CONTEXTS` | Comma-separated extra commit-status contexts accepted by `require_ai_review` as a completed AI review when no formal review is found, in addition to the built-in `CodeRabbit` (exact, case-insensitive match on the current HEAD). Repos can add their own via `.marvin.yaml`'s `ai_review.status_contexts`. | `MyAIReviewer` |
-| `MARVIN_REPO_CONFIG_CACHE_TTL` | How long a repository's `.marvin.yaml` is cached before being re-fetched from its default branch | `5m` (default) |
+| `MARVIN_REPO_CONFIG_POLL_INTERVAL` | How often Marvin re-polls every installed repository's `.marvin.yaml` in the background. Webhook handling always reads from this cache and never fetches `.marvin.yaml` itself. | `5m` (default) |
 
 ### Linear (required for Linear features)
 
@@ -284,9 +284,13 @@ reviewer assignment.
 
 Marvin always reads `.marvin.yaml` off the repository's **default branch**, never off a PR's head
 branch. Otherwise a PR author could edit their own review rules inside the very PR being
-reviewed (e.g. remove the reviewer requirement) and bypass review. Changes to `.marvin.yaml` take
-effect once merged to the default branch, subject to the `MARVIN_REPO_CONFIG_CACHE_TTL` cache
-(default `5m`).
+reviewed (e.g. remove the reviewer requirement) and bypass review. `.marvin.yaml` is never fetched
+from the webhook request path: a background poller periodically re-reads it for every repository
+the GitHub App is installed on (every `MARVIN_REPO_CONFIG_POLL_INTERVAL`, default `5m`) and
+webhook handling only ever reads from that cache. Changes to `.marvin.yaml` take effect once
+merged to the default branch, subject to that poll interval. If a repository's `.marvin.yaml`
+becomes invalid or fails to load, Marvin keeps using the last known-good configuration and
+comments on the pull request explaining why.
 
 ```yaml
 # .marvin.yaml, at the root of the repository

@@ -298,6 +298,22 @@ func (mr *MockClientMockRecorder) ListCheckSuites(ctx, prEvent, opts any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCheckSuites", reflect.TypeOf((*MockClient)(nil).ListCheckSuites), ctx, prEvent, opts)
 }
 
+// ListInstalledRepos mocks base method.
+func (m *MockClient) ListInstalledRepos(ctx context.Context, opts *github0.ListOptions) (*github0.ListRepositories, *github0.Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListInstalledRepos", ctx, opts)
+	ret0, _ := ret[0].(*github0.ListRepositories)
+	ret1, _ := ret[1].(*github0.Response)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ListInstalledRepos indicates an expected call of ListInstalledRepos.
+func (mr *MockClientMockRecorder) ListInstalledRepos(ctx, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListInstalledRepos", reflect.TypeOf((*MockClient)(nil).ListInstalledRepos), ctx, opts)
+}
+
 // ListLabels mocks base method.
 func (m *MockClient) ListLabels(ctx context.Context, webhook github.RepoSenderGetter, opts *github0.ListOptions) ([]*github0.Label, *github0.Response, error) {
 	m.ctrl.T.Helper()
