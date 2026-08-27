@@ -68,7 +68,7 @@ var _ = Describe("RepoConfigProvider", func() {
 		provider.Start(context.Background(), 0)
 
 		for range 5 {
-			cfg, warning := provider.Get(context.Background(), webhook)
+			cfg, warning := provider.Get(webhook)
 			Expect(warning).To(BeNil())
 			Expect(cfg.AutoMerge).To(BeTrue())
 		}
@@ -77,7 +77,7 @@ var _ = Describe("RepoConfigProvider", func() {
 	It("returns a nil config for every repository until Start has run", func() {
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
 
-		cfg, warning := provider.Get(context.Background(), webhook)
+		cfg, warning := provider.Get(webhook)
 		Expect(cfg).To(BeNil())
 		Expect(warning).To(BeNil())
 	})
@@ -92,7 +92,7 @@ var _ = Describe("RepoConfigProvider", func() {
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
 		provider.Start(context.Background(), 0)
 
-		cfg, warning := provider.Get(context.Background(), webhook)
+		cfg, warning := provider.Get(webhook)
 		Expect(warning).To(BeNil())
 		Expect(cfg.AutoMerge).To(BeTrue())
 	})
@@ -107,7 +107,7 @@ var _ = Describe("RepoConfigProvider", func() {
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{MarvinAIReviewerLogins: []string{"org-bot"}})
 		provider.Start(context.Background(), 0)
 
-		cfg, _ := provider.Get(context.Background(), webhook)
+		cfg, _ := provider.Get(webhook)
 		Expect(cfg.RequireAIReview).To(BeTrue())
 		Expect(cfg.AIReviewerLogins).To(Equal(append(append(append([]string{}, marvin.DefaultAIReviewerLogins...), "org-bot"), "my-custom-bot")))
 	})
@@ -122,7 +122,7 @@ var _ = Describe("RepoConfigProvider", func() {
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{MarvinAIReviewerLogins: []string{"org-bot"}})
 		provider.Start(context.Background(), 0)
 
-		cfg, _ := provider.Get(context.Background(), webhook)
+		cfg, _ := provider.Get(webhook)
 		Expect(cfg.RequireAIReview).To(BeFalse())
 		Expect(cfg.AIReviewerLogins).To(BeEmpty())
 	})
@@ -145,7 +145,7 @@ reviewers:
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
 		provider.Start(context.Background(), 0)
 
-		cfg, _ := provider.Get(context.Background(), webhook)
+		cfg, _ := provider.Get(webhook)
 		Expect(cfg.DefaultTeam).To(Equal("platform"))
 		Expect(cfg.ReviewRules).To(Equal([]marvin.PathReviewRule{
 			{Pattern: "go/**", Team: "backend-team"},
@@ -163,7 +163,7 @@ reviewers:
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
 		provider.Start(context.Background(), 0)
 
-		cfg, _ := provider.Get(context.Background(), webhook)
+		cfg, _ := provider.Get(webhook)
 		Expect(cfg.ChangelogFile).To(Equal(marvin.DefaultChangelogFile))
 	})
 
@@ -181,7 +181,7 @@ check_changelog:
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
 		provider.Start(context.Background(), 0)
 
-		cfg, _ := provider.Get(context.Background(), webhook)
+		cfg, _ := provider.Get(webhook)
 		Expect(cfg.ChangelogFile).To(Equal("docs/CHANGELOG.md"))
 	})
 
@@ -195,7 +195,7 @@ check_changelog:
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
 		provider.Start(context.Background(), 0)
 
-		cfg, warning := provider.Get(context.Background(), webhook)
+		cfg, warning := provider.Get(webhook)
 		Expect(warning).To(BeNil())
 		Expect(cfg).To(BeNil())
 	})
@@ -210,7 +210,7 @@ check_changelog:
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
 		provider.Start(context.Background(), 0)
 
-		cfg, warning := provider.Get(context.Background(), webhook)
+		cfg, warning := provider.Get(webhook)
 		Expect(cfg).To(BeNil())
 		Expect(warning).NotTo(BeNil())
 		Expect(warning.UsedFallback).To(BeFalse())
@@ -226,7 +226,7 @@ check_changelog:
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
 		provider.Start(context.Background(), 0)
 
-		cfg, warning := provider.Get(context.Background(), webhook)
+		cfg, warning := provider.Get(webhook)
 		Expect(cfg).To(BeNil())
 		Expect(warning).NotTo(BeNil())
 		Expect(warning.UsedFallback).To(BeFalse())
@@ -252,12 +252,12 @@ check_changelog:
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
 
 		provider.Start(context.Background(), 0)
-		good, warning := provider.Get(context.Background(), webhook)
+		good, warning := provider.Get(webhook)
 		Expect(warning).To(BeNil())
 		Expect(good.AutoMerge).To(BeTrue())
 
 		provider.Start(context.Background(), 0)
-		cfg, warning := provider.Get(context.Background(), webhook)
+		cfg, warning := provider.Get(webhook)
 		Expect(cfg).To(Equal(good))
 		Expect(warning).NotTo(BeNil())
 		Expect(warning.UsedFallback).To(BeTrue())
@@ -279,12 +279,12 @@ check_changelog:
 		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
 
 		provider.Start(context.Background(), 0)
-		good, warning := provider.Get(context.Background(), webhook)
+		good, warning := provider.Get(webhook)
 		Expect(warning).To(BeNil())
 		Expect(good.AutoMerge).To(BeTrue())
 
 		provider.Start(context.Background(), 0)
-		cfg, warning := provider.Get(context.Background(), webhook)
+		cfg, warning := provider.Get(webhook)
 		Expect(warning).To(BeNil())
 		Expect(cfg).To(Equal(good))
 	})

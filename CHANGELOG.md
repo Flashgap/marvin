@@ -17,9 +17,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The `FindAndAssignReviewers` signature (internal `github.Service` interface) changed from a
   single `fromTeam string` to `fromTeams []string`, to support requesting reviewers from more than
   one team on a single PR.
-- **Renamed `MARVIN_REPO_CONFIG_CACHE_TTL` to `MARVIN_REPO_CONFIG_POLL_INTERVAL`** (same default,
-  `5m`). Its meaning changed from a per-repository cache max-age to the interval at which Marvin
-  polls every installed repository's `.marvin.yaml` in the background — see "Changed" below.
 
 ### Added
 
@@ -39,14 +36,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - If a repository's `.marvin.yaml` fails to load (invalid YAML, or a GitHub API error), Marvin now
   keeps using the last known-good configuration instead of silently disabling itself, and comments
   on the pull request explaining what went wrong.
-
-### Changed
-
-- **`.marvin.yaml` is no longer fetched from the webhook request path.** A background poller
-  discovers every repository the GitHub App is installed on and periodically re-reads each one's
-  `.marvin.yaml` (every `MARVIN_REPO_CONFIG_POLL_INTERVAL`); webhook handling only ever reads from
-  that cache. This removes the risk of a slow or unavailable GitHub API call delaying (or timing
-  out) webhook delivery.
 
 ## [1.0.0] — 2026-03-24
 

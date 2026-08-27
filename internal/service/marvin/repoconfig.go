@@ -64,7 +64,7 @@ type RepoConfigProvider interface {
 	// can surface it (e.g. as a PR comment) instead of silently disabling Marvin on a typo or a
 	// transient GitHub outage. If no known-good configuration exists yet, Get returns a nil
 	// configuration alongside the warning.
-	Get(ctx context.Context, webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning)
+	Get(webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning)
 
 	// Start performs an initial poll of every repository accessible to the GitHub App installation,
 	// populating the cache Get reads from, then repeats the poll every interval until ctx is
@@ -90,7 +90,7 @@ type ConfigWarning struct {
 // caller that already has repo configs resolved by other means.
 type StaticRepoConfigProvider map[string]*GitHubRepositoryConfiguration
 
-func (p StaticRepoConfigProvider) Get(_ context.Context, webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning) {
+func (p StaticRepoConfigProvider) Get(webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning) {
 	return p[webhook.GetRepo().GetName()], nil
 }
 
@@ -119,7 +119,7 @@ func NewRepoConfigProvider(githubClient pkggithub.Client, orgConfig config.Marvi
 	}
 }
 
-func (p *repoConfigProvider) Get(_ context.Context, webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning) {
+func (p *repoConfigProvider) Get(webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning) {
 	p.mu.RLock()
 	entry := p.cache[webhook.GetRepo().GetFullName()]
 	p.mu.RUnlock()
@@ -193,7 +193,7 @@ type installedRepoWebhook struct {
 }
 
 func (w installedRepoWebhook) GetRepo() *gogithub.Repository { return w.repo }
-func (w installedRepoWebhook) GetSender() *gogithub.User      { return nil }
+func (w installedRepoWebhook) GetSender() *gogithub.User     { return nil }
 
 // pollRepo refreshes a single repository's cached configuration. On failure it keeps the
 // previously cached configuration (if any) and attaches a ConfigWarning describing why, so a
