@@ -87,7 +87,7 @@ type ConfigWarning struct {
 
 // StaticRepoConfigProvider is a RepoConfigProvider backed by a fixed, pre-resolved map of
 // repository name to configuration, with no polling or caching. Useful for tests and for any
-// caller that already has repo configs resolved by other means.
+// caller that already has repo configs resolved by other means such as legacy config.
 type StaticRepoConfigProvider map[string]*GitHubRepositoryConfiguration
 
 func (p StaticRepoConfigProvider) Get(webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning) {
