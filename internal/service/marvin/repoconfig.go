@@ -204,10 +204,8 @@ func (p *repoConfigProvider) pollRepo(ctx context.Context, repo *gogithub.Reposi
 
 	repoConfig, err := p.fetch(ctx, webhook)
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	if err != nil {
+		p.mu.Lock()
 		prev, hadPrev := p.cache[repoKey]
 
 		var warning *ConfigWarning
@@ -223,12 +221,27 @@ func (p *repoConfigProvider) pollRepo(ctx context.Context, repo *gogithub.Reposi
 			}
 		}
 
-		logrus.Warnf("%s: %s", repoKey, warning.Message)
 		p.cache[repoKey] = repoConfigCacheEntry{config: repoConfig, warning: warning}
+		p.mu.Unlock()
+
+		logrus.Warnf("%s: %s", repoKey, warning.Message)
 		return
 	}
 
+	if repoConfig == nil {
+		// Genuinely no .marvin.yaml. Fall back to the repository's legacy config:
+		if fallback := legacyFallbackConfig(p.orgConfig, repo.GetName()); fallback != nil {
+			logrus.Infof("no %s yet for %s, running off legacy config pending migration", RepoConfigFileName, repoKey)
+			repoConfig = fallback
+		} else {
+			logrus.Infof("Marvin disabled for %s: no %s and no legacy entry", repoKey, RepoConfigFileName)
+		}
+		p.attemptConfigMigration(ctx, webhook)
+	}
+
+	p.mu.Lock()
 	p.cache[repoKey] = repoConfigCacheEntry{config: repoConfig}
+	p.mu.Unlock()
 }
 
 // fetch always reads .marvin.yaml off the repository's default branch, never off the webhook's PR
@@ -240,15 +253,25 @@ func (p *repoConfigProvider) fetch(ctx context.Context, webhook pkggithub.RepoSe
 	content, res, err := p.githubClient.GetFileContent(ctx, webhook, RepoConfigFileName, defaultBranch)
 	if err != nil {
 		if res != nil && res.StatusCode == http.StatusNotFound {
-			logrus.Infof("no %s found in %s, Marvin is disabled for this repository", RepoConfigFileName, webhook.GetRepo().GetFullName())
+			logrus.Infof("no %s found in %s", RepoConfigFileName, webhook.GetRepo().GetFullName())
 			return nil, nil
 		}
 		return nil, fmt.Errorf("error fetching %s from %s: %w", RepoConfigFileName, webhook.GetRepo().GetFullName(), err)
 	}
 
+	repoConfig, err := parseRepoConfig(content, p.orgConfig)
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s in %s: %w", RepoConfigFileName, webhook.GetRepo().GetFullName(), err)
+	}
+
+	return repoConfig, nil
+}
+
+// parseRepoConfig builds a GitHubRepositoryConfiguration from raw .marvin.yaml content.
+func parseRepoConfig(content string, orgConfig config.Marvin) (*GitHubRepositoryConfiguration, error) {
 	var file repoConfigFile
 	if err := yaml.Unmarshal([]byte(content), &file); err != nil {
-		return nil, fmt.Errorf("invalid %s in %s: %w", RepoConfigFileName, webhook.GetRepo().GetFullName(), err)
+		return nil, err
 	}
 
 	repoConfig := &GitHubRepositoryConfiguration{}
@@ -267,7 +290,7 @@ func (p *repoConfigProvider) fetch(ctx context.Context, webhook pkggithub.RepoSe
 	}
 
 	if repoConfig.SlackNotify {
-		repoConfig.GithubToSlack = p.orgConfig.MarvinGithubToSlack
+		repoConfig.GithubToSlack = orgConfig.MarvinGithubToSlack
 	}
 
 	var repoAIReviewerLogins, repoAIReviewStatusContexts []string
@@ -277,10 +300,10 @@ func (p *repoConfigProvider) fetch(ctx context.Context, webhook pkggithub.RepoSe
 	}
 
 	if repoConfig.RequireAIReview || repoConfig.AutoChangesRequired {
-		repoConfig.AIReviewerLogins = slices.Concat(DefaultAIReviewerLogins, p.orgConfig.MarvinAIReviewerLogins, repoAIReviewerLogins)
+		repoConfig.AIReviewerLogins = slices.Concat(DefaultAIReviewerLogins, orgConfig.MarvinAIReviewerLogins, repoAIReviewerLogins)
 	}
 	if repoConfig.RequireAIReview {
-		repoConfig.AIReviewStatusContexts = slices.Concat(DefaultAIReviewStatusContexts, p.orgConfig.MarvinAIReviewStatusContexts, repoAIReviewStatusContexts)
+		repoConfig.AIReviewStatusContexts = slices.Concat(DefaultAIReviewStatusContexts, orgConfig.MarvinAIReviewStatusContexts, repoAIReviewStatusContexts)
 	}
 
 	config.PrintConfig(repoConfig)
