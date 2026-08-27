@@ -90,6 +90,22 @@ func (mr *MockClientMockRecorder) CreateCheckRun(ctx, webhook, opts any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCheckRun", reflect.TypeOf((*MockClient)(nil).CreateCheckRun), ctx, webhook, opts)
 }
 
+// CreateFile mocks base method.
+func (m *MockClient) CreateFile(ctx context.Context, webhook github.RepoSenderGetter, path string, opts *github0.RepositoryContentFileOptions) (*github0.RepositoryContentResponse, *github0.Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateFile", ctx, webhook, path, opts)
+	ret0, _ := ret[0].(*github0.RepositoryContentResponse)
+	ret1, _ := ret[1].(*github0.Response)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// CreateFile indicates an expected call of CreateFile.
+func (mr *MockClientMockRecorder) CreateFile(ctx, webhook, path, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateFile", reflect.TypeOf((*MockClient)(nil).CreateFile), ctx, webhook, path, opts)
+}
+
 // CreatePRComment mocks base method.
 func (m *MockClient) CreatePRComment(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, body *github0.IssueComment) (*github0.IssueComment, *github0.Response, error) {
 	m.ctrl.T.Helper()
@@ -104,6 +120,38 @@ func (m *MockClient) CreatePRComment(ctx context.Context, webhook github.RepoSen
 func (mr *MockClientMockRecorder) CreatePRComment(ctx, webhook, prNumber, body any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePRComment", reflect.TypeOf((*MockClient)(nil).CreatePRComment), ctx, webhook, prNumber, body)
+}
+
+// CreatePullRequest mocks base method.
+func (m *MockClient) CreatePullRequest(ctx context.Context, webhook github.RepoSenderGetter, newPR *github0.NewPullRequest) (*github0.PullRequest, *github0.Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatePullRequest", ctx, webhook, newPR)
+	ret0, _ := ret[0].(*github0.PullRequest)
+	ret1, _ := ret[1].(*github0.Response)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// CreatePullRequest indicates an expected call of CreatePullRequest.
+func (mr *MockClientMockRecorder) CreatePullRequest(ctx, webhook, newPR any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePullRequest", reflect.TypeOf((*MockClient)(nil).CreatePullRequest), ctx, webhook, newPR)
+}
+
+// CreateRef mocks base method.
+func (m *MockClient) CreateRef(ctx context.Context, webhook github.RepoSenderGetter, ref *github0.Reference) (*github0.Reference, *github0.Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRef", ctx, webhook, ref)
+	ret0, _ := ret[0].(*github0.Reference)
+	ret1, _ := ret[1].(*github0.Response)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// CreateRef indicates an expected call of CreateRef.
+func (mr *MockClientMockRecorder) CreateRef(ctx, webhook, ref any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRef", reflect.TypeOf((*MockClient)(nil).CreateRef), ctx, webhook, ref)
 }
 
 // EditPR mocks base method.
@@ -170,6 +218,38 @@ func (mr *MockClientMockRecorder) GetCommit(ctx, webhook, sha, opts any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCommit", reflect.TypeOf((*MockClient)(nil).GetCommit), ctx, webhook, sha, opts)
 }
 
+// GetFileContent mocks base method.
+func (m *MockClient) GetFileContent(ctx context.Context, webhook github.RepoSenderGetter, path, ref string) (string, *github0.Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFileContent", ctx, webhook, path, ref)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(*github0.Response)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetFileContent indicates an expected call of GetFileContent.
+func (mr *MockClientMockRecorder) GetFileContent(ctx, webhook, path, ref any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFileContent", reflect.TypeOf((*MockClient)(nil).GetFileContent), ctx, webhook, path, ref)
+}
+
+// GetRef mocks base method.
+func (m *MockClient) GetRef(ctx context.Context, webhook github.RepoSenderGetter, ref string) (*github0.Reference, *github0.Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRef", ctx, webhook, ref)
+	ret0, _ := ret[0].(*github0.Reference)
+	ret1, _ := ret[1].(*github0.Response)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetRef indicates an expected call of GetRef.
+func (mr *MockClientMockRecorder) GetRef(ctx, webhook, ref any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRef", reflect.TypeOf((*MockClient)(nil).GetRef), ctx, webhook, ref)
+}
+
 // GetRulesForBranch mocks base method.
 func (m *MockClient) GetRulesForBranch(ctx context.Context, webhook github.RepoSenderGetter, branch string) ([]*github0.RepositoryRule, *github0.Response, error) {
 	m.ctrl.T.Helper()
@@ -216,6 +296,22 @@ func (m *MockClient) ListCheckSuites(ctx context.Context, prEvent *github0.PullR
 func (mr *MockClientMockRecorder) ListCheckSuites(ctx, prEvent, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCheckSuites", reflect.TypeOf((*MockClient)(nil).ListCheckSuites), ctx, prEvent, opts)
+}
+
+// ListInstalledRepos mocks base method.
+func (m *MockClient) ListInstalledRepos(ctx context.Context, opts *github0.ListOptions) (*github0.ListRepositories, *github0.Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListInstalledRepos", ctx, opts)
+	ret0, _ := ret[0].(*github0.ListRepositories)
+	ret1, _ := ret[1].(*github0.Response)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ListInstalledRepos indicates an expected call of ListInstalledRepos.
+func (mr *MockClientMockRecorder) ListInstalledRepos(ctx, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListInstalledRepos", reflect.TypeOf((*MockClient)(nil).ListInstalledRepos), ctx, opts)
 }
 
 // ListLabels mocks base method.

@@ -15,6 +15,7 @@ Marvin is a GitHub App that automates pull request hygiene. It validates PR titl
 - [Prerequisites](#prerequisites)
 - [GitHub App setup](#github-app-setup)
 - [Configuration](#configuration)
+- [Repository configuration (`.marvin.yaml`)](#repository-configuration-marvinyaml)
 - [PR body format](#pr-body-format)
 - [Feature reference](#feature-reference)
 - [Local development](#local-development)
@@ -24,7 +25,9 @@ Marvin is a GitHub App that automates pull request hygiene. It validates PR titl
 
 ## Features
 
-Every feature is opt-in and enabled per repository via the `MARVIN_REPOSITORIES` env var. Features are disabled by default.
+Every feature is opt-in and enabled per repository via that repository's own `.marvin.yaml` file (see
+[Repository configuration](#repository-configuration-marvinyaml)). Features are disabled by default,
+and a repository with no `.marvin.yaml` has Marvin fully disabled on it.
 
 | Feature | Description |
 |---------|-------------|
@@ -42,7 +45,7 @@ Every feature is opt-in and enabled per repository via the `MARVIN_REPOSITORIES`
 | `check_time_spent` | Validates that the *Time spent* section contains a valid float (e.g. `1.5 hours`) |
 | `check_linear_link` | Validates that a Linear issue URL is present and consistent with the title |
 | `check_linear_project` | Validates that the linked Linear issue belongs to a project |
-| `check_changelog` | Validates that `CHANGELOG.md` was updated and references the PR number |
+| `check_changelog` | Validates that the changelog file (`CHANGELOG.md` by default, overridable via `check_changelog.file`) was updated and references the PR number |
 | `slack_notify` | Sends a Slack DM to the reviewer when they are requested |
 | `auto_cap_report` | On merge, creates a Jira task from the Linear issue for capitalization tracking |
 
@@ -139,7 +142,10 @@ Every feature is opt-in and enabled per repository via the `MARVIN_REPOSITORIES`
 
 ## Configuration
 
-Marvin is configured entirely through environment variables. Copy `config/local/marvin.env` as a starting point.
+The Marvin service itself (credentials, org-wide settings) is configured through environment
+variables — copy `config/local/marvin.env` as a starting point. Per-repository settings (which
+features are on, who reviews what) live in each repo's own `.marvin.yaml` instead; see
+[Repository configuration](#repository-configuration-marvinyaml).
 
 ### GitHub (required)
 
@@ -150,15 +156,18 @@ Marvin is configured entirely through environment variables. Copy `config/local/
 | `GH_SECRET_KEY` | Path to the `.pem` private key file | `/app/secrets/gh-key/latest.pem` |
 | `GH_WEBHOOK_SECRET` | Webhook secret used to verify payloads | `s3cr3t` |
 
-### Marvin (required)
+### Marvin (org-wide, optional)
+
+These apply across every repository Marvin is installed on. Per-repository settings — which
+features are on, who reviews what — live in each repo's own `.marvin.yaml` instead; see
+[Repository configuration](#repository-configuration-marvinyaml).
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `MARVIN_REPOSITORIES` | Comma-separated list of `repo:feature1;feature2` | `my-repo:auto_merge;check_title,other-repo:slack_notify` |
-| `MARVIN_REVIEWERS_TEAMS` | Comma-separated `repo:team-slug` for `auto_review_assign` | `my-repo:backend` |
 | `MARVIN_GITHUB_TO_SLACK` | Comma-separated `github-handle:slack-user-id` for Slack DMs | `octocat:U012345678` |
-| `MARVIN_AI_REVIEWER_LOGINS` | Comma-separated extra AI-reviewer bot logins recognized by `require_ai_review` and `auto_changes_required`, in addition to the built-in `coderabbitai[bot]`/`graphite-app[bot]`/`copilot-pull-request-reviewer[bot]` (exact, case-insensitive match) | `my-custom-ai-bot[bot]` |
-| `MARVIN_AI_REVIEW_STATUS_CONTEXTS` | Comma-separated extra commit-status contexts accepted by `require_ai_review` as a completed AI review when no formal review is found, in addition to the built-in `CodeRabbit` (exact, case-insensitive match on the current HEAD) | `MyAIReviewer` |
+| `MARVIN_AI_REVIEWER_LOGINS` | Comma-separated extra AI-reviewer bot logins recognized by `require_ai_review` and `auto_changes_required`, in addition to the built-in `coderabbitai[bot]`/`graphite-app[bot]`/`copilot-pull-request-reviewer[bot]` (exact, case-insensitive match). Repos can add their own via `.marvin.yaml`'s `ai_review.reviewer_logins`. | `my-custom-ai-bot[bot]` |
+| `MARVIN_AI_REVIEW_STATUS_CONTEXTS` | Comma-separated extra commit-status contexts accepted by `require_ai_review` as a completed AI review when no formal review is found, in addition to the built-in `CodeRabbit` (exact, case-insensitive match on the current HEAD). Repos can add their own via `.marvin.yaml`'s `ai_review.status_contexts`. | `MyAIReviewer` |
+| `MARVIN_REPO_CONFIG_POLL_INTERVAL` | How often Marvin re-polls every installed repository's `.marvin.yaml` in the background. Webhook handling always reads from this cache and never fetches `.marvin.yaml` itself. | `5m` (default) |
 
 ### Linear (required for Linear features)
 
@@ -262,6 +271,67 @@ The endpoint is **gated on the database**: without `DB_HOST`, requests return
 
 ---
 
+## Repository configuration (`.marvin.yaml`)
+
+Everything about how Marvin behaves on a specific repository — which features are on, who reviews
+what — is declared in a `.marvin.yaml` file committed at the **root of that repository**, on its
+**default branch**. There is no central per-repo config on Marvin's side anymore: repo owners
+self-serve their own settings via a normal PR to their own repo, without touching Marvin's
+deployment.
+
+A repository with no `.marvin.yaml` has Marvin fully disabled on it — no comments, no checks, no
+reviewer assignment.
+
+Marvin always reads `.marvin.yaml` off the repository's **default branch**, never off a PR's head
+branch. Otherwise a PR author could edit their own review rules inside the very PR being
+reviewed (e.g. remove the reviewer requirement) and bypass review. `.marvin.yaml` is never fetched
+from the webhook request path: a background poller periodically re-reads it for every repository
+the GitHub App is installed on (every `MARVIN_REPO_CONFIG_POLL_INTERVAL`, default `5m`) and
+webhook handling only ever reads from that cache. Changes to `.marvin.yaml` take effect once
+merged to the default branch, subject to that poll interval. If a repository's `.marvin.yaml`
+becomes invalid or fails to load, Marvin keeps using the last known-good configuration and
+comments on the pull request explaining why.
+
+```yaml
+# .marvin.yaml, at the root of the repository
+
+features:
+  - auto_merge
+  - auto_review_assign
+  - check_changelog
+  - require_ai_review
+  - slack_notify                # still requires the central MARVIN_GITHUB_TO_SLACK mapping
+
+reviewers:
+  default_team: platform        # used when no rule below matches a changed file (optional)
+  rules:
+    - path: "go/**"
+      team: backend-team
+    - path: "py/**"
+      team: data-team
+
+check_changelog:
+  file: docs/CHANGELOG.md        # optional, defaults to CHANGELOG.md at the repo root
+
+ai_review:
+  reviewer_logins: ["my-custom-ai-bot[bot]"]     # extends the built-in + org-wide defaults, this repo only
+  status_contexts: ["MyAIReviewer"]
+```
+
+- `features` is the same list of feature names documented in [Features](#features) and
+  [Feature reference](#feature-reference) — only where they're declared has changed.
+- `reviewers.rules` is a list of glob patterns (`**` supported, e.g. `go/**`, `py/**`) matched
+  against every file changed in a PR. When a PR touches files matched by more than one rule,
+  Marvin requests reviewers from the **union** of every matched team — this is what makes
+  `auto_review_assign` work across a monorepo with per-team subtrees. `reviewers.default_team` is
+  used as a fallback when no rule matches any changed file.
+- `check_changelog.file` overrides which file `check_changelog` validates against; defaults to
+  `CHANGELOG.md` at the repo root when omitted.
+- An invalid or unparsable `.marvin.yaml` disables Marvin for that repository (fails closed) rather
+  than running with a partial configuration; check the Marvin service logs for the parse error.
+
+---
+
 ## PR body format
 
 When using validation features (`check_description`, `check_time_spent`, `check_linear_link`), Marvin expects PR bodies to contain specific sections. Use this template:
@@ -299,9 +369,16 @@ The PR must have no labels other than `dependencies`, `hotfix`, and `Merge 🚀`
 
 ### `auto_review_assign`
 
-When the **Ready for review 👌** label is added, Marvin picks reviewers from the configured team (see `MARVIN_REVIEWERS_TEAMS`). 
-The algorithm assigns people with the smallest current review load (load = total additions across open PRs assigned to them). 
-The number of reviewers to assign is derived from the branch's required approving review count — 
+When the **Ready for review 👌** label is added, Marvin resolves which team(s) should review based
+on the `reviewers` block of the repository's [`.marvin.yaml`](#repository-configuration-marvinyaml):
+every changed file is matched against `reviewers.rules`, and Marvin pools reviewers from the
+union of every matched team, falling back to `reviewers.default_team` when nothing matches. This
+is what lets a single monorepo route reviews to different teams per subtree (e.g. `go/**` →
+`backend-team`, `py/**` → `data-team`).
+
+Within the resolved team pool, the algorithm assigns people with the smallest current review load
+(load = total additions across open PRs assigned to them).
+The number of reviewers to assign is derived from the branch's required approving review count —
 Marvin supports both classic branch protection rules and repository rulesets.
 
 ### `auto_draft_labels`
@@ -319,15 +396,15 @@ Non-draft PRs opened normally are not affected by this automation.
 Manages the *Changes required* label lifecycle:
 
 - When a review requests changes, Marvin adds the *Changes required* label and notifies via Slack (see `slack_notify`).
-- When the *Ready for review* label is re-applied while *Changes required* is still present, Marvin removes *Changes required* and re-requests a review from the human reviewers whose latest review requested changes — excluding recognized AI reviewer bots (default: `coderabbitai[bot]`, `graphite-app[bot]`, `copilot-pull-request-reviewer[bot]`, extendable via `MARVIN_AI_REVIEWER_LOGINS`).
+- When the *Ready for review* label is re-applied while *Changes required* is still present, Marvin removes *Changes required* and re-requests a review from the human reviewers whose latest review requested changes — excluding recognized AI reviewer bots (default: `coderabbitai[bot]`, `graphite-app[bot]`, `copilot-pull-request-reviewer[bot]`, extendable org-wide via `MARVIN_AI_REVIEWER_LOGINS` or per-repo via `.marvin.yaml`'s `ai_review.reviewer_logins`).
 - If the repository also has `require_ai_review` and `auto_review_assign` enabled, this swap waits for the AI-review gate to pass first, so a re-request never fires ahead of the AI review check.
 
 ### `require_ai_review`
 
 Gates `auto_review_assign` behind AI-reviewer confirmation:
 
-- When the *Ready for review* label is added (manually, or via the native draft → ready transition), Marvin checks whether a recognized AI reviewer bot (default: `coderabbitai[bot]`, `graphite-app[bot]`, `copilot-pull-request-reviewer[bot]`, extendable via `MARVIN_AI_REVIEWER_LOGINS`) has submitted **at least one** review on the PR. The review does not have to be on the current commit — an AI reviewer legitimately skips re-reviewing commits that add no reviewable changes (e.g. base-branch merges), so we rely on the author to re-request a review when needed.
-- As a fallback, if no formal review is found, Marvin accepts a **successful commit status** whose context matches a known AI reviewer (default: `CodeRabbit`, extendable via `MARVIN_AI_REVIEW_STATUS_CONTEXTS`) on the current HEAD. Some reviewers skip submitting a review on trivial/no-op diffs but still publish this completion status.
+- When the *Ready for review* label is added (manually, or via the native draft → ready transition), Marvin checks whether a recognized AI reviewer bot (default: `coderabbitai[bot]`, `graphite-app[bot]`, `copilot-pull-request-reviewer[bot]`, extendable org-wide via `MARVIN_AI_REVIEWER_LOGINS` or per-repo via `.marvin.yaml`'s `ai_review.reviewer_logins`) has submitted **at least one** review on the PR. The review does not have to be on the current commit — an AI reviewer legitimately skips re-reviewing commits that add no reviewable changes (e.g. base-branch merges), so we rely on the author to re-request a review when needed.
+- As a fallback, if no formal review is found, Marvin accepts a **successful commit status** whose context matches a known AI reviewer (default: `CodeRabbit`, extendable org-wide via `MARVIN_AI_REVIEW_STATUS_CONTEXTS` or per-repo via `.marvin.yaml`'s `ai_review.status_contexts`) on the current HEAD. Some reviewers skip submitting a review on trivial/no-op diffs but still publish this completion status.
 - If neither is found, Marvin removes *Ready for review*, re-adds *Work in progress*, comments asking the author to request an AI review, and does **not** assign a human reviewer.
 - If an AI review (or matching success status) is found, `auto_review_assign` proceeds as normal.
 

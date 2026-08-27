@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Flashgap/logrus"
 	gogithub "github.com/google/go-github/v63/github"
 
 	"github.com/Flashgap/marvin/internal/middlewares"
@@ -22,7 +23,6 @@ const (
 	CheckName     = "🤖 Marvin checks"
 	GitHubAppName = "marvin"
 	githubCopilot = "copilot"
-	changelogFile = "CHANGELOG.md"
 
 	timeSpentToCheckAfterCommits   = 3
 	timeSpentToCheckAfterAdditions = 50
@@ -42,7 +42,8 @@ I removed this label, please add it back when the PR is ready to be merged!`
 	commentMissingTimeSpent       = "Invalid PR, should contain time spent."
 	commentWrongDescription       = "Description should only be composed by bullet points."
 	commentTitleTooLong           = "Invalid PR title, it's too long. It contains %d characters, it should be less than %d."
-	commentChanglogNotUpdated     = "PR should update the CHANGELOG.md and contain a reference to this PR."
+	commentChanglogNotUpdated     = "PR should update the %s and contain a reference to this PR."
+	commentInvalidRepoConfig      = "Hey, I ran into a problem with this repository's %s: %s"
 
 	// check runs
 	checkRunTitleHotfix   = "Hotfix PR"
@@ -51,12 +52,13 @@ I removed this label, please add it back when the PR is ready to be merged!`
 )
 
 type service struct {
-	githubService  github.Service
-	jiraService    jira.Service
-	linearClient   linear.Client
-	slackService   slacksvc.Service
-	repoConfigs    GitHubRepositoryConfigurations
-	prParserConfig github.PRParserConfig
+	githubService      github.Service
+	jiraService        jira.Service
+	linearClient       linear.Client
+	slackService       slacksvc.Service
+	repoConfigProvider RepoConfigProvider
+	legacyConfig       LegacyConfig
+	prParserConfig     github.PRParserConfig
 }
 
 func NewService(
@@ -64,31 +66,42 @@ func NewService(
 	jiraService jira.Service,
 	linearClient linear.Client,
 	slackService slacksvc.Service,
-	repoConfigs GitHubRepositoryConfigurations,
+	repoConfigProvider RepoConfigProvider,
+	legacyConfig LegacyConfig,
 	prParserConfig github.PRParserConfig,
 ) Service {
 	return &service{
-		githubService:  githubService,
-		jiraService:    jiraService,
-		linearClient:   linearClient,
-		slackService:   slackService,
-		repoConfigs:    repoConfigs,
-		prParserConfig: prParserConfig,
+		githubService:      githubService,
+		jiraService:        jiraService,
+		linearClient:       linearClient,
+		slackService:       slackService,
+		repoConfigProvider: repoConfigProvider,
+		legacyConfig:       legacyConfig,
+		prParserConfig:     prParserConfig,
 	}
 }
 
 // The Marvin Service is a GitHub webhook manager
 
 func (s *service) OnPullRequest(ctx context.Context, event *gogithub.PullRequestEvent) error {
-	config := s.repoConfigs[event.GetRepo().GetName()]
+	config, warning := s.repoConfigProvider.Get(event)
+
+	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnPullRequest")
+
+	if warning != nil {
+		s.reportConfigWarning(ctx, event, event.GetPullRequest().GetNumber(), warning, log)
+	}
+
 	if config == nil {
+		if warning == nil {
+			s.attemptConfigMigration(ctx, event)
+		}
 		return nil
 	}
 
 	action := event.GetAction()
 	pr := event.GetPullRequest()
 
-	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnPullRequest")
 	log.Infof("Got a pull request webhook with action %q", action)
 
 	// Handle draft/ready-for-review transitions before the WIP guard so that
@@ -140,6 +153,19 @@ func (s *service) OnPullRequest(ctx context.Context, event *gogithub.PullRequest
 	return nil
 }
 
+// reportConfigWarning surfaces a non-fatal RepoConfigProvider.Get warning (invalid .marvin.yaml,
+// or a GitHub error while fetching it) both in the logs and as a PR comment, so repo owners notice
+// a broken config without Marvin silently going quiet.
+func (s *service) reportConfigWarning(ctx context.Context, webhook pkggithub.RepoSenderGetter, prNumber int, warning *ConfigWarning, log *logrus.Entry) {
+	log.Warnf("repository config warning: %s", warning.Message)
+
+	if _, _, err := s.githubService.CreatePRComment(ctx, webhook, prNumber, &gogithub.IssueComment{
+		Body: utils.Ptr(fmt.Sprintf(commentInvalidRepoConfig, RepoConfigFileName, warning.Message)),
+	}); err != nil {
+		log.Errorf("error posting repository config warning comment: %v", err)
+	}
+}
+
 // handleDraftTransition manages the "action:Work in progress" and "action:Ready for review"
 // labels based on GitHub's native draft state transitions. It returns true when the event
 // was fully handled and no further processing is required.
@@ -185,7 +211,11 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 				return true, err
 			}
 			if proceed {
-				if _, err := s.githubService.FindAndAssignReviewers(ctx, event, pr, config.ReviewersTeam); err != nil {
+				reviewTeams, err := s.resolveReviewTeams(ctx, event, pr.GetNumber(), config)
+				if err != nil {
+					return true, err
+				}
+				if _, err := s.githubService.FindAndAssignReviewers(ctx, event, pr, reviewTeams); err != nil {
 					return true, err
 				}
 			}
@@ -197,14 +227,22 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 }
 
 func (s *service) OnCheckRun(ctx context.Context, event *gogithub.CheckRunEvent) error {
-	config := s.repoConfigs[event.GetRepo().GetName()]
+	config, warning := s.repoConfigProvider.Get(event)
+
+	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnCheckRun")
+
+	if warning != nil {
+		// No PR number resolved yet at this point (a check run can cover several PRs), so this is
+		// log-only; OnPullRequest/OnPullRequestReview already surface the same warning as a comment.
+		log.Warnf("repository config warning: %s", warning.Message)
+	}
+
 	if config == nil || !config.AutoMerge {
 		return nil
 	}
 
 	action := event.GetAction()
 
-	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnCheckRun")
 	log.Infof("Got a check run webhook with action %q", action)
 
 	switch action {
@@ -248,7 +286,14 @@ func (s *service) OnCheckRun(ctx context.Context, event *gogithub.CheckRunEvent)
 }
 
 func (s *service) OnPullRequestReview(ctx context.Context, event *gogithub.PullRequestReviewEvent) error {
-	config := s.repoConfigs[event.GetRepo().GetName()]
+	config, warning := s.repoConfigProvider.Get(event)
+
+	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnPullRequestReview")
+
+	if warning != nil {
+		s.reportConfigWarning(ctx, event, event.GetPullRequest().GetNumber(), warning, log)
+	}
+
 	if config == nil {
 		return nil
 	}
@@ -256,7 +301,6 @@ func (s *service) OnPullRequestReview(ctx context.Context, event *gogithub.PullR
 	action := event.GetAction()
 	pr := event.GetPullRequest()
 
-	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnPullRequestReview")
 	log.Infof("Got a pull request review webhook with action %q and state %q", action, event.GetReview().GetState())
 
 	switch action {
@@ -327,11 +371,11 @@ func (s *service) checkAndFormatPR(ctx context.Context, webhook pkggithub.RepoSe
 	}
 
 	if config.CheckChangelog && action == pkggithub.EventPullRequestActionSynchronize {
-		if ok, err := s.hasChangelogBeenUpdated(ctx, webhook, pr.GetNumber()); err != nil {
+		if ok, err := s.hasChangelogBeenUpdated(ctx, webhook, pr.GetNumber(), config.ChangelogFile); err != nil {
 			return fmt.Errorf("error checking if backlog is updated: %w", err)
 		} else if !ok {
 			// change log not updated, it's an error
-			comments = append(comments, commentChanglogNotUpdated)
+			comments = append(comments, fmt.Sprintf(commentChanglogNotUpdated, config.ChangelogFile))
 			log.Warn("error: changelog not updated")
 		}
 	}
@@ -514,7 +558,12 @@ func (s *service) labelActions(ctx context.Context, webhook pkggithub.RepoSender
 					}
 				}
 
-				success, err := s.githubService.FindAndAssignReviewers(ctx, webhook, pr, config.ReviewersTeam)
+				reviewTeams, err := s.resolveReviewTeams(ctx, webhook, pr.GetNumber(), config)
+				if err != nil {
+					return err
+				}
+
+				success, err := s.githubService.FindAndAssignReviewers(ctx, webhook, pr, reviewTeams)
 				if err != nil {
 					return err
 				}
@@ -663,7 +712,7 @@ func (s *service) delayMerge(ctx context.Context, webhook pkggithub.RepoSenderGe
 	return nil
 }
 
-func (s *service) hasChangelogBeenUpdated(ctx context.Context, webhook pkggithub.RepoSenderGetter, prNumber int) (bool, error) {
+func (s *service) hasChangelogBeenUpdated(ctx context.Context, webhook pkggithub.RepoSenderGetter, prNumber int, changelogFile string) (bool, error) {
 	log := middlewares.LoggerFromGHContext(ctx, "marvin.hasChangelogBeenUpdated")
 
 	var changelogUpdated bool

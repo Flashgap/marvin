@@ -54,13 +54,22 @@ type Linear struct {
 
 // Marvin configuration.
 type Marvin struct {
-	// MarvinRepositories the list of repositories where Marvin is enabled with its features
-	// ex: repo-name:auto_merge;auto_assign,another-repo:check_title
-	MarvinRepositories map[string]string `envconfig:"MARVIN_REPOSITORIES" required:"true"`
+	// Deprecated: MarvinLegacyRepositories only seeds the one-time .marvin.yaml migration PR (see
+	// internal/service/marvin/migration.go) that Marvin opens for a repository it previously had
+	// an entry for here. It no longer has any effect on Marvin's actual per-repository behavior,
+	// which is driven entirely by each repository's own .marvin.yaml. Safe to unset once every
+	// repository has been migrated.
+	// ex: repo-name:auto_merge;auto_assign,other-repo:check_title
+	MarvinLegacyRepositories map[string]string `envconfig:"MARVIN_REPOSITORIES"`
 
-	// MarvinReviewersTeams is a mapping of repository to their respective owner teams
+	// Deprecated: migration-only, see MarvinLegacyRepositories.
 	// ex: repo-name:team-name
-	MarvinReviewersTeams map[string]string `envconfig:"MARVIN_REVIEWERS_TEAMS"`
+	MarvinLegacyReviewersTeams map[string]string `envconfig:"MARVIN_REVIEWERS_TEAMS"`
+
+	// MarvinRepoConfigPollInterval controls how often Marvin re-polls every installed repository's
+	// .marvin.yaml file in the background (defaults to 5m). Webhook handling always reads from
+	// this cache and never fetches .marvin.yaml itself.
+	MarvinRepoConfigPollInterval time.Duration `envconfig:"MARVIN_REPO_CONFIG_POLL_INTERVAL" default:"5m"`
 
 	// MarvinGithubToSlack is a mapping of GitHub handles to Slack IDs
 	// ex: octocat:U043AC1234,bob:U043BC1234

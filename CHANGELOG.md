@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### ⚠ Breaking changes
+
+- **Removed `MARVIN_REPOSITORIES` and `MARVIN_REVIEWERS_TEAMS` env vars.** Per-repository settings
+  (which features are enabled, which team(s) review which paths) now live in a `.marvin.yaml` YAML
+  file committed at the root of each monitored repository's default branch, instead of Marvin's
+  own deployment env vars. **Every previously configured repository needs a `.marvin.yaml` added
+  before upgrading, or Marvin goes silent (all features disabled) for that repository until one is
+  added.** See the README's "Repository configuration (`.marvin.yaml`)" section.
+- The `FindAndAssignReviewers` signature (internal `github.Service` interface) changed from a
+  single `fromTeam string` to `fromTeams []string`, to support requesting reviewers from more than
+  one team on a single PR.
+
+### Added
+
+- **Path-based reviewer teams**: `.marvin.yaml`'s `reviewers.rules` maps glob patterns (`**`
+  supported, e.g. `go/**`, `py/**`) to GitHub teams. A PR requests reviewers from the union of
+  every team whose pattern matches a changed file, with `reviewers.default_team` as a fallback —
+  enabling per-team review ownership within a single monorepo.
+- `.marvin.yaml` is always fetched from a repository's default branch, never from a PR's head, so a
+  PR author cannot edit their own review rules inside the PR being reviewed.
+- **Automatic config migration**: for a repository with no `.marvin.yaml` yet but a legacy
+  `MARVIN_REPOSITORIES` entry, Marvin opens a one-time PR (branch `marvin/add-marvin-yaml-config`)
+  proposing a `.marvin.yaml` generated from that legacy config. `MARVIN_REPOSITORIES` and
+  `MARVIN_REVIEWERS_TEAMS` are kept as deprecated, optional env vars solely to seed this migration
+  PR — they have no other effect and can be unset once every repo has been migrated.
+- Per-repo `ai_review.reviewer_logins` / `ai_review.status_contexts` in `.marvin.yaml`, extending the
+  org-wide `MARVIN_AI_REVIEWER_LOGINS` / `MARVIN_AI_REVIEW_STATUS_CONTEXTS` for that repository only.
+- If a repository's `.marvin.yaml` fails to load (invalid YAML, or a GitHub API error), Marvin now
+  keeps using the last known-good configuration instead of silently disabling itself, and comments
+  on the pull request explaining what went wrong.
+
 ## [1.0.0] — 2026-03-24
 
 ### Added

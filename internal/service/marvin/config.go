@@ -5,25 +5,41 @@ import (
 
 	"github.com/Flashgap/logrus"
 
-	"github.com/Flashgap/marvin/internal/config"
 	"github.com/Flashgap/marvin/pkg/utils/maputil"
 )
 
 // DefaultAIReviewerLogins lists known AI code-review bot logins recognized out of the box by
 // require_ai_review and auto_changes_required, using their exact GitHub review-author login.
-// GetGitHubRepositoryConfigurations merges this with org-specific bots configured via the
-// MARVIN_AI_REVIEWER_LOGINS env var (the MarvinAIReviewerLogins field on config.Marvin) into
-// GitHubRepositoryConfiguration.AIReviewerLogins.
+// RepoConfigProvider merges this with org-specific bots configured via the
+// MARVIN_AI_REVIEWER_LOGINS env var (the MarvinAIReviewerLogins field on config.Marvin) and any
+// repo-specific logins declared in that repo's .marvin.yaml into GitHubRepositoryConfiguration.AIReviewerLogins.
 var DefaultAIReviewerLogins = []string{"coderabbitai[bot]", "graphite-app[bot]", "copilot-pull-request-reviewer[bot]"}
 
 // DefaultAIReviewStatusContexts lists commit-status contexts that count as a completed AI review when
 // no formal review is found. Some AI reviewers (e.g. CodeRabbit) skip submitting a review on trivial
 // or no-op diffs but still publish a success status named after themselves. Merged with the
-// MARVIN_AI_REVIEW_STATUS_CONTEXTS env var into GitHubRepositoryConfiguration.AIReviewStatusContexts.
+// MARVIN_AI_REVIEW_STATUS_CONTEXTS env var and any repo-specific contexts declared in that repo's
+// .marvin.yaml into GitHubRepositoryConfiguration.AIReviewStatusContexts.
 var DefaultAIReviewStatusContexts = []string{"CodeRabbit"}
 
+// DefaultChangelogFile is the changelog path check_changelog validates against when a repository's
+// .marvin.yaml doesn't override it via `check_changelog.file`.
+const DefaultChangelogFile = "CHANGELOG.md"
+
+// PathReviewRule maps a glob pattern (matched against changed file paths, doublestar syntax e.g. "go/**")
+// to the GitHub team that should review matching changes.
+type PathReviewRule struct {
+	Pattern string
+	Team    string
+}
+
 type GitHubRepositoryConfiguration struct {
-	ReviewersTeam       string
+	// ReviewRules is the ordered list of path->team rules declared under `reviewers.rules` in .marvin.yaml.
+	// A PR requests reviewers from the union of every team whose pattern matches a changed file.
+	ReviewRules []PathReviewRule
+	// DefaultTeam is used when no ReviewRules pattern matches any changed file. Declared as
+	// `reviewers.default_team` in .marvin.yaml.
+	DefaultTeam         string
 	AutoApprove         bool
 	AutoChangesRequired bool
 	AutoMerge           bool
@@ -36,10 +52,13 @@ type GitHubRepositoryConfiguration struct {
 	CheckLinearLink     bool
 	CheckLinearProject  bool
 	CheckChangelog      bool
-	AutoAssignee        bool
-	UpdateLinearLink    bool
-	SlackNotify         bool
-	AutoCapReport       bool
+	// ChangelogFile is the path check_changelog validates against. Defaults to DefaultChangelogFile;
+	// overridable per repo via `check_changelog.file` in .marvin.yaml.
+	ChangelogFile          string
+	AutoAssignee           bool
+	UpdateLinearLink       bool
+	SlackNotify            bool
+	AutoCapReport          bool
 	RequireAIReview        bool
 	AIReviewerLogins       []string
 	AIReviewStatusContexts []string
@@ -136,48 +155,16 @@ var configToFunc = map[string]optionFunc{
 	"require_ai_review":     withRequireAIReview,
 }
 
-// GitHubRepositoryConfigurations maps the repository with its configuration to enable/disable features
-type GitHubRepositoryConfigurations map[string]*GitHubRepositoryConfiguration
-
-func GetGitHubRepositoryConfigurations(cfg config.Marvin) GitHubRepositoryConfigurations {
-	configs := make(map[string]*GitHubRepositoryConfiguration, len(cfg.MarvinRepositories))
-	logrus.Infof("reviewers teams: %+v", cfg.MarvinReviewersTeams)
-
-	for repoName, featuresStr := range cfg.MarvinRepositories {
-		features := strings.Split(featuresStr, ";")
-		repoName = strings.TrimSpace(repoName)
-		logrus.Infof("got %+v features for repository: %s", features, repoName)
-		repoConfig := &GitHubRepositoryConfiguration{}
-		if team, ok := cfg.MarvinReviewersTeams[repoName]; ok {
-			logrus.Infof("repository %q will use team %q to find its reviewers", repoName, team)
-			repoConfig.ReviewersTeam = team
+// applyFeatures turns a list of feature-name strings (as declared under `features:` in a repo's
+// .marvin.yaml) into flag toggles on repoConfig, logging a critical error for any unrecognized name.
+func applyFeatures(repoConfig *GitHubRepositoryConfiguration, features []string) {
+	for _, featureName := range features {
+		featureName = strings.TrimSpace(featureName)
+		opt, ok := configToFunc[featureName]
+		if !ok {
+			logrus.Criticalf("unknown feature: %q. Known features are: %q", featureName, strings.Join(maputil.Keys(configToFunc), ","))
+		} else {
+			opt(repoConfig)
 		}
-
-		for _, featureName := range features {
-			opt, ok := configToFunc[featureName]
-			if !ok {
-				logrus.Criticalf("unknown feature: %q. Known features are: %q", featureName, strings.Join(maputil.Keys(configToFunc), ","))
-			} else {
-				opt(repoConfig)
-			}
-		}
-		if repoConfig.SlackNotify {
-			repoConfig.GithubToSlack = cfg.MarvinGithubToSlack
-		}
-		if repoConfig.RequireAIReview || repoConfig.AutoChangesRequired {
-			repoConfig.AIReviewerLogins = make([]string, 0, len(DefaultAIReviewerLogins)+len(cfg.MarvinAIReviewerLogins))
-			repoConfig.AIReviewerLogins = append(repoConfig.AIReviewerLogins, DefaultAIReviewerLogins...)
-			repoConfig.AIReviewerLogins = append(repoConfig.AIReviewerLogins, cfg.MarvinAIReviewerLogins...)
-		}
-		if repoConfig.RequireAIReview {
-			repoConfig.AIReviewStatusContexts = make([]string, 0, len(DefaultAIReviewStatusContexts)+len(cfg.MarvinAIReviewStatusContexts))
-			repoConfig.AIReviewStatusContexts = append(repoConfig.AIReviewStatusContexts, DefaultAIReviewStatusContexts...)
-			repoConfig.AIReviewStatusContexts = append(repoConfig.AIReviewStatusContexts, cfg.MarvinAIReviewStatusContexts...)
-		}
-
-		config.PrintConfig(repoConfig)
-		configs[repoName] = repoConfig
 	}
-
-	return configs
 }

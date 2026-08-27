@@ -93,11 +93,17 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 			return fmt.Errorf("either LINEAR_ISSUE_PREFIXES or LINEAR_PREFIX_REFRESH_INTERVAL must be set")
 		}
 
-		repoConfigs := marvin.GetGitHubRepositoryConfigurations(cfg.Marvin)
+		repoConfigProvider := marvin.NewRepoConfigProvider(s.GithubService, cfg.Marvin)
+		repoConfigProvider.Start(ctx, cfg.MarvinRepoConfigPollInterval)
+		// Intentional: sole read site, seeds the one-time .marvin.yaml migration PR (see internal/service/marvin/migration.go).
+		legacyConfig := marvin.LegacyConfig{
+			Repositories:   cfg.MarvinLegacyRepositories,   //nolint:staticcheck // migration-only seed, see comment above
+			ReviewersTeams: cfg.MarvinLegacyReviewersTeams, //nolint:staticcheck // migration-only seed, see comment above
+		}
 		prefixCache := github.NewPrefixCache(cfg.LinearWorkspaceSlug, cfg.LinearIssuePrefixes, linearClient.Teams)
 		prefixCache.Start(ctx, cfg.LinearPrefixRefreshInterval)
 		prParserConfig := github.PRParserConfig{Prefixes: prefixCache}
-		s.MarvinService = marvin.NewService(s.GithubService, s.JiraService, linearClient, s.SlackService, repoConfigs, prParserConfig)
+		s.MarvinService = marvin.NewService(s.GithubService, s.JiraService, linearClient, s.SlackService, repoConfigProvider, legacyConfig, prParserConfig)
 	}
 
 	return nil

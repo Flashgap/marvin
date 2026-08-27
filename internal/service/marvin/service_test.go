@@ -1,6 +1,7 @@
 package marvin_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -61,7 +62,7 @@ var _ = Describe("Service tests", func() {
 		cfg := marvin.GitHubRepositoryConfiguration{
 			AutoApprove: true,
 		}
-		cfgs := marvin.GitHubRepositoryConfigurations{
+		cfgs := marvin.StaticRepoConfigProvider{
 			repoName: &cfg,
 		}
 
@@ -119,7 +120,7 @@ var _ = Describe("Service tests", func() {
 				}
 
 				mockGithub.EXPECT().ListReviews(gomock.Any(), reviewEvent, prNumber, gomock.Any()).Return(reviews, nil, nil)
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequestReview(ctx, reviewEvent)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -154,7 +155,7 @@ var _ = Describe("Service tests", func() {
 				}
 
 				mockGithub.EXPECT().ListReviews(gomock.Any(), reviewEvent, prNumber, gomock.Any()).Return(reviews, nil, nil)
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequestReview(ctx, reviewEvent)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -165,7 +166,7 @@ var _ = Describe("Service tests", func() {
 		cfg := marvin.GitHubRepositoryConfiguration{
 			AutoMerge: true,
 		}
-		cfgs := marvin.GitHubRepositoryConfigurations{
+		cfgs := marvin.StaticRepoConfigProvider{
 			repoName: &cfg,
 		}
 
@@ -206,7 +207,7 @@ var _ = Describe("Service tests", func() {
 					}
 
 					mockGithub.EXPECT().ListCheckRunsForRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&marvinCheck, nil, nil)
-					svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+					svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				})
 
 				It("should not merge and remove merge label", func(ctx SpecContext) {
@@ -240,7 +241,7 @@ var _ = Describe("Service tests", func() {
 					}
 
 					mockGithub.EXPECT().ListCheckRunsForRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&marvinCheck, nil, nil)
-					svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+					svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				})
 
 				It("should merge", func(ctx SpecContext) {
@@ -313,7 +314,7 @@ blabla
 		cfg := marvin.GitHubRepositoryConfiguration{
 			CheckTitle: true,
 		}
-		cfgs := marvin.GitHubRepositoryConfigurations{
+		cfgs := marvin.StaticRepoConfigProvider{
 			repoName: &cfg,
 		}
 
@@ -350,7 +351,7 @@ blabla
 				mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				mockGithub.EXPECT().CreateCheckRun(gomock.Any(), gomock.Any(), gomock.Any())
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -371,7 +372,7 @@ blabla
 					Conclusion: utils.Ptr("success"),
 				})
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -382,7 +383,7 @@ blabla
 		cfg := marvin.GitHubRepositoryConfiguration{
 			CheckLinearProject: true,
 		}
-		cfgs := marvin.GitHubRepositoryConfigurations{
+		cfgs := marvin.StaticRepoConfigProvider{
 			repoName: &cfg,
 		}
 
@@ -418,7 +419,7 @@ blabla
 				mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 				mockGithub.EXPECT().CreateCheckRun(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -439,7 +440,7 @@ blabla
 					Conclusion: utils.Ptr("success"),
 				}).Times(1)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -447,12 +448,12 @@ blabla
 	})
 
 	Context("Update title", func() {
-		getSvc := func(hasLinearTitle bool, hasLinearLink bool, hasLinearBranch bool) (marvin.GitHubRepositoryConfigurations, gogithub.PullRequestEvent) {
+		getSvc := func(hasLinearTitle bool, hasLinearLink bool, hasLinearBranch bool) (marvin.StaticRepoConfigProvider, gogithub.PullRequestEvent) {
 			cfg := marvin.GitHubRepositoryConfiguration{
 				CheckTitle:  true,
 				UpdateTitle: true,
 			}
-			cfgs := marvin.GitHubRepositoryConfigurations{
+			cfgs := marvin.StaticRepoConfigProvider{
 				repoName: &cfg,
 			}
 
@@ -523,7 +524,7 @@ blabla
 				// issue ID isn't find in the title, but it's updated.
 
 				cfgs, prEvent := getSvc(false, true, true)
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -548,7 +549,7 @@ blabla
 				// issue ID isn't find in the title, but it's updated.
 
 				cfgs, prEvent := getSvc(false, true, true)
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -560,7 +561,7 @@ blabla
 				mockGithub.EXPECT().CreateCheckRun(gomock.Any(), gomock.Any(), gomock.Any())
 
 				cfgs, prEvent := getSvc(false, false, false)
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -577,7 +578,7 @@ blabla
 				})
 
 				cfgs, prEvent := getSvc(true, true, true)
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -590,7 +591,7 @@ blabla
 			CheckLinearLink:  true,
 			UpdateLinearLink: true,
 		}
-		cfgs := marvin.GitHubRepositoryConfigurations{
+		cfgs := marvin.StaticRepoConfigProvider{
 			repoName: &cfg,
 		}
 
@@ -626,7 +627,7 @@ blabla
 					Conclusion: utils.Ptr("success"),
 				})
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -660,7 +661,7 @@ blabla
 				// as we can't update, comment should be created about missing linear link
 				mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -745,7 +746,7 @@ blabla
 			SlackNotify:   true,
 			GithubToSlack: map[string]string{"marvin": "U1234W5678"},
 		}
-		cfgs := marvin.GitHubRepositoryConfigurations{
+		cfgs := marvin.StaticRepoConfigProvider{
 			repoName: &cfg,
 		}
 		When("someone gets assigned to a PR", func() {
@@ -777,7 +778,7 @@ blabla
 				}
 
 				mockSlack.EXPECT().SendDM(gomock.Any(), "U1234W5678", gomock.Any()).Return(nil).Times(1)
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -790,7 +791,7 @@ blabla
 				AutoCapReport: true,
 			}
 
-			cfgs := marvin.GitHubRepositoryConfigurations{
+			cfgs := marvin.StaticRepoConfigProvider{
 				repoName: &cfg,
 			}
 
@@ -819,7 +820,7 @@ blabla
 
 			mockLinear.EXPECT().Issue(gomock.Any(), gomock.Any()).Return(&linear.Issue{ProjectID: uuid.NewString()}, nil).Times(1)
 			mockJira.EXPECT().DoCapReportWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-			svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+			svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 			Expect(svc.OnPullRequest(ctx, &prEvent)).To(Succeed())
 		})
 	})
@@ -854,7 +855,7 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoDraftLabels: true,
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -865,21 +866,21 @@ blabla
 				}, nil, nil).Times(1)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelWorkInProgress}).Return(nil, nil, nil).Times(1)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("should do nothing when AutoDraftLabels is disabled", func(ctx SpecContext) {
 				cfg := marvin.GitHubRepositoryConfiguration{}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
 				prEvent := getDraftEvent(pkggithub.EventPullRequestActionOpened, true)
 
 				// No mocks expected; current behavior ignores draft PRs
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -890,7 +891,7 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoDraftLabels: true,
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -910,7 +911,7 @@ blabla
 					},
 				}).Times(1)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -921,7 +922,7 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoDraftLabels: true,
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -934,7 +935,7 @@ blabla
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelWorkInProgress}).Return(nil, nil, nil).Times(1)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelReadyForReview).Return(nil, nil).Times(1)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -945,9 +946,9 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoDraftLabels:  true,
 					AutoReviewAssign: true,
-					ReviewersTeam:    "my-team",
+					DefaultTeam:      "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -986,7 +987,73 @@ blabla
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "my-team", gomock.Any()).Return(nil, nil, nil).Times(1)
 				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, nil).Times(1)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
+				err := svc.OnPullRequest(ctx, &prEvent)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should assign reviewers from the union of every team whose path rule matches a changed file", func(ctx SpecContext) {
+				cfg := marvin.GitHubRepositoryConfiguration{
+					AutoDraftLabels:  true,
+					AutoReviewAssign: true,
+					ReviewRules: []marvin.PathReviewRule{
+						{Pattern: "go/**", Team: "backend-team"},
+						{Pattern: "py/**", Team: "data-team"},
+					},
+				}
+				cfgs := marvin.StaticRepoConfigProvider{
+					repoName: &cfg,
+				}
+
+				prEvent := getDraftEvent(pkggithub.EventPullRequestActionReadyForReview, false)
+				prEvent.PullRequest.Labels = []*gogithub.Label{
+					{Name: utils.Ptr(github.LabelHotfix)},
+				}
+
+				protection := &gogithub.Protection{
+					RequiredPullRequestReviews: &gogithub.PullRequestReviewsEnforcement{
+						RequiredApprovingReviewCount: 2,
+					},
+				}
+
+				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
+					{Name: utils.Ptr(github.LabelWorkInProgress)},
+					{Name: utils.Ptr(github.LabelReadyForReview)},
+				}, nil, nil).Times(2)
+				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelWorkInProgress).Return(nil, nil).Times(1)
+				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelReadyForReview}).Return(nil, nil, nil).Times(1)
+				// checkAndFormatPR (hotfix path)
+				mockGithub.EXPECT().CreateCheckRun(gomock.Any(), gomock.Any(), gogithub.CreateCheckRunOptions{
+					Name:       marvin.CheckName,
+					HeadSHA:    "mybranch",
+					Status:     utils.Ptr(pkggithub.CheckRunStatusCompleted),
+					Conclusion: utils.Ptr("success"),
+					Output: &gogithub.CheckRunOutput{
+						Title:   utils.Ptr("Hotfix PR"),
+						Summary: utils.Ptr("This is a hotfix PR, Marvin's checks are bypassed."),
+					},
+				}).Times(1)
+				// resolveReviewTeams: two changed files, each matching a different rule
+				mockGithub.EXPECT().ListPRFiles(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return([]*gogithub.CommitFile{
+					{Filename: utils.Ptr("go/main.go")},
+					{Filename: utils.Ptr("py/app.py")},
+				}, &gogithub.Response{}, nil).Times(1)
+				// FindAndAssignReviewers, pooling both matched teams
+				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Return(protection, nil, nil).Times(1)
+				mockGithub.EXPECT().ListReviews(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().ListReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(&gogithub.Reviewers{}, nil, nil).Times(1)
+				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "backend-team", gomock.Any()).
+					Return([]*gogithub.User{{Login: utils.Ptr("alice")}}, nil, nil).Times(1)
+				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "data-team", gomock.Any()).
+					Return([]*gogithub.User{{Login: utils.Ptr("bob")}}, nil, nil).Times(1)
+				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).DoAndReturn(
+					func(_ context.Context, _ pkggithub.RepoSenderGetter, _ int, reviewers []string) (*gogithub.PullRequest, *gogithub.Response, error) {
+						Expect(reviewers).To(ConsistOf("alice", "bob"))
+						return nil, nil, nil
+					}).Times(1)
+
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -996,9 +1063,9 @@ blabla
 					AutoDraftLabels:  true,
 					AutoReviewAssign: true,
 					RequireAIReview:  true,
-					ReviewersTeam:    "my-team",
+					DefaultTeam:      "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1037,7 +1104,7 @@ blabla
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelWorkInProgress}).Return(nil, nil, nil).Times(1)
 				mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(nil, nil, nil).Times(1)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -1048,9 +1115,9 @@ blabla
 					AutoReviewAssign: true,
 					RequireAIReview:  true,
 					AIReviewerLogins: marvin.DefaultAIReviewerLogins,
-					ReviewersTeam:    "my-team",
+					DefaultTeam:      "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1097,7 +1164,7 @@ blabla
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "my-team", gomock.Any()).Return(nil, nil, nil).Times(1)
 				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, nil).Times(1)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -1109,9 +1176,9 @@ blabla
 					RequireAIReview:        true,
 					AIReviewerLogins:       marvin.DefaultAIReviewerLogins,
 					AIReviewStatusContexts: marvin.DefaultAIReviewStatusContexts,
-					ReviewersTeam:          "my-team",
+					DefaultTeam:            "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1156,21 +1223,21 @@ blabla
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "my-team", gomock.Any()).Return(nil, nil, nil).Times(1)
 				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, nil).Times(1)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("should do nothing when AutoDraftLabels is disabled", func(ctx SpecContext) {
 				cfg := marvin.GitHubRepositoryConfiguration{}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
 				prEvent := getDraftEvent(pkggithub.EventPullRequestActionReadyForReview, false)
 
 				// No mocks expected; falls through to default case
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -1210,9 +1277,9 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					RequireAIReview:  true,
 					AutoReviewAssign: true,
-					ReviewersTeam:    "my-team",
+					DefaultTeam:      "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1244,7 +1311,7 @@ blabla
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -1253,9 +1320,9 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					RequireAIReview:  true,
 					AutoReviewAssign: true,
-					ReviewersTeam:    "my-team",
+					DefaultTeam:      "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1294,7 +1361,7 @@ blabla
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -1335,7 +1402,7 @@ blabla
 					AutoChangesRequired: true,
 					AIReviewerLogins:    marvin.DefaultAIReviewerLogins,
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1366,7 +1433,7 @@ blabla
 				mockGithub.EXPECT().ListReviews(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(reviews, nil, nil).Times(1)
 				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), prNumber, []string{"alice"}).Return(nil, nil, nil).Times(1)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -1375,7 +1442,7 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoChangesRequired: true,
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1409,14 +1476,14 @@ blabla
 				mockGithub.EXPECT().ListReviews(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(reviews, nil, nil).Times(1)
 				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), prNumber, []string{"alice"}).Return(nil, nil, nil).Times(1)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("does nothing when AutoChangesRequired is disabled", func(ctx SpecContext) {
 				cfg := marvin.GitHubRepositoryConfiguration{}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1426,7 +1493,7 @@ blabla
 				})
 
 				// No mocks expected: AutoChangesRequired is disabled and AutoReviewAssign is disabled
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -1435,7 +1502,7 @@ blabla
 				cfg := marvin.GitHubRepositoryConfiguration{
 					RequireAIReview: true,
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1450,7 +1517,7 @@ blabla
 				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 				mockGithub.EXPECT().ListReviews(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -1462,9 +1529,9 @@ blabla
 					AutoChangesRequired: true,
 					RequireAIReview:     true,
 					AutoReviewAssign:    true,
-					ReviewersTeam:       "my-team",
+					DefaultTeam:         "my-team",
 				}
-				cfgs := marvin.GitHubRepositoryConfigurations{
+				cfgs := marvin.StaticRepoConfigProvider{
 					repoName: &cfg,
 				}
 
@@ -1498,7 +1565,7 @@ blabla
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
-				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
 			})

@@ -35,7 +35,7 @@ var (
 
 type Service interface {
 	github.Client // This could be removed by defining the interface on the requesters side
-	FindAndAssignReviewers(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, fromTeam string) (bool, error)
+	FindAndAssignReviewers(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, fromTeams []string) (bool, error)
 	AddLabel(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, label string) error
 	RemoveLabel(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, label string) error
 	UpdateAndMergePR(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest) error
@@ -149,9 +149,9 @@ func (s *service) requiredReviewCountFromRuleset(ctx context.Context, webhook gi
 }
 
 // FindAndAssignReviewers attempts to assign reviewers to the given PR. It returns true if it succeeded
-// All members of the given team are considered after being ranked by current review load.
+// All members of the given teams are pooled together and considered after being ranked by current review load.
 // Succeeding in assigning reviewers means that we found and assigned at least enough reviewers to satisfy the main branch protection
-func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, fromTeam string) (bool, error) {
+func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, fromTeams []string) (bool, error) {
 	prNumber := pr.GetNumber()
 	prOwner := pr.GetUser().GetLogin()
 
@@ -164,27 +164,33 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 
 	log.Infof("PR has total reviewers: %v", allReviewers)
 
-	teamMembers, _, err := s.ListTeamMembers(ctx, webhook, fromTeam, nil)
-	if err != nil {
-		return false, fmt.Errorf("error listing team members: %w", err)
-	}
+	// Pool members across every matched team, deduping logins that belong to more than one
+	teamMembersSet := make(map[string]struct{})
+	for _, fromTeam := range fromTeams {
+		teamMembers, _, err := s.ListTeamMembers(ctx, webhook, fromTeam, nil)
+		if err != nil {
+			return false, fmt.Errorf("error listing team members for team %q: %w", fromTeam, err)
+		}
 
-	log.Infof("found %d developers in team %s", len(teamMembers), fromTeam)
+		log.Infof("found %d developers in team %s", len(teamMembers), fromTeam)
+		for _, teamMember := range teamMembers {
+			teamMembersSet[teamMember.GetLogin()] = struct{}{}
+		}
+	}
 
 	// Prune reviewer list, considering only team members and ignoring PR opener
 	consideredReviewers := make(map[string]struct{})
-	teamMembersLogins := make([]string, len(teamMembers))
-	for i, teamMember := range teamMembers {
-		login := teamMember.GetLogin()
+	teamMembersLogins := make([]string, 0, len(teamMembersSet))
+	for login := range teamMembersSet {
 		if _, ok := allReviewers[login]; ok && login != prOwner {
 			consideredReviewers[login] = struct{}{}
 		}
 
 		// Also take the opportunity to fill this slice that is needed below
-		teamMembersLogins[i] = login
+		teamMembersLogins = append(teamMembersLogins, login)
 	}
 
-	log.Infof("PR has reviewers in team %s: %v", fromTeam, consideredReviewers)
+	log.Infof("PR has reviewers in teams %v: %v", fromTeams, consideredReviewers)
 
 	requiredReviewers, err := s.requiredReviewCount(ctx, webhook, webhook.GetRepo().GetDefaultBranch())
 	if err != nil {
