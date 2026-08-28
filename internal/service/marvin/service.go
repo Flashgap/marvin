@@ -57,7 +57,6 @@ type service struct {
 	linearClient       linear.Client
 	slackService       slacksvc.Service
 	repoConfigProvider RepoConfigProvider
-	legacyConfig       LegacyConfig
 	prParserConfig     github.PRParserConfig
 }
 
@@ -67,7 +66,6 @@ func NewService(
 	linearClient linear.Client,
 	slackService slacksvc.Service,
 	repoConfigProvider RepoConfigProvider,
-	legacyConfig LegacyConfig,
 	prParserConfig github.PRParserConfig,
 ) Service {
 	return &service{
@@ -76,7 +74,6 @@ func NewService(
 		linearClient:       linearClient,
 		slackService:       slackService,
 		repoConfigProvider: repoConfigProvider,
-		legacyConfig:       legacyConfig,
 		prParserConfig:     prParserConfig,
 	}
 }
@@ -84,18 +81,14 @@ func NewService(
 // The Marvin Service is a GitHub webhook manager
 
 func (s *service) OnPullRequest(ctx context.Context, event *gogithub.PullRequestEvent) error {
-	config, warning := s.repoConfigProvider.Get(event)
-
 	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnPullRequest")
+	config, warning := s.repoConfigProvider.Get(event)
 
 	if warning != nil {
 		s.reportConfigWarning(ctx, event, event.GetPullRequest().GetNumber(), warning, log)
 	}
 
 	if config == nil {
-		if warning == nil {
-			s.attemptConfigMigration(ctx, event)
-		}
 		return nil
 	}
 
@@ -227,16 +220,14 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 }
 
 func (s *service) OnCheckRun(ctx context.Context, event *gogithub.CheckRunEvent) error {
-	config, warning := s.repoConfigProvider.Get(event)
-
 	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnCheckRun")
 
+	config, warning := s.repoConfigProvider.Get(event)
 	if warning != nil {
 		// No PR number resolved yet at this point (a check run can cover several PRs), so this is
 		// log-only; OnPullRequest/OnPullRequestReview already surface the same warning as a comment.
 		log.Warnf("repository config warning: %s", warning.Message)
 	}
-
 	if config == nil || !config.AutoMerge {
 		return nil
 	}
@@ -286,9 +277,8 @@ func (s *service) OnCheckRun(ctx context.Context, event *gogithub.CheckRunEvent)
 }
 
 func (s *service) OnPullRequestReview(ctx context.Context, event *gogithub.PullRequestReviewEvent) error {
-	config, warning := s.repoConfigProvider.Get(event)
-
 	log := middlewares.LoggerFromGHContext(ctx, "marvin.OnPullRequestReview")
+	config, warning := s.repoConfigProvider.Get(event)
 
 	if warning != nil {
 		s.reportConfigWarning(ctx, event, event.GetPullRequest().GetNumber(), warning, log)

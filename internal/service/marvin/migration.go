@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Flashgap/logrus"
 	gogithub "github.com/google/go-github/v63/github"
 
+	"github.com/Flashgap/marvin/internal/config"
 	"github.com/Flashgap/marvin/internal/middlewares"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 )
@@ -29,73 +31,96 @@ Review the generated file, adjust it as needed (e.g. add path-based reviewer rul
 monorepo), and merge whenever you're ready.
 `
 
-// LegacyConfig carries the deprecated MARVIN_REPOSITORIES / MARVIN_REVIEWERS_TEAMS env vars.
-// It has no effect on Marvin's actual behavior — which is driven entirely by each repository's
-// own .marvin.yaml — and is used only to seed the one-time migration PR in attemptConfigMigration.
-type LegacyConfig struct {
-	Repositories   map[string]string
-	ReviewersTeams map[string]string
+// legacyFallbackConfig synthesizes a GitHubRepositoryConfiguration for a repository that has no
+// .marvin.yaml yet but does have a legacy MARVIN_REPOSITORIES entry (orgConfig.MarvinLegacyRepositories),
+// by rendering that entry through the same .marvin.yaml schema and parser used for a real file
+// (renderMigratedConfig + parseRepoConfig) — so the fallback behaves exactly like the eventual
+// migrated .marvin.yaml will. Returns nil if the repository has no legacy entry.
+func legacyFallbackConfig(orgConfig config.Marvin, repoName string) *GitHubRepositoryConfiguration {
+	features, team, ok := legacyEntry(orgConfig, repoName)
+	if !ok {
+		return nil
+	}
+
+	repoConfig, err := parseRepoConfig(renderMigratedConfig(features, team), orgConfig)
+	if err != nil {
+		// renderMigratedConfig always produces valid YAML; a failure here means Marvin itself has a
+		// bug, not a data problem with the legacy entry.
+		logrus.Errorf("legacy config fallback: failed to parse synthesized %s for %s: %v", RepoConfigFileName, repoName, err)
+		return nil
+	}
+
+	return repoConfig
+}
+
+// legacyEntry looks up repoName's legacy MARVIN_REPOSITORIES/MARVIN_REVIEWERS_TEAMS entry, if any.
+//
+//nolint:staticcheck // SA1019: deprecated fields, this is their one intended remaining use
+func legacyEntry(orgConfig config.Marvin, repoName string) (features []string, team string, ok bool) {
+	featuresStr, ok := orgConfig.MarvinLegacyRepositories[repoName]
+	if !ok {
+		return nil, "", false
+	}
+
+	return strings.Split(featuresStr, ";"), orgConfig.MarvinLegacyReviewersTeams[repoName], true
 }
 
 // attemptConfigMigration opens a one-shot PR proposing a .marvin.yaml generated from this
 // repository's legacy MARVIN_REPOSITORIES/MARVIN_REVIEWERS_TEAMS entry, if it has one. It is a
 // no-op for repositories with no legacy entry, and best-effort: failures are logged, never
-// returned, since this is a migration aid and must never block normal webhook processing.
-func (s *service) attemptConfigMigration(ctx context.Context, webhook pkggithub.RepoSenderGetter) {
+// returned, since this is a migration aid and must never block the poll loop.
+func (p *repoConfigProvider) attemptConfigMigration(ctx context.Context, webhook pkggithub.RepoSenderGetter) {
 	log := middlewares.LoggerFromGHContext(ctx, "marvin.attemptConfigMigration")
-
 	repoName := webhook.GetRepo().GetName()
-	featuresStr, ok := s.legacyConfig.Repositories[repoName]
+	features, team, ok := legacyEntry(p.orgConfig, repoName)
 	if !ok {
 		return
 	}
 
-	features := strings.Split(featuresStr, ";")
-	team := s.legacyConfig.ReviewersTeams[repoName]
 	defaultBranch := webhook.GetRepo().GetDefaultBranch()
 
-	baseRef, _, err := s.githubService.GetRef(ctx, webhook, "refs/heads/"+defaultBranch)
+	baseRef, _, err := p.githubClient.GetRef(ctx, webhook, "refs/heads/"+defaultBranch)
 	if err != nil {
-		log.Errorf("config migration: cannot get default branch ref: %v", err)
+		log.Errorf("config migration: cannot get default branch ref for %s: %v", repoName, err)
 		return
 	}
 
-	_, res, err := s.githubService.CreateRef(ctx, webhook, &gogithub.Reference{
+	_, res, err := p.githubClient.CreateRef(ctx, webhook, &gogithub.Reference{
 		Ref:    new("refs/heads/" + migrationBranch),
 		Object: &gogithub.GitObject{SHA: baseRef.GetObject().SHA},
 	})
 	if err != nil {
 		if res != nil && res.StatusCode == http.StatusUnprocessableEntity {
-			log.Infof("config migration branch %q already exists, already proposed once", migrationBranch)
+			log.Infof("config migration branch %q already exists for %s, already proposed once", migrationBranch, repoName)
 			return
 		}
-		log.Errorf("config migration: cannot create branch %q: %v", migrationBranch, err)
+		log.Errorf("config migration: cannot create branch %q for %s: %v", migrationBranch, repoName, err)
 		return
 	}
 
 	content := renderMigratedConfig(features, team)
 
-	if _, _, err := s.githubService.CreateFile(ctx, webhook, RepoConfigFileName, &gogithub.RepositoryContentFileOptions{
+	if _, _, err := p.githubClient.CreateFile(ctx, webhook, RepoConfigFileName, &gogithub.RepositoryContentFileOptions{
 		Message: new(fmt.Sprintf("Add %s (migrated from MARVIN_REPOSITORIES)", RepoConfigFileName)),
 		Content: []byte(content),
 		Branch:  new(migrationBranch),
 	}); err != nil {
-		log.Errorf("config migration: cannot create %s on %q: %v", RepoConfigFileName, migrationBranch, err)
+		log.Errorf("config migration: cannot create %s on %q for %s: %v", RepoConfigFileName, migrationBranch, repoName, err)
 		return
 	}
 
-	pr, _, err := s.githubService.CreatePullRequest(ctx, webhook, &gogithub.NewPullRequest{
+	pr, _, err := p.githubClient.CreatePullRequest(ctx, webhook, &gogithub.NewPullRequest{
 		Title: new(fmt.Sprintf("Add %s", RepoConfigFileName)),
 		Head:  new(migrationBranch),
 		Base:  new(defaultBranch),
 		Body:  new(migrationPRBody),
 	})
 	if err != nil {
-		log.Errorf("config migration: cannot open PR: %v", err)
+		log.Errorf("config migration: cannot open PR for %s: %v", repoName, err)
 		return
 	}
 
-	log.Infof("opened config migration PR #%d", pr.GetNumber())
+	log.Infof("opened config migration PR #%d for %s", pr.GetNumber(), repoName)
 }
 
 // renderMigratedConfig renders a .marvin.yaml body from a legacy MARVIN_REPOSITORIES feature list

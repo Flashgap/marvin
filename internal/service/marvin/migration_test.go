@@ -10,13 +10,10 @@ import (
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
 
-	svcgithub "github.com/Flashgap/marvin/internal/service/github"
-	mock_jira "github.com/Flashgap/marvin/internal/service/jira/mock"
+	"github.com/Flashgap/marvin/internal/config"
 	"github.com/Flashgap/marvin/internal/service/marvin"
-	mock_slack "github.com/Flashgap/marvin/internal/service/slack/mock"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 	mock_github "github.com/Flashgap/marvin/pkg/github/mock"
-	mock_linear "github.com/Flashgap/marvin/pkg/linear/mock"
 	"github.com/Flashgap/marvin/pkg/utils"
 )
 
@@ -25,42 +22,34 @@ var _ = Describe("Config migration", func() {
 
 	var mockCtrl *gomock.Controller
 	var mockGithub *mock_github.MockClient
-	var githubService svcgithub.Service
-	var mockSlack *mock_slack.MockService
-	var mockLinear *mock_linear.MockClient
-	var mockJira *mock_jira.MockService
-	var prEvent *gogithub.PullRequestEvent
+	var repo *gogithub.Repository
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockGithub = mock_github.NewMockClient(mockCtrl)
-		mockSlack = mock_slack.NewMockService(mockCtrl)
-		mockLinear = mock_linear.NewMockClient(mockCtrl)
-		mockJira = mock_jira.NewMockService(mockCtrl)
-		githubService = svcgithub.NewService(mockGithub)
 
-		prEvent = &gogithub.PullRequestEvent{
-			Action: new(pkggithub.EventPullRequestActionOpened),
-			Repo: &gogithub.Repository{
-				Name:          new(repoName),
-				DefaultBranch: new(defaultBranch),
-			},
-			Sender: &gogithub.User{Login: new("mx")},
-			PullRequest: &gogithub.PullRequest{
-				Number: new(1),
-				State:  new("open"),
-				User:   &gogithub.User{Login: new("dave")},
-			},
+		repo = &gogithub.Repository{
+			Name:          new(repoName),
+			FullName:      new("acme/" + repoName),
+			DefaultBranch: new(defaultBranch),
 		}
 	})
 
+	expectListAndNoFile := func() {
+		mockGithub.EXPECT().ListInstalledRepos(gomock.Any(), gomock.Any()).
+			Return(&gogithub.ListRepositories{Repositories: []*gogithub.Repository{repo}}, &gogithub.Response{NextPage: 0}, nil)
+		mockGithub.EXPECT().GetFileContent(gomock.Any(), gomock.Any(), marvin.RepoConfigFileName, defaultBranch).
+			Return("", &gogithub.Response{Response: &http.Response{StatusCode: http.StatusNotFound}}, errors.New("404 Not Found"))
+	}
+
 	When("the repository has a legacy MARVIN_REPOSITORIES entry and no .marvin.yaml", func() {
-		It("opens a migration PR carrying the legacy config forward as YAML", func(ctx SpecContext) {
-			legacyConfig := marvin.LegacyConfig{
-				Repositories:   map[string]string{repoName: "auto_merge;check_title"},
-				ReviewersTeams: map[string]string{repoName: "backend-team"},
+		It("opens a migration PR carrying the legacy config forward as YAML, and falls back to it in the meantime", func(ctx SpecContext) {
+			orgConfig := config.Marvin{
+				MarvinLegacyRepositories:   map[string]string{repoName: "auto_merge;check_title"},
+				MarvinLegacyReviewersTeams: map[string]string{repoName: "backend-team"},
 			}
-			cfgs := marvin.StaticRepoConfigProvider{}
+
+			expectListAndNoFile()
 
 			mockGithub.EXPECT().GetRef(gomock.Any(), gomock.Any(), "refs/heads/"+defaultBranch).
 				Return(&gogithub.Reference{Object: &gogithub.GitObject{SHA: utils.Ptr("base-sha")}}, nil, nil)
@@ -99,18 +88,22 @@ reviewers:
 					return &gogithub.PullRequest{Number: utils.Ptr(42)}, nil, nil
 				})
 
-			svc := marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, legacyConfig, testPRParserConfig)
-			err := svc.OnPullRequest(ctx, prEvent)
-			Expect(err).NotTo(HaveOccurred())
+			provider := marvin.NewRepoConfigProvider(mockGithub, orgConfig)
+			provider.Start(ctx, 0)
+
+			cfg, warning := provider.Get(&gogithub.PullRequestEvent{Repo: repo})
+			Expect(warning).To(BeNil())
+			Expect(cfg.AutoMerge).To(BeTrue())
 		})
 	})
 
 	When("the migration branch already exists (already proposed once)", func() {
 		It("stops before creating the file or the PR", func(ctx SpecContext) {
-			legacyConfig := marvin.LegacyConfig{
-				Repositories: map[string]string{repoName: "auto_merge"},
+			orgConfig := config.Marvin{
+				MarvinLegacyRepositories: map[string]string{repoName: "auto_merge"},
 			}
-			cfgs := marvin.StaticRepoConfigProvider{}
+
+			expectListAndNoFile()
 
 			mockGithub.EXPECT().GetRef(gomock.Any(), gomock.Any(), "refs/heads/"+defaultBranch).
 				Return(&gogithub.Reference{Object: &gogithub.GitObject{SHA: utils.Ptr("base-sha")}}, nil, nil)
@@ -120,21 +113,27 @@ reviewers:
 
 			// No CreateFile / CreatePullRequest expected: gomock fails the test if either is called.
 
-			svc := marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, legacyConfig, testPRParserConfig)
-			err := svc.OnPullRequest(ctx, prEvent)
-			Expect(err).NotTo(HaveOccurred())
+			provider := marvin.NewRepoConfigProvider(mockGithub, orgConfig)
+			provider.Start(ctx, 0)
+
+			cfg, warning := provider.Get(&gogithub.PullRequestEvent{Repo: repo})
+			Expect(warning).To(BeNil())
+			Expect(cfg.AutoMerge).To(BeTrue())
 		})
 	})
 
 	When("the repository has no legacy entry", func() {
-		It("does nothing", func(ctx SpecContext) {
-			cfgs := marvin.StaticRepoConfigProvider{}
+		It("does nothing beyond the regular poll", func(ctx SpecContext) {
+			expectListAndNoFile()
 
-			// No GetHub calls expected at all.
+			// No GetRef / CreateRef / CreateFile / CreatePullRequest expected.
 
-			svc := marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, marvin.LegacyConfig{}, testPRParserConfig)
-			err := svc.OnPullRequest(ctx, prEvent)
-			Expect(err).NotTo(HaveOccurred())
+			provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
+			provider.Start(ctx, 0)
+
+			cfg, warning := provider.Get(&gogithub.PullRequestEvent{Repo: repo})
+			Expect(warning).To(BeNil())
+			Expect(cfg).To(BeNil())
 		})
 	})
 })
