@@ -14,7 +14,6 @@ import (
 
 	"github.com/Flashgap/marvin/internal/config"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
-	"github.com/Flashgap/marvin/pkg/utils/maputil"
 )
 
 // RepoConfigFileName is the name of the per-repository Marvin configuration file, committed at
@@ -226,23 +225,16 @@ func (p *repoConfigProvider) pollRepo(ctx context.Context, repo *gogithub.Reposi
 		p.mu.Unlock()
 
 		logrus.Warnf("%s: %s", repoKey, warning.Message)
-
-		if _, _, ok := legacyEntry(p.orgConfig, repo.GetName()); ok {
-			logrus.Warnf("%s: has a legacy config entry but no migration PR was attempted this poll because the %s fetch failed above", repoKey, RepoConfigFileName)
-		}
 		return
 	}
 
 	if repoConfig == nil {
 		// Genuinely no .marvin.yaml. Fall back to the repository's legacy config:
-		_, _, hasLegacyEntry := legacyEntry(p.orgConfig, repo.GetName())
 		if fallback := legacyFallbackConfig(p.orgConfig, repo.GetName()); fallback != nil {
 			logrus.Infof("no %s yet for %s, running off legacy config pending migration", RepoConfigFileName, repoKey)
 			repoConfig = fallback
-		} else if hasLegacyEntry {
-			logrus.Errorf("no %s yet for %s, has a legacy entry but legacyFallbackConfig failed to build a config from it (see error above)", RepoConfigFileName, repoKey)
 		} else {
-			logrus.Infof("Marvin disabled for %s: no %s and no legacy entry (looked up key %q against %q)", repoKey, RepoConfigFileName, repo.GetName(), maputil.Keys(p.orgConfig.MarvinLegacyRepositories))
+			logrus.Infof("Marvin disabled for %s: no %s and no legacy entry", repoKey, RepoConfigFileName)
 		}
 		p.attemptConfigMigration(ctx, webhook)
 	}

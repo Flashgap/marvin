@@ -20,15 +20,23 @@ import (
 // regardless of whether that first PR is still open, merged, or was closed without merging.
 const migrationBranch = "marvin/add-marvin-yaml-config"
 
-const migrationPRBody = `This PR was opened automatically by Marvin.
+const migrationPRBody = `## Description
 
-Marvin v2.0.0 moved per-repository settings out of its own deployment env vars and into a ` + "`" + RepoConfigFileName + "`" + ` file
-committed in each repository it manages. This repository previously had an entry in the
-(now deprecated) ` + "`MARVIN_REPOSITORIES`" + ` / ` + "`MARVIN_REVIEWERS_TEAMS`" + ` env vars — this PR carries that
-configuration forward as a starting point.
+* **Improvements**
+  * Migrated this repository's deprecated ` + "`MARVIN_REPOSITORIES`" + ` / ` + "`MARVIN_REVIEWERS_TEAMS`" + ` env var entry into a ` + "`" + RepoConfigFileName + "`" + ` file, carrying the existing configuration forward as a starting point.
 
-Review the generated file, adjust it as needed (e.g. add path-based reviewer rules for a
-monorepo), and merge whenever you're ready.
+## Time spent
+
+0.25 hours
+
+## Fixed issues
+
+N/A
+
+## Reviewer's notes
+
+This PR was opened automatically by Marvin. Review the generated file, adjust it as needed
+(e.g. add path-based reviewer rules for a monorepo), and merge whenever you're ready.
 `
 
 // legacyFallbackConfig synthesizes a GitHubRepositoryConfiguration for a repository that has no
