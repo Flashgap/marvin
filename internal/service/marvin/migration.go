@@ -37,13 +37,10 @@ monorepo), and merge whenever you're ready.
 // (renderMigratedConfig + parseRepoConfig) — so the fallback behaves exactly like the eventual
 // migrated .marvin.yaml will. Returns nil if the repository has no legacy entry.
 func legacyFallbackConfig(orgConfig config.Marvin, repoName string) *GitHubRepositoryConfiguration {
-	featuresStr, ok := orgConfig.MarvinLegacyRepositories[repoName]
+	features, team, ok := legacyEntry(orgConfig, repoName)
 	if !ok {
 		return nil
 	}
-
-	features := strings.Split(featuresStr, ";")
-	team := orgConfig.MarvinLegacyReviewersTeams[repoName]
 
 	repoConfig, err := parseRepoConfig(renderMigratedConfig(features, team), orgConfig)
 	if err != nil {
@@ -56,6 +53,18 @@ func legacyFallbackConfig(orgConfig config.Marvin, repoName string) *GitHubRepos
 	return repoConfig
 }
 
+// legacyEntry looks up repoName's legacy MARVIN_REPOSITORIES/MARVIN_REVIEWERS_TEAMS entry, if any.
+//
+//nolint:staticcheck // SA1019: deprecated fields, this is their one intended remaining use
+func legacyEntry(orgConfig config.Marvin, repoName string) (features []string, team string, ok bool) {
+	featuresStr, ok := orgConfig.MarvinLegacyRepositories[repoName]
+	if !ok {
+		return nil, "", false
+	}
+
+	return strings.Split(featuresStr, ";"), orgConfig.MarvinLegacyReviewersTeams[repoName], true
+}
+
 // attemptConfigMigration opens a one-shot PR proposing a .marvin.yaml generated from this
 // repository's legacy MARVIN_REPOSITORIES/MARVIN_REVIEWERS_TEAMS entry, if it has one. It is a
 // no-op for repositories with no legacy entry, and best-effort: failures are logged, never
@@ -63,13 +72,11 @@ func legacyFallbackConfig(orgConfig config.Marvin, repoName string) *GitHubRepos
 func (p *repoConfigProvider) attemptConfigMigration(ctx context.Context, webhook pkggithub.RepoSenderGetter) {
 	log := middlewares.LoggerFromGHContext(ctx, "marvin.attemptConfigMigration")
 	repoName := webhook.GetRepo().GetName()
-	featuresStr, ok := p.orgConfig.MarvinLegacyRepositories[repoName]
+	features, team, ok := legacyEntry(p.orgConfig, repoName)
 	if !ok {
 		return
 	}
 
-	features := strings.Split(featuresStr, ";")
-	team := p.orgConfig.MarvinLegacyReviewersTeams[repoName]
 	defaultBranch := webhook.GetRepo().GetDefaultBranch()
 
 	baseRef, _, err := p.githubClient.GetRef(ctx, webhook, "refs/heads/"+defaultBranch)
