@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/Flashgap/logrus"
-	gogithub "github.com/google/go-github/v63/github"
+	gogithub "github.com/google/go-github/v90/github"
 
 	"github.com/Flashgap/marvin/internal/middlewares"
 	"github.com/Flashgap/marvin/internal/service/github"
@@ -136,6 +136,12 @@ func (s *service) OnPullRequest(ctx context.Context, event *gogithub.PullRequest
 	case pkggithub.EventPullRequestActionReviewRequested:
 		return s.notifyReviewRequestBySlack(ctx, pr, event.GetRequestedReviewer().GetLogin(), config)
 	case pkggithub.EventPullRequestActionClosed:
+		// Merges are asynchronous on GitHub's side, so this event is where we learn that a PR we
+		// asked to merge actually landed.
+		if pr.GetMerged() {
+			log.Infof("PR merged as %s", pr.GetMergeCommitSHA())
+		}
+
 		if config.AutoCapReport && pr.GetMerged() {
 			return s.reportCapitalization(ctx, pr)
 		}
@@ -579,6 +585,7 @@ func (s *service) labelActions(ctx context.Context, webhook pkggithub.RepoSender
 	case pkggithub.IsLabel(addedLabel, github.LabelMerge):
 		if err = s.attemptMerge(ctx, webhook, pr, config); err != nil {
 			if errors.Is(err, github.ErrMerge) {
+				log.Errorf("cannot merge PR, delaying merge: %v", err)
 				return s.delayMerge(ctx, webhook, pr.GetNumber())
 			}
 			return err

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	gogithub "github.com/google/go-github/v63/github"
+	gogithub "github.com/google/go-github/v90/github"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -55,10 +55,10 @@ var _ = Describe("Config migration", func() {
 				Return(&gogithub.Reference{Object: &gogithub.GitObject{SHA: utils.Ptr("base-sha")}}, nil, nil)
 
 			mockGithub.EXPECT().CreateRef(gomock.Any(), gomock.Any(), gomock.Any()).
-				DoAndReturn(func(_ context.Context, _ pkggithub.RepoSenderGetter, ref *gogithub.Reference) (*gogithub.Reference, *gogithub.Response, error) {
-					Expect(ref.GetRef()).To(Equal("refs/heads/marvin/add-marvin-yaml-config"))
-					Expect(ref.GetObject().GetSHA()).To(Equal("base-sha"))
-					return ref, &gogithub.Response{}, nil
+				DoAndReturn(func(_ context.Context, _ pkggithub.RepoSenderGetter, ref gogithub.CreateRef) (*gogithub.Reference, *gogithub.Response, error) {
+					Expect(ref.Ref).To(Equal("refs/heads/marvin/add-marvin-yaml-config"))
+					Expect(ref.SHA).To(Equal("base-sha"))
+					return &gogithub.Reference{}, &gogithub.Response{}, nil
 				})
 
 			expectedConfig := `# .marvin.yaml
@@ -82,9 +82,9 @@ reviewers:
 				})
 
 			mockGithub.EXPECT().CreatePullRequest(gomock.Any(), gomock.Any(), gomock.Any()).
-				DoAndReturn(func(_ context.Context, _ pkggithub.RepoSenderGetter, newPR *gogithub.NewPullRequest) (*gogithub.PullRequest, *gogithub.Response, error) {
-					Expect(newPR.GetHead()).To(Equal("marvin/add-marvin-yaml-config"))
-					Expect(newPR.GetBase()).To(Equal(defaultBranch))
+				DoAndReturn(func(_ context.Context, _ pkggithub.RepoSenderGetter, newPR gogithub.CreatePullRequest) (*gogithub.PullRequest, *gogithub.Response, error) {
+					Expect(newPR.Head).To(Equal("marvin/add-marvin-yaml-config"))
+					Expect(newPR.Base).To(Equal(defaultBranch))
 					return &gogithub.PullRequest{Number: utils.Ptr(42)}, nil, nil
 				})
 

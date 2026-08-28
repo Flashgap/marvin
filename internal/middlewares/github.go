@@ -6,7 +6,7 @@ import (
 	"io"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/go-github/v63/github"
+	"github.com/google/go-github/v90/github"
 
 	"github.com/Flashgap/marvin/internal/config"
 	"github.com/Flashgap/marvin/internal/web"

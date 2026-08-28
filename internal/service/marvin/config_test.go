@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	gogithub "github.com/google/go-github/v63/github"
+	gogithub "github.com/google/go-github/v90/github"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"

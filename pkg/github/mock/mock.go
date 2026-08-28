@@ -14,7 +14,7 @@ import (
 	reflect "reflect"
 
 	github "github.com/Flashgap/marvin/pkg/github"
-	github0 "github.com/google/go-github/v63/github"
+	github0 "github.com/google/go-github/v90/github"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -123,7 +123,7 @@ func (mr *MockClientMockRecorder) CreatePRComment(ctx, webhook, prNumber, body a
 }
 
 // CreatePullRequest mocks base method.
-func (m *MockClient) CreatePullRequest(ctx context.Context, webhook github.RepoSenderGetter, newPR *github0.NewPullRequest) (*github0.PullRequest, *github0.Response, error) {
+func (m *MockClient) CreatePullRequest(ctx context.Context, webhook github.RepoSenderGetter, newPR github0.CreatePullRequest) (*github0.PullRequest, *github0.Response, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreatePullRequest", ctx, webhook, newPR)
 	ret0, _ := ret[0].(*github0.PullRequest)
@@ -139,7 +139,7 @@ func (mr *MockClientMockRecorder) CreatePullRequest(ctx, webhook, newPR any) *go
 }
 
 // CreateRef mocks base method.
-func (m *MockClient) CreateRef(ctx context.Context, webhook github.RepoSenderGetter, ref *github0.Reference) (*github0.Reference, *github0.Response, error) {
+func (m *MockClient) CreateRef(ctx context.Context, webhook github.RepoSenderGetter, ref github0.CreateRef) (*github0.Reference, *github0.Response, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateRef", ctx, webhook, ref)
 	ret0, _ := ret[0].(*github0.Reference)
@@ -251,10 +251,10 @@ func (mr *MockClientMockRecorder) GetRef(ctx, webhook, ref any) *gomock.Call {
 }
 
 // GetRulesForBranch mocks base method.
-func (m *MockClient) GetRulesForBranch(ctx context.Context, webhook github.RepoSenderGetter, branch string) ([]*github0.RepositoryRule, *github0.Response, error) {
+func (m *MockClient) GetRulesForBranch(ctx context.Context, webhook github.RepoSenderGetter, branch string) (*github0.BranchRules, *github0.Response, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRulesForBranch", ctx, webhook, branch)
-	ret0, _ := ret[0].([]*github0.RepositoryRule)
+	ret0, _ := ret[0].(*github0.BranchRules)
 	ret1, _ := ret[1].(*github0.Response)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -426,20 +426,20 @@ func (mr *MockClientMockRecorder) ListTeamMembers(ctx, webhook, teamSlug, opts a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTeamMembers", reflect.TypeOf((*MockClient)(nil).ListTeamMembers), ctx, webhook, teamSlug, opts)
 }
 
-// MergePR mocks base method.
-func (m *MockClient) MergePR(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, commitMsg string, opts *github0.PullRequestOptions) (*github0.PullRequestMergeResult, *github0.Response, error) {
+// MergePRAsync mocks base method.
+func (m *MockClient) MergePRAsync(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, body github.PullRequestMergeAsyncRequest) (*github.PullRequestMergeAsyncResult, *github0.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MergePR", ctx, webhook, prNumber, commitMsg, opts)
-	ret0, _ := ret[0].(*github0.PullRequestMergeResult)
+	ret := m.ctrl.Call(m, "MergePRAsync", ctx, webhook, prNumber, body)
+	ret0, _ := ret[0].(*github.PullRequestMergeAsyncResult)
 	ret1, _ := ret[1].(*github0.Response)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
 
-// MergePR indicates an expected call of MergePR.
-func (mr *MockClientMockRecorder) MergePR(ctx, webhook, prNumber, commitMsg, opts any) *gomock.Call {
+// MergePRAsync indicates an expected call of MergePRAsync.
+func (mr *MockClientMockRecorder) MergePRAsync(ctx, webhook, prNumber, body any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergePR", reflect.TypeOf((*MockClient)(nil).MergePR), ctx, webhook, prNumber, commitMsg, opts)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergePRAsync", reflect.TypeOf((*MockClient)(nil).MergePRAsync), ctx, webhook, prNumber, body)
 }
 
 // PR mocks base method.

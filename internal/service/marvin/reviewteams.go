@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/bmatcuk/doublestar/v4"
-	gogithub "github.com/google/go-github/v63/github"
+	gogithub "github.com/google/go-github/v90/github"
 
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 )

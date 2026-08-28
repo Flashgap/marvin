@@ -3,7 +3,7 @@ package github
 import (
 	"context"
 
-	"github.com/google/go-github/v63/github"
+	"github.com/google/go-github/v90/github"
 )
 
 // RepoSenderGetter is the missing interface from GitHub sdk. It allows us to get data on all webhook types.
@@ -36,12 +36,12 @@ func (h *client) GetBranchProtection(ctx context.Context, webhook RepoSenderGett
 	return h.Repositories.GetBranchProtection(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), branch)
 }
 
-func (h *client) GetRulesForBranch(ctx context.Context, webhook RepoSenderGetter, branch string) ([]*github.RepositoryRule, *github.Response, error) {
-	return h.Repositories.GetRulesForBranch(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), branch)
+func (h *client) GetRulesForBranch(ctx context.Context, webhook RepoSenderGetter, branch string) (*github.BranchRules, *github.Response, error) {
+	return h.Repositories.ListRulesForBranch(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), branch, nil)
 }
 
-func (h *client) ListReviewers(ctx context.Context, webhook RepoSenderGetter, prNumber int, opts *github.ListOptions) (*github.Reviewers, *github.Response, error) {
-	return h.PullRequests.ListReviewers(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), prNumber, opts)
+func (h *client) ListReviewers(ctx context.Context, webhook RepoSenderGetter, prNumber int, _ *github.ListOptions) (*github.Reviewers, *github.Response, error) {
+	return h.PullRequests.ListReviewers(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), prNumber)
 }
 
 func (h *client) ListReviews(ctx context.Context, webhook RepoSenderGetter, prNumber int, opts *github.ListOptions) ([]*github.PullRequestReview, *github.Response, error) {
@@ -104,10 +104,6 @@ func (h *client) CreatePRComment(ctx context.Context, webhook RepoSenderGetter, 
 	return h.Issues.CreateComment(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), prNumber, body)
 }
 
-func (h *client) MergePR(ctx context.Context, webhook RepoSenderGetter, prNumber int, commitMsg string, opts *github.PullRequestOptions) (*github.PullRequestMergeResult, *github.Response, error) {
-	return h.PullRequests.Merge(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), prNumber, commitMsg, opts)
-}
-
 func (h *client) EditPR(ctx context.Context, webhook RepoSenderGetter, prNumber int, body *github.PullRequest) (*github.PullRequest, *github.Response, error) {
 	return h.PullRequests.Edit(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), prNumber, body)
 }
@@ -138,8 +134,8 @@ func (h *client) GetRef(ctx context.Context, webhook RepoSenderGetter, ref strin
 	return h.Git.GetRef(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), ref)
 }
 
-// CreateRef creates a new git reference (e.g. a branch) pointing at ref.Object.SHA.
-func (h *client) CreateRef(ctx context.Context, webhook RepoSenderGetter, ref *github.Reference) (*github.Reference, *github.Response, error) {
+// CreateRef creates a new git reference (e.g. a branch) pointing at ref.SHA.
+func (h *client) CreateRef(ctx context.Context, webhook RepoSenderGetter, ref github.CreateRef) (*github.Reference, *github.Response, error) {
 	return h.Git.CreateRef(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), ref)
 }
 
@@ -150,7 +146,7 @@ func (h *client) CreateFile(ctx context.Context, webhook RepoSenderGetter, path 
 }
 
 // CreatePullRequest opens a new pull request.
-func (h *client) CreatePullRequest(ctx context.Context, webhook RepoSenderGetter, newPR *github.NewPullRequest) (*github.PullRequest, *github.Response, error) {
+func (h *client) CreatePullRequest(ctx context.Context, webhook RepoSenderGetter, newPR github.CreatePullRequest) (*github.PullRequest, *github.Response, error) {
 	return h.PullRequests.Create(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), newPR)
 }
 

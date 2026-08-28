@@ -2,14 +2,13 @@ package github
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"sort"
 	"strings"
 
-	gogithub "github.com/google/go-github/v63/github"
+	gogithub "github.com/google/go-github/v90/github"
 
 	"github.com/Flashgap/marvin/internal/middlewares"
 	"github.com/Flashgap/marvin/pkg/github"
@@ -136,14 +135,8 @@ func (s *service) requiredReviewCountFromRuleset(ctx context.Context, webhook gi
 	if err != nil {
 		return 0, fmt.Errorf("error getting rules for branch: %w", err)
 	}
-	for _, rule := range rules {
-		if rule.Type == "pull_request" && rule.Parameters != nil {
-			var params gogithub.PullRequestRuleParameters
-			if err := json.Unmarshal(*rule.Parameters, &params); err != nil {
-				return 0, fmt.Errorf("error parsing pull_request rule parameters: %w", err)
-			}
-			return params.RequiredApprovingReviewCount, nil
-		}
+	for _, rule := range rules.PullRequest {
+		return rule.Parameters.RequiredApprovingReviewCount, nil
 	}
 	return 1, nil
 }
@@ -340,6 +333,12 @@ func (s *service) AddLabel(ctx context.Context, webhook github.RepoSenderGetter,
 
 // UpdateAndMergePR updates the title (or description if the title is too long) with the PR number and merges the PR
 // It errors with ErrMerge if the GitHub merge request failed (most probably due to unsatisfied main branch protection constraints)
+//
+// The merge goes through GitHub's asynchronous endpoint, the only one accepting stacked PRs: the
+// synchronous one rejects them with "Merging stacked PRs via this endpoint is not supported". For a
+// stacked PR, GitHub merges every PR of the stack up to and including this one. PRs sitting above it
+// in the stack are never merged, and there is no way to merge this PR while skipping the ones below,
+// as its changes are built on top of them.
 func (s *service) UpdateAndMergePR(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest) error {
 	log := middlewares.LoggerFromGHContext(ctx, "github.UpdateAndMergePR")
 
@@ -352,13 +351,36 @@ func (s *service) UpdateAndMergePR(ctx context.Context, webhook github.RepoSende
 	log.Infof("got this description: %q", prDescription)
 	commitTitle, commitDescription := TitleOrDescriptionWithPRNumber(pr.GetTitle(), prDescription, pr.GetNumber())
 	log.Infof("merging PR, title: %q description: %q", commitTitle, commitDescription)
-	if res, _, err := s.MergePR(ctx, webhook, pr.GetNumber(), commitDescription, &gogithub.PullRequestOptions{
-		CommitTitle: commitTitle,
-		MergeMethod: "squash",
-	}); err != nil {
+
+	res, _, err := s.MergePRAsync(ctx, webhook, pr.GetNumber(), github.PullRequestMergeAsyncRequest{
+		CommitTitle:   utils.Ptr(commitTitle),
+		CommitMessage: utils.Ptr(commitDescription),
+		MergeMethod:   utils.Ptr("squash"),
+		MergeAction:   utils.Ptr(github.MergeActionDirect),
+		// Pinning the head we ran our checks against: GitHub cancels the merge if the branch moved.
+		SHA: utils.Ptr(pr.GetHead().GetSHA()),
+	})
+	if err != nil {
 		return fmt.Errorf("%w: %w", ErrMerge, err)
-	} else if !res.GetMerged() {
-		return fmt.Errorf("%w: %s", ErrMerge, res.GetMessage())
+	}
+
+	// GitHub only runs basic state checks (closed, draft, head moved) before answering; branch
+	// protections and repository rules are evaluated later, while the merge runs in the background.
+	// Whether the PR actually landed is therefore reported by the pull_request "closed" webhook, not
+	// here, and a merge still running is not an error.
+	details := res.GetDetails()
+
+	switch res.GetStatus() {
+	case github.MergeAsyncStatusMerged:
+		log.Infof("PR merged as %s: %s", details.GetSHA(), details.GetMessage())
+	case github.MergeAsyncStatusEnqueued:
+		log.Infof("PR added to the merge queue: %s", details.GetMessage())
+	case github.MergeAsyncStatusPending:
+		log.Infof("merge request %s accepted, GitHub is merging the PR: %s", details.GetUUID(), details.GetMessage())
+	case github.MergeAsyncStatusFailed:
+		return fmt.Errorf("%w: %s", ErrMerge, details.GetMessage())
+	default:
+		return fmt.Errorf("%w: unknown merge status %q", ErrMerge, res.GetStatus())
 	}
 
 	return nil

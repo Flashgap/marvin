@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	gogithub "github.com/google/go-github/v63/github"
+	gogithub "github.com/google/go-github/v90/github"
 	"golang.org/x/oauth2"
 
 	"github.com/Flashgap/marvin/internal/middlewares"
