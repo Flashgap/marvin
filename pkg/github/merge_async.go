@@ -7,15 +7,7 @@ import (
 	"github.com/google/go-github/v90/github"
 )
 
-// The types, accessors and MergeAsync below are copied from the go-github pull request adding
-// asynchronous merge support (https://github.com/google/go-github/pull/4491), which is still open.
-// Keeping the upstream names and shapes means that, once it is merged and released, this file can be
-// dropped and the calls pointed at PullRequests.MergeAsync without touching the callers.
-//
-// Known limitation inherited from upstream: MergeAsync goes through client.Do, which discards the
-// response body on a 4xx. GitHub reports a refused merge as a regular result payload on a 400
-// (`{"status":"failed","details":{"message":"..."}}`), so on such a refusal the caller gets an
-// *github.ErrorResponse with an empty Message instead of the reason the merge was refused.
+// Copied from https://github.com/google/go-github/pull/4491 which is still open.
 
 // Statuses reported by GitHub's asynchronous merge endpoint.
 const (
@@ -58,30 +50,6 @@ type PullRequestMergeAsyncDetails struct {
 	SHA             *string `json:"sha,omitempty"`
 }
 
-// GetExpectedHeadSHA returns the ExpectedHeadSHA field if it's non-nil, zero value otherwise.
-func (p *PullRequestMergeAsyncDetails) GetExpectedHeadSHA() string {
-	if p == nil || p.ExpectedHeadSHA == nil {
-		return ""
-	}
-	return *p.ExpectedHeadSHA
-}
-
-// GetMergeAction returns the MergeAction field if it's non-nil, zero value otherwise.
-func (p *PullRequestMergeAsyncDetails) GetMergeAction() string {
-	if p == nil || p.MergeAction == nil {
-		return ""
-	}
-	return *p.MergeAction
-}
-
-// GetMergeMethod returns the MergeMethod field if it's non-nil, zero value otherwise.
-func (p *PullRequestMergeAsyncDetails) GetMergeMethod() string {
-	if p == nil || p.MergeMethod == nil {
-		return ""
-	}
-	return *p.MergeMethod
-}
-
 // GetMessage returns the Message field if it's non-nil, zero value otherwise.
 func (p *PullRequestMergeAsyncDetails) GetMessage() string {
 	if p == nil || p.Message == nil {
@@ -112,38 +80,6 @@ func (p *PullRequestMergeAsyncRequest) GetCommitMessage() string {
 		return ""
 	}
 	return *p.CommitMessage
-}
-
-// GetCommitTitle returns the CommitTitle field if it's non-nil, zero value otherwise.
-func (p *PullRequestMergeAsyncRequest) GetCommitTitle() string {
-	if p == nil || p.CommitTitle == nil {
-		return ""
-	}
-	return *p.CommitTitle
-}
-
-// GetMergeAction returns the MergeAction field if it's non-nil, zero value otherwise.
-func (p *PullRequestMergeAsyncRequest) GetMergeAction() string {
-	if p == nil || p.MergeAction == nil {
-		return ""
-	}
-	return *p.MergeAction
-}
-
-// GetMergeMethod returns the MergeMethod field if it's non-nil, zero value otherwise.
-func (p *PullRequestMergeAsyncRequest) GetMergeMethod() string {
-	if p == nil || p.MergeMethod == nil {
-		return ""
-	}
-	return *p.MergeMethod
-}
-
-// GetSHA returns the SHA field if it's non-nil, zero value otherwise.
-func (p *PullRequestMergeAsyncRequest) GetSHA() string {
-	if p == nil || p.SHA == nil {
-		return ""
-	}
-	return *p.SHA
 }
 
 // GetDetails returns the Details field.

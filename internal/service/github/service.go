@@ -333,12 +333,7 @@ func (s *service) AddLabel(ctx context.Context, webhook github.RepoSenderGetter,
 
 // UpdateAndMergePR updates the title (or description if the title is too long) with the PR number and merges the PR
 // It errors with ErrMerge if the GitHub merge request failed (most probably due to unsatisfied main branch protection constraints)
-//
-// The merge goes through GitHub's asynchronous endpoint, the only one accepting stacked PRs: the
-// synchronous one rejects them with "Merging stacked PRs via this endpoint is not supported". For a
-// stacked PR, GitHub merges every PR of the stack up to and including this one. PRs sitting above it
-// in the stack are never merged, and there is no way to merge this PR while skipping the ones below,
-// as its changes are built on top of them.
+// The merge goes through GitHub's asynchronous endpoint, the only one accepting stacked PRs.
 func (s *service) UpdateAndMergePR(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest) error {
 	log := middlewares.LoggerFromGHContext(ctx, "github.UpdateAndMergePR")
 
