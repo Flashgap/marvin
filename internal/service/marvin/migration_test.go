@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	gogithub "github.com/google/go-github/v63/github"
+	"github.com/kelseyhightower/envconfig"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -94,6 +95,63 @@ reviewers:
 			cfg, warning := provider.Get(&gogithub.PullRequestEvent{Repo: repo})
 			Expect(warning).To(BeNil())
 			Expect(cfg.AutoMerge).To(BeTrue())
+		})
+	})
+
+	When("the legacy entry's key carries the leading newline envconfig leaves in place", func() {
+		// MARVIN_REPOSITORIES is routinely set from a multi-line string (a YAML block scalar, a
+		// Terraform heredoc). envconfig splits the raw value on "," and trims neither side, so every
+		// entry but the first reaches the map with a leading newline baked into its key. Matching
+		// those keys verbatim silently skipped both the fallback and the migration PR for every
+		// repository except whichever one happened to be listed first.
+		It("still falls back to it and opens the migration PR", func(ctx SpecContext) {
+			orgConfig := config.Marvin{
+				MarvinLegacyRepositories:   map[string]string{"\n" + repoName: "auto_merge;check_title"},
+				MarvinLegacyReviewersTeams: map[string]string{"\n" + repoName: "backend-team"},
+			}
+
+			expectListAndNoFile()
+
+			mockGithub.EXPECT().GetRef(gomock.Any(), gomock.Any(), "refs/heads/"+defaultBranch).
+				Return(&gogithub.Reference{Object: &gogithub.GitObject{SHA: utils.Ptr("base-sha")}}, nil, nil)
+
+			mockGithub.EXPECT().CreateRef(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(&gogithub.Reference{}, &gogithub.Response{}, nil)
+
+			mockGithub.EXPECT().CreateFile(gomock.Any(), gomock.Any(), marvin.RepoConfigFileName, gomock.Any()).
+				DoAndReturn(func(_ context.Context, _ pkggithub.RepoSenderGetter, path string, opts *gogithub.RepositoryContentFileOptions) (*gogithub.RepositoryContentResponse, *gogithub.Response, error) {
+					// The newline rides in on the key, never the value, so the rendered YAML is
+					// byte-for-byte what a clean single-line entry would have produced.
+					Expect(string(opts.Content)).To(ContainSubstring("  - auto_merge\n"))
+					Expect(string(opts.Content)).To(ContainSubstring("  default_team: backend-team\n"))
+					return &gogithub.RepositoryContentResponse{}, nil, nil
+				})
+
+			mockGithub.EXPECT().CreatePullRequest(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(&gogithub.PullRequest{Number: utils.Ptr(42)}, nil, nil)
+
+			provider := marvin.NewRepoConfigProvider(mockGithub, orgConfig)
+			provider.Start(ctx, 0)
+
+			cfg, warning := provider.Get(&gogithub.PullRequestEvent{Repo: repo})
+			Expect(warning).To(BeNil())
+			Expect(cfg).NotTo(BeNil())
+			Expect(cfg.AutoMerge).To(BeTrue())
+			Expect(cfg.CheckTitle).To(BeTrue())
+			Expect(cfg.DefaultTeam).To(Equal("backend-team"))
+		})
+
+		It("is the shape envconfig actually decodes a multi-line MARVIN_REPOSITORIES into", func() {
+			// Guards the assumption the fix rests on: if envconfig ever starts trimming, this fails
+			// and the trimmed-key lookup becomes dead weight rather than a silent no-op.
+			GinkgoT().Setenv("MARVIN_REPOSITORIES", "backend:auto_merge,\nfrontend:check_title")
+
+			var cfg config.Marvin
+			Expect(envconfig.Process("", &cfg)).To(Succeed())
+
+			Expect(cfg.MarvinLegacyRepositories).To(HaveKey("backend"))
+			Expect(cfg.MarvinLegacyRepositories).To(HaveKey("\nfrontend"))
+			Expect(cfg.MarvinLegacyRepositories).NotTo(HaveKey("frontend"))
 		})
 	})
 

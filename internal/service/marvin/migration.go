@@ -57,12 +57,25 @@ func legacyFallbackConfig(orgConfig config.Marvin, repoName string) *GitHubRepos
 //
 //nolint:staticcheck // SA1019: deprecated fields, this is their one intended remaining use
 func legacyEntry(orgConfig config.Marvin, repoName string) (features []string, team string, ok bool) {
-	featuresStr, ok := orgConfig.MarvinLegacyRepositories[repoName]
+	featuresStr, ok := lookupTrimmed(orgConfig.MarvinLegacyRepositories, repoName)
 	if !ok {
 		return nil, "", false
 	}
 
-	return strings.Split(featuresStr, ";"), orgConfig.MarvinLegacyReviewersTeams[repoName], true
+	team, _ = lookupTrimmed(orgConfig.MarvinLegacyReviewersTeams, repoName)
+
+	return strings.Split(featuresStr, ";"), strings.TrimSpace(team), true
+}
+
+// lookupTrimmed returns m[repoName], matching keys on their whitespace-trimmed form.
+func lookupTrimmed(m map[string]string, repoName string) (string, bool) {
+	for key, value := range m {
+		if strings.TrimSpace(key) == repoName {
+			return value, true
+		}
+	}
+
+	return "", false
 }
 
 // attemptConfigMigration opens a one-shot PR proposing a .marvin.yaml generated from this
