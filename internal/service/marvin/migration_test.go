@@ -149,8 +149,7 @@ reviewers:
 			var cfg config.Marvin
 			Expect(envconfig.Process("", &cfg)).To(Succeed())
 
-			//nolint:staticcheck // SA1019: asserting on the deprecated field is the whole point here
-			repos := cfg.MarvinLegacyRepositories
+			repos := cfg.MarvinLegacyRepositories //nolint:staticcheck // SA1019: asserting on the deprecated field is the whole point here
 
 			Expect(repos).To(HaveKey("backend"))
 			Expect(repos).To(HaveKey("\nfrontend"))
