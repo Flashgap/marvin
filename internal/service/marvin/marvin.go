@@ -4,7 +4,7 @@ package marvin
 import (
 	"context"
 
-	gogithub "github.com/google/go-github/v63/github"
+	gogithub "github.com/google/go-github/v90/github"
 )
 
 type Service interface {

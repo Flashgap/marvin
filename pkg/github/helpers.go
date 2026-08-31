@@ -3,7 +3,7 @@ package github
 import (
 	"strings"
 
-	"github.com/google/go-github/v63/github"
+	"github.com/google/go-github/v90/github"
 )
 
 // ConsumePaginatedResource is a generic function to consume any paginated resource from the GitHub SDK

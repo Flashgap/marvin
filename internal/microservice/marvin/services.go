@@ -7,7 +7,7 @@ import (
 
 	"cloud.google.com/go/errorreporting"
 	"github.com/bradleyfalzon/ghinstallation/v2"
-	gogithub "github.com/google/go-github/v63/github"
+	gogithub "github.com/google/go-github/v90/github"
 
 	"github.com/Flashgap/marvin/internal/migrations"
 	"github.com/Flashgap/marvin/internal/service/github"
@@ -70,8 +70,11 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		if err != nil {
 			return fmt.Errorf("failed creating Github client: %w", err)
 		}
-		ghClient := pkggithub.NewClient(gogithub.NewClient(&http.Client{Transport: itr}))
-		s.GithubService = github.NewService(ghClient)
+		gogithubClient, err := gogithub.NewClient(gogithub.WithTransport(itr))
+		if err != nil {
+			return fmt.Errorf("failed creating Github client: %w", err)
+		}
+		s.GithubService = github.NewService(pkggithub.NewClient(gogithubClient))
 	}
 
 	if s.JiraService == nil {

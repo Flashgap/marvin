@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/Flashgap/logrus"
-	gogithub "github.com/google/go-github/v63/github"
+	gogithub "github.com/google/go-github/v90/github"
 
 	"github.com/Flashgap/marvin/internal/middlewares"
 	"github.com/Flashgap/marvin/internal/service/github"
@@ -134,8 +134,14 @@ func (s *service) OnPullRequest(ctx context.Context, event *gogithub.PullRequest
 	case pkggithub.EventPullRequestActionLabeled:
 		return s.labelActions(ctx, event, pr, event.GetLabel(), config)
 	case pkggithub.EventPullRequestActionReviewRequested:
-		return s.notifyReviewRequestBySlack(ctx, pr, event.GetRequestedReviewer().GetLogin(), config)
+		return s.notifyReviewRequestBySlack(ctx, event, pr, event.GetRequestedReviewer().GetLogin(), config)
 	case pkggithub.EventPullRequestActionClosed:
+		// Merges are asynchronous on GitHub's side, so this event is where we learn that a PR we
+		// asked to merge actually landed.
+		if pr.GetMerged() {
+			log.Infof("PR merged as %s", pr.GetMergeCommitSHA())
+		}
+
 		if config.AutoCapReport && pr.GetMerged() {
 			return s.reportCapitalization(ctx, pr)
 		}
@@ -579,6 +585,7 @@ func (s *service) labelActions(ctx context.Context, webhook pkggithub.RepoSender
 	case pkggithub.IsLabel(addedLabel, github.LabelMerge):
 		if err = s.attemptMerge(ctx, webhook, pr, config); err != nil {
 			if errors.Is(err, github.ErrMerge) {
+				log.Errorf("cannot merge PR, delaying merge: %v", err)
 				return s.delayMerge(ctx, webhook, pr.GetNumber())
 			}
 			return err
@@ -797,7 +804,7 @@ func (s *service) isTimeSpentOutdated(ctx context.Context, webhook pkggithub.Rep
 	return false, nil
 }
 
-func (s *service) notifyReviewRequestBySlack(ctx context.Context, pr *gogithub.PullRequest, ghLogin string, config *GitHubRepositoryConfiguration) error {
+func (s *service) notifyReviewRequestBySlack(ctx context.Context, webhook pkggithub.RepoSenderGetter, pr *gogithub.PullRequest, ghLogin string, config *GitHubRepositoryConfiguration) error {
 	if ghLogin != "" && ghLogin != githubCopilot {
 		// in config, keys are in lowercase.
 		ghLogin = strings.ToLower(ghLogin)
@@ -806,7 +813,15 @@ func (s *service) notifyReviewRequestBySlack(ctx context.Context, pr *gogithub.P
 			return fmt.Errorf("no slack ID mapping for github user %q", ghLogin)
 		}
 
+		isReRequest, err := s.reviewerLastRequestedChanges(ctx, webhook, pr.GetNumber(), ghLogin)
+		if err != nil {
+			return fmt.Errorf("error checking review history for %q: %w", ghLogin, err)
+		}
+
 		msg := fmt.Sprintf("You've been assigned to PR #%d\n%s\n%s", pr.GetNumber(), pr.GetTitle(), pr.GetHTMLURL())
+		if isReRequest {
+			msg = fmt.Sprintf("Changes addressed — please re-review PR #%d\n%s\n%s", pr.GetNumber(), pr.GetTitle(), pr.GetHTMLURL())
+		}
 
 		if err := s.slackService.SendDM(ctx, slackID, msg); err != nil {
 			return fmt.Errorf("error sending slack message: %w", err)
@@ -814,6 +829,31 @@ func (s *service) notifyReviewRequestBySlack(ctx context.Context, pr *gogithub.P
 	}
 
 	return nil
+}
+
+// reviewerLastRequestedChanges returns true if ghLogin's most recent review on the PR requested
+// changes, meaning a fresh review_requested event for them is a re-request rather than a first ask.
+func (s *service) reviewerLastRequestedChanges(ctx context.Context, webhook pkggithub.RepoSenderGetter, prNumber int, ghLogin string) (bool, error) {
+	var lastState string
+	err := pkggithub.ConsumePaginatedResource(pkggithub.MaxPerPage, func(opts *gogithub.ListOptions) (*gogithub.Response, bool, error) {
+		reviews, res, err := s.githubService.ListReviews(ctx, webhook, prNumber, opts)
+		if err != nil {
+			return nil, false, fmt.Errorf("error listing reviews: %w", err)
+		}
+
+		for _, review := range reviews {
+			if strings.EqualFold(review.GetUser().GetLogin(), ghLogin) {
+				lastState = review.GetState()
+			}
+		}
+
+		return res, true, nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("error listing all reviews: %w", err)
+	}
+
+	return strings.EqualFold(lastState, pkggithub.PullRequestReviewStateChangesRequested), nil
 }
 
 func (s *service) notifyChangesRequestedBySlack(ctx context.Context, senderLogin string, pr *gogithub.PullRequest, ghLogin string, config *GitHubRepositoryConfiguration) error {

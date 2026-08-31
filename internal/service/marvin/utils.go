@@ -8,7 +8,7 @@ import (
 	"github.com/Flashgap/marvin/internal/service/jira"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 	"github.com/Flashgap/marvin/pkg/linear"
-	gogithub "github.com/google/go-github/v63/github"
+	gogithub "github.com/google/go-github/v90/github"
 )
 
 func isMarvinEvent(prEvent *gogithub.PullRequestEvent) bool {

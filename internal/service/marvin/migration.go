@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/Flashgap/logrus"
-	gogithub "github.com/google/go-github/v63/github"
+	gogithub "github.com/google/go-github/v90/github"
 
 	"github.com/Flashgap/marvin/internal/config"
 	"github.com/Flashgap/marvin/internal/middlewares"
@@ -106,9 +106,9 @@ func (p *repoConfigProvider) attemptConfigMigration(ctx context.Context, webhook
 		return
 	}
 
-	_, res, err := p.githubClient.CreateRef(ctx, webhook, &gogithub.Reference{
-		Ref:    new("refs/heads/" + migrationBranch),
-		Object: &gogithub.GitObject{SHA: baseRef.GetObject().SHA},
+	_, res, err := p.githubClient.CreateRef(ctx, webhook, gogithub.CreateRef{
+		Ref: "refs/heads/" + migrationBranch,
+		SHA: baseRef.GetObject().GetSHA(),
 	})
 	if err != nil {
 		if res != nil && res.StatusCode == http.StatusUnprocessableEntity {
@@ -130,10 +130,10 @@ func (p *repoConfigProvider) attemptConfigMigration(ctx context.Context, webhook
 		return
 	}
 
-	pr, _, err := p.githubClient.CreatePullRequest(ctx, webhook, &gogithub.NewPullRequest{
+	pr, _, err := p.githubClient.CreatePullRequest(ctx, webhook, gogithub.CreatePullRequest{
 		Title: new(fmt.Sprintf("Add %s", RepoConfigFileName)),
-		Head:  new(migrationBranch),
-		Base:  new(defaultBranch),
+		Head:  migrationBranch,
+		Base:  defaultBranch,
 		Body:  new(migrationPRBody),
 	})
 	if err != nil {

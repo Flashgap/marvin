@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/Flashgap/logrus"
-	"github.com/google/go-github/v63/github"
+	"github.com/google/go-github/v90/github"
 
 	"github.com/Flashgap/marvin/pkg/utils"
 )
@@ -127,10 +127,10 @@ func GenerateChangelog(
 			isServiceConcerned := false
 			hasDeployLabel := false
 			for _, label := range pullRequest.Labels {
-				if strings.HasPrefix(*label.Name, deployLabelPrefix) {
+				if strings.HasPrefix(label.Name, deployLabelPrefix) {
 					hasDeployLabel = true
 
-					if strings.Contains(*label.Name, serviceName) {
+					if strings.Contains(label.Name, serviceName) {
 						isServiceConcerned = true
 						break
 					}

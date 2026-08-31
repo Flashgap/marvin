@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/Flashgap/logrus"
-	gogithub "github.com/google/go-github/v63/github"
+	gogithub "github.com/google/go-github/v90/github"
 	"gopkg.in/yaml.v3"
 
 	"github.com/Flashgap/marvin/internal/config"

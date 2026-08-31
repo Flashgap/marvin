@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	gogithub "github.com/google/go-github/v63/github"
+	gogithub "github.com/google/go-github/v90/github"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -129,9 +129,9 @@ var _ = Describe("Service tests", func() {
 		When("It has enough reviewers", func() {
 			It("should approve the PR", func(ctx SpecContext) {
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelApproved)},
-					{Name: utils.Ptr(github.LabelReadyForReview)},
-					{Name: utils.Ptr(github.LabelChangesRequired)},
+					{Name: github.LabelApproved},
+					{Name: github.LabelReadyForReview},
+					{Name: github.LabelChangesRequired},
 				}, nil, nil).Times(3)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), reviewEvent, prNumber, []string{github.LabelApproved}).Times(1).Return(nil, nil, nil)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), reviewEvent, prNumber, github.LabelReadyForReview).Times(1).Return(nil, nil)
@@ -171,7 +171,7 @@ var _ = Describe("Service tests", func() {
 		}
 
 		When("User adds merge label", func() {
-			mergeGHLabel := &gogithub.Label{Name: utils.Ptr(github.LabelMerge)}
+			mergeGHLabel := &gogithub.Label{Name: github.LabelMerge}
 
 			prEvent := gogithub.PullRequestEvent{
 				Action: utils.Ptr("labeled"),
@@ -263,7 +263,9 @@ blabla
 `, prBody)
 
 					prEvent.PullRequest.Body = &prBody
-					mockGithub.EXPECT().MergePR(gomock.Any(), gomock.Any(), gomock.Any(), "- hello world", gomock.Any()).Return(&gogithub.PullRequestMergeResult{Merged: utils.Ptr(true)}, nil, nil)
+					mockGithub.EXPECT().MergePRAsync(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Cond(func(body pkggithub.PullRequestMergeAsyncRequest) bool {
+						return body.GetCommitMessage() == "- hello world"
+					})).Return(&pkggithub.PullRequestMergeAsyncResult{Status: utils.Ptr(pkggithub.MergeAsyncStatusMerged)}, nil, nil)
 					err := svc.OnPullRequest(ctx, &prEvent)
 					Expect(err).NotTo(HaveOccurred())
 				})
@@ -300,7 +302,7 @@ blabla
 						})
 
 						prEvent.PullRequest.Body = &prBody
-						mockGithub.EXPECT().MergePR(gomock.Any(), gomock.Any(), gomock.Any(), "- hello world", gomock.Any()).Return(nil, nil, errors.New("some kind of error"))
+						mockGithub.EXPECT().MergePRAsync(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, errors.New("some kind of error"))
 						mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 						err := svc.OnPullRequest(ctx, &prEvent)
 						Expect(err).NotTo(HaveOccurred())
@@ -682,58 +684,58 @@ blabla
 			Entry(
 				"it should be ok with merge, dependencies, approved",
 				[]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelMerge)},
-					{Name: utils.Ptr(github.LabelDependencies)},
-					{Name: utils.Ptr(github.LabelApproved)},
+					{Name: github.LabelMerge},
+					{Name: github.LabelDependencies},
+					{Name: github.LabelApproved},
 				},
 				true,
 			),
 			Entry(
 				"it should be ok with merge, hotfix",
 				[]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelMerge)},
-					{Name: utils.Ptr(github.LabelHotfix)},
+					{Name: github.LabelMerge},
+					{Name: github.LabelHotfix},
 				},
 				true,
 			),
 			Entry(
 				"it should be ok with merge, approved",
 				[]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelMerge)},
-					{Name: utils.Ptr(github.LabelApproved)},
+					{Name: github.LabelMerge},
+					{Name: github.LabelApproved},
 				},
 				true,
 			),
 			Entry(
 				"it should be ok with merge, dependencies",
 				[]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelMerge)},
-					{Name: utils.Ptr(github.LabelDependencies)},
+					{Name: github.LabelMerge},
+					{Name: github.LabelDependencies},
 				},
 				true,
 			),
 			Entry("it should be ok with merge only",
 				[]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelMerge)},
+					{Name: github.LabelMerge},
 				},
 				true,
 			),
 			Entry("it should not be ok with merge and ready to be reviewed",
 				[]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelMerge)},
-					{Name: utils.Ptr(github.LabelReadyForReview)},
+					{Name: github.LabelMerge},
+					{Name: github.LabelReadyForReview},
 				},
 				false,
 			),
 			Entry("it should not be ok with ready to be reviewed",
 				[]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelReadyForReview)},
+					{Name: github.LabelReadyForReview},
 				},
 				false,
 			),
 			Entry("it should not be ok with hotfix",
 				[]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelHotfix)},
+					{Name: github.LabelHotfix},
 				},
 				false,
 			),
@@ -777,7 +779,49 @@ blabla
 					},
 				}
 
-				mockSlack.EXPECT().SendDM(gomock.Any(), "U1234W5678", gomock.Any()).Return(nil).Times(1)
+				mockGithub.EXPECT().ListReviews(gomock.Any(), &prEvent, 500, gomock.Any()).Return(nil, nil, nil)
+				mockSlack.EXPECT().SendDM(gomock.Any(), "U1234W5678", "You've been assigned to PR #500\nmy title\n").Return(nil).Times(1)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				err := svc.OnPullRequest(ctx, &prEvent)
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+
+		When("someone is re-requested to review a PR after they requested changes", func() {
+			It("should notify them that changes were addressed instead of a plain assignment", func(ctx SpecContext) {
+				prBody := githubtest.BuildPrBody(githubtest.PrData{})
+
+				prEvent := gogithub.PullRequestEvent{
+					Action: utils.Ptr("review_requested"),
+					Repo: &gogithub.Repository{
+						Name: utils.Ptr(repoName),
+					},
+					Sender: &gogithub.User{
+						Name: utils.Ptr("mx-test"),
+					},
+					PullRequest: &gogithub.PullRequest{
+						State:  utils.Ptr("open"),
+						Title:  utils.Ptr("my title"),
+						Body:   utils.Ptr(prBody),
+						Number: utils.Ptr(500),
+						Head: &gogithub.PullRequestBranch{
+							Ref: utils.Ptr("mybranch"),
+							SHA: utils.Ptr("mybranch"),
+						},
+					},
+					RequestedReviewer: &gogithub.User{
+						Login: utils.Ptr("marvin"),
+						Name:  utils.Ptr("marvin user"),
+					},
+				}
+
+				mockGithub.EXPECT().ListReviews(gomock.Any(), &prEvent, 500, gomock.Any()).Return([]*gogithub.PullRequestReview{
+					{
+						User:  &gogithub.User{Login: utils.Ptr("marvin")},
+						State: utils.Ptr("changes_requested"),
+					},
+				}, nil, nil)
+				mockSlack.EXPECT().SendDM(gomock.Any(), "U1234W5678", "Changes addressed — please re-review PR #500\nmy title\n").Return(nil).Times(1)
 				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
@@ -862,7 +906,7 @@ blabla
 				prEvent := getDraftEvent(pkggithub.EventPullRequestActionOpened, true)
 
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelWorkInProgress)},
+					{Name: github.LabelWorkInProgress},
 				}, nil, nil).Times(1)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelWorkInProgress}).Return(nil, nil, nil).Times(1)
 
@@ -897,7 +941,7 @@ blabla
 
 				prEvent := getDraftEvent(pkggithub.EventPullRequestActionOpened, false)
 				prEvent.PullRequest.Labels = []*gogithub.Label{
-					{Name: utils.Ptr(github.LabelHotfix)},
+					{Name: github.LabelHotfix},
 				}
 
 				mockGithub.EXPECT().CreateCheckRun(gomock.Any(), gomock.Any(), gogithub.CreateCheckRunOptions{
@@ -929,8 +973,8 @@ blabla
 				prEvent := getDraftEvent(pkggithub.EventPullRequestActionConvertedToDraft, true)
 
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelWorkInProgress)},
-					{Name: utils.Ptr(github.LabelReadyForReview)},
+					{Name: github.LabelWorkInProgress},
+					{Name: github.LabelReadyForReview},
 				}, nil, nil).Times(2)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelWorkInProgress}).Return(nil, nil, nil).Times(1)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelReadyForReview).Return(nil, nil).Times(1)
@@ -954,7 +998,7 @@ blabla
 
 				prEvent := getDraftEvent(pkggithub.EventPullRequestActionReadyForReview, false)
 				prEvent.PullRequest.Labels = []*gogithub.Label{
-					{Name: utils.Ptr(github.LabelHotfix)},
+					{Name: github.LabelHotfix},
 				}
 
 				protection := &gogithub.Protection{
@@ -964,8 +1008,8 @@ blabla
 				}
 
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelWorkInProgress)},
-					{Name: utils.Ptr(github.LabelReadyForReview)},
+					{Name: github.LabelWorkInProgress},
+					{Name: github.LabelReadyForReview},
 				}, nil, nil).Times(2)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelWorkInProgress).Return(nil, nil).Times(1)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelReadyForReview}).Return(nil, nil, nil).Times(1)
@@ -1007,7 +1051,7 @@ blabla
 
 				prEvent := getDraftEvent(pkggithub.EventPullRequestActionReadyForReview, false)
 				prEvent.PullRequest.Labels = []*gogithub.Label{
-					{Name: utils.Ptr(github.LabelHotfix)},
+					{Name: github.LabelHotfix},
 				}
 
 				protection := &gogithub.Protection{
@@ -1017,8 +1061,8 @@ blabla
 				}
 
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelWorkInProgress)},
-					{Name: utils.Ptr(github.LabelReadyForReview)},
+					{Name: github.LabelWorkInProgress},
+					{Name: github.LabelReadyForReview},
 				}, nil, nil).Times(2)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelWorkInProgress).Return(nil, nil).Times(1)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelReadyForReview}).Return(nil, nil, nil).Times(1)
@@ -1071,12 +1115,12 @@ blabla
 
 				prEvent := getDraftEvent(pkggithub.EventPullRequestActionReadyForReview, false)
 				prEvent.PullRequest.Labels = []*gogithub.Label{
-					{Name: utils.Ptr(github.LabelHotfix)},
+					{Name: github.LabelHotfix},
 				}
 
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelWorkInProgress)},
-					{Name: utils.Ptr(github.LabelReadyForReview)},
+					{Name: github.LabelWorkInProgress},
+					{Name: github.LabelReadyForReview},
 				}, nil, nil).Times(4)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelWorkInProgress).Return(nil, nil).Times(1)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelReadyForReview}).Return(nil, nil, nil).Times(1)
@@ -1123,7 +1167,7 @@ blabla
 
 				prEvent := getDraftEvent(pkggithub.EventPullRequestActionReadyForReview, false)
 				prEvent.PullRequest.Labels = []*gogithub.Label{
-					{Name: utils.Ptr(github.LabelHotfix)},
+					{Name: github.LabelHotfix},
 				}
 
 				protection := &gogithub.Protection{
@@ -1140,8 +1184,8 @@ blabla
 				}
 
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelWorkInProgress)},
-					{Name: utils.Ptr(github.LabelReadyForReview)},
+					{Name: github.LabelWorkInProgress},
+					{Name: github.LabelReadyForReview},
 				}, nil, nil).Times(2)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelWorkInProgress).Return(nil, nil).Times(1)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelReadyForReview}).Return(nil, nil, nil).Times(1)
@@ -1184,7 +1228,7 @@ blabla
 
 				prEvent := getDraftEvent(pkggithub.EventPullRequestActionReadyForReview, false)
 				prEvent.PullRequest.Labels = []*gogithub.Label{
-					{Name: utils.Ptr(github.LabelHotfix)},
+					{Name: github.LabelHotfix},
 				}
 
 				protection := &gogithub.Protection{
@@ -1202,8 +1246,8 @@ blabla
 				}
 
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelWorkInProgress)},
-					{Name: utils.Ptr(github.LabelReadyForReview)},
+					{Name: github.LabelWorkInProgress},
+					{Name: github.LabelReadyForReview},
 				}, nil, nil).Times(2)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelWorkInProgress).Return(nil, nil).Times(1)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelReadyForReview}).Return(nil, nil, nil).Times(1)
@@ -1257,7 +1301,7 @@ blabla
 					Login: utils.Ptr("mx-test"),
 				},
 				Label: &gogithub.Label{
-					Name: utils.Ptr(github.LabelReadyForReview),
+					Name: github.LabelReadyForReview,
 				},
 				PullRequest: &gogithub.PullRequest{
 					State:  utils.Ptr("open"),
@@ -1284,7 +1328,7 @@ blabla
 				}
 
 				prEvent := getLabeledEvent([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelReadyForReview)},
+					{Name: github.LabelReadyForReview},
 				})
 
 				// aiReviewGatePassed: no AI review found on the current commit
@@ -1298,8 +1342,8 @@ blabla
 
 				// gate blocked: revert to WIP and comment
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelReadyForReview)},
-					{Name: utils.Ptr(github.LabelWorkInProgress)},
+					{Name: github.LabelReadyForReview},
+					{Name: github.LabelWorkInProgress},
 				}, nil, nil).Times(2)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelReadyForReview).Return(nil, nil).Times(1)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelWorkInProgress}).Return(nil, nil, nil).Times(1)
@@ -1327,7 +1371,7 @@ blabla
 				}
 
 				prEvent := getLabeledEvent([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelReadyForReview)},
+					{Name: github.LabelReadyForReview},
 				})
 				prEvent.Sender = &gogithub.User{
 					Login: utils.Ptr("some-automation[bot]"),
@@ -1346,8 +1390,8 @@ blabla
 
 				// gate blocked: revert to WIP and comment, tagging the PR author (not the bot sender)
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelReadyForReview)},
-					{Name: utils.Ptr(github.LabelWorkInProgress)},
+					{Name: github.LabelReadyForReview},
+					{Name: github.LabelWorkInProgress},
 				}, nil, nil).Times(2)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelReadyForReview).Return(nil, nil).Times(1)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelWorkInProgress}).Return(nil, nil, nil).Times(1)
@@ -1381,7 +1425,7 @@ blabla
 					Login: utils.Ptr("mx-test"),
 				},
 				Label: &gogithub.Label{
-					Name: utils.Ptr(github.LabelReadyForReview),
+					Name: github.LabelReadyForReview,
 				},
 				PullRequest: &gogithub.PullRequest{
 					State:  utils.Ptr("open"),
@@ -1407,12 +1451,12 @@ blabla
 				}
 
 				prEvent := getLabeledEvent([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelReadyForReview)},
-					{Name: utils.Ptr(github.LabelChangesRequired)},
+					{Name: github.LabelReadyForReview},
+					{Name: github.LabelChangesRequired},
 				})
 
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelChangesRequired)},
+					{Name: github.LabelChangesRequired},
 				}, nil, nil).Times(1)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelChangesRequired).Return(nil, nil).Times(1)
 
@@ -1447,12 +1491,12 @@ blabla
 				}
 
 				prEvent := getLabeledEvent([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelReadyForReview)},
-					{Name: utils.Ptr(github.LabelChangesRequired)},
+					{Name: github.LabelReadyForReview},
+					{Name: github.LabelChangesRequired},
 				})
 
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelChangesRequired)},
+					{Name: github.LabelChangesRequired},
 				}, nil, nil).Times(1)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelChangesRequired).Return(nil, nil).Times(1)
 
@@ -1488,8 +1532,8 @@ blabla
 				}
 
 				prEvent := getLabeledEvent([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelReadyForReview)},
-					{Name: utils.Ptr(github.LabelChangesRequired)},
+					{Name: github.LabelReadyForReview},
+					{Name: github.LabelChangesRequired},
 				})
 
 				// No mocks expected: AutoChangesRequired is disabled and AutoReviewAssign is disabled
@@ -1507,8 +1551,8 @@ blabla
 				}
 
 				prEvent := getLabeledEvent([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelReadyForReview)},
-					{Name: utils.Ptr(github.LabelChangesRequired)},
+					{Name: github.LabelReadyForReview},
+					{Name: github.LabelChangesRequired},
 				})
 
 				// No swap: AutoChangesRequired is disabled, and AutoReviewAssign is disabled too
@@ -1536,8 +1580,8 @@ blabla
 				}
 
 				prEvent := getLabeledEvent([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelReadyForReview)},
-					{Name: utils.Ptr(github.LabelChangesRequired)},
+					{Name: github.LabelReadyForReview},
+					{Name: github.LabelChangesRequired},
 				})
 
 				// aiReviewGatePassed: no AI review found on the current commit
@@ -1551,8 +1595,8 @@ blabla
 
 				// gate blocked: revert to WIP and comment
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
-					{Name: utils.Ptr(github.LabelReadyForReview)},
-					{Name: utils.Ptr(github.LabelWorkInProgress)},
+					{Name: github.LabelReadyForReview},
+					{Name: github.LabelWorkInProgress},
 				}, nil, nil).Times(2)
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelReadyForReview).Return(nil, nil).Times(1)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelWorkInProgress}).Return(nil, nil, nil).Times(1)
