@@ -779,7 +779,49 @@ blabla
 					},
 				}
 
-				mockSlack.EXPECT().SendDM(gomock.Any(), "U1234W5678", gomock.Any()).Return(nil).Times(1)
+				mockGithub.EXPECT().ListReviews(gomock.Any(), &prEvent, 500, gomock.Any()).Return(nil, nil, nil)
+				mockSlack.EXPECT().SendDM(gomock.Any(), "U1234W5678", "You've been assigned to PR #500\nmy title\n").Return(nil).Times(1)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				err := svc.OnPullRequest(ctx, &prEvent)
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+
+		When("someone is re-requested to review a PR after they requested changes", func() {
+			It("should notify them that changes were addressed instead of a plain assignment", func(ctx SpecContext) {
+				prBody := githubtest.BuildPrBody(githubtest.PrData{})
+
+				prEvent := gogithub.PullRequestEvent{
+					Action: utils.Ptr("review_requested"),
+					Repo: &gogithub.Repository{
+						Name: utils.Ptr(repoName),
+					},
+					Sender: &gogithub.User{
+						Name: utils.Ptr("mx-test"),
+					},
+					PullRequest: &gogithub.PullRequest{
+						State:  utils.Ptr("open"),
+						Title:  utils.Ptr("my title"),
+						Body:   utils.Ptr(prBody),
+						Number: utils.Ptr(500),
+						Head: &gogithub.PullRequestBranch{
+							Ref: utils.Ptr("mybranch"),
+							SHA: utils.Ptr("mybranch"),
+						},
+					},
+					RequestedReviewer: &gogithub.User{
+						Login: utils.Ptr("marvin"),
+						Name:  utils.Ptr("marvin user"),
+					},
+				}
+
+				mockGithub.EXPECT().ListReviews(gomock.Any(), &prEvent, 500, gomock.Any()).Return([]*gogithub.PullRequestReview{
+					{
+						User:  &gogithub.User{Login: utils.Ptr("marvin")},
+						State: utils.Ptr("changes_requested"),
+					},
+				}, nil, nil)
+				mockSlack.EXPECT().SendDM(gomock.Any(), "U1234W5678", "Changes addressed — please re-review PR #500\nmy title\n").Return(nil).Times(1)
 				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
 				Expect(err).ToNot(HaveOccurred())
