@@ -2,6 +2,8 @@ package github
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/go-github/v90/github"
@@ -120,6 +122,18 @@ func (h *client) MergeAsync(ctx context.Context, owner, repo string, number int,
 	var result *PullRequestMergeAsyncResult
 	resp, err := h.Do(req, &result)
 	if err != nil {
+		// GitHub answers 202 Accepted while the merge runs in the background, and go-github maps
+		// every 202 to an AcceptedError. That is the pending happy path here, not a failure, so we
+		// decode the status out of the error payload instead of reporting a failed merge.
+		var accepted *github.AcceptedError
+		if errors.As(err, &accepted) {
+			if err := json.Unmarshal(accepted.Raw, &result); err != nil {
+				return nil, resp, fmt.Errorf("error parsing accepted merge response: %w", err)
+			}
+
+			return result, resp, nil
+		}
+
 		return nil, resp, err
 	}
 
