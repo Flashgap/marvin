@@ -366,6 +366,91 @@ blabla
 						Entry("unstable", pkggithub.MergeableStateUnstable),
 						Entry("clean", pkggithub.MergeableStateClean),
 					)
+
+					When("the PR is blocked", func() {
+						BeforeEach(func() {
+							prEvent.PullRequest.Body = &prBody
+							mockGithub.EXPECT().PR(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+								&gogithub.PullRequest{
+									MergeableState: utils.Ptr(pkggithub.MergeableStateBlocked),
+									Base:           &gogithub.PullRequestBranch{Ref: utils.Ptr("master")},
+								}, nil, nil)
+						})
+
+						It("keeps the label and waits when checks are still running", func(ctx SpecContext) {
+							mockGithub.EXPECT().ListCheckRunsForRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+								Return(&gogithub.ListCheckRunsResults{
+									CheckRuns: []*gogithub.CheckRun{
+										{Name: utils.Ptr("build"), Status: utils.Ptr("in_progress")},
+									},
+								}, nil, nil)
+							mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(),
+								gomock.Cond(func(comment *gogithub.IssueComment) bool {
+									return strings.Contains(comment.GetBody(), "I'll try when all status check succeed")
+								})).Return(nil, nil, nil).Times(1)
+
+							err := svc.OnPullRequest(ctx, &prEvent)
+							Expect(err).NotTo(HaveOccurred())
+						})
+
+						It("cancels the merge and lists the branch requirements when checks are done", func(ctx SpecContext) {
+							mockGithub.EXPECT().ListCheckRunsForRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+								Return(&gogithub.ListCheckRunsResults{
+									CheckRuns: []*gogithub.CheckRun{
+										{Name: utils.Ptr("build"), Status: utils.Ptr(pkggithub.CheckRunStatusCompleted)},
+									},
+								}, nil, nil)
+							mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), "master").
+								Return(nil, nil, gogithub.ErrBranchNotProtected)
+							mockGithub.EXPECT().GetRulesForBranch(gomock.Any(), gomock.Any(), "master").
+								Return(&gogithub.BranchRules{
+									PullRequest: []*gogithub.PullRequestBranchRule{
+										{
+											Parameters: gogithub.PullRequestRuleParameters{
+												RequiredReviewThreadResolution: true,
+												RequiredApprovingReviewCount:   1,
+											},
+										},
+									},
+								}, nil, nil)
+							mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).
+								Return([]*gogithub.Label{mergeGHLabel}, nil, nil).Times(1)
+							mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), gomock.Any(), github.LabelMerge).
+								Return(nil, nil).Times(1)
+							mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(),
+								gomock.Cond(func(comment *gogithub.IssueComment) bool {
+									body := comment.GetBody()
+									return strings.Contains(body, "The master branch requires:") &&
+										strings.Contains(body, "- conversation resolution on all review threads") &&
+										strings.Contains(body, "- 1 approving review")
+								})).Return(nil, nil, nil).Times(1)
+
+							err := svc.OnPullRequest(ctx, &prEvent)
+							Expect(err).NotTo(HaveOccurred())
+						})
+
+						It("falls back to a generic explanation when the branch has no readable rules", func(ctx SpecContext) {
+							mockGithub.EXPECT().ListCheckRunsForRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+								Return(&gogithub.ListCheckRunsResults{
+									CheckRuns: []*gogithub.CheckRun{
+										{Name: utils.Ptr("build"), Status: utils.Ptr(pkggithub.CheckRunStatusCompleted)},
+									},
+								}, nil, nil)
+							mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), "master").
+								Return(nil, nil, errors.New("no access"))
+							mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).
+								Return([]*gogithub.Label{mergeGHLabel}, nil, nil).Times(1)
+							mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), gomock.Any(), github.LabelMerge).
+								Return(nil, nil).Times(1)
+							mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(),
+								gomock.Cond(func(comment *gogithub.IssueComment) bool {
+									return strings.Contains(comment.GetBody(), "an unresolved review conversation")
+								})).Return(nil, nil, nil).Times(1)
+
+							err := svc.OnPullRequest(ctx, &prEvent)
+							Expect(err).NotTo(HaveOccurred())
+						})
+					})
 				})
 			})
 		})
