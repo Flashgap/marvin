@@ -695,27 +695,21 @@ func (s *service) attemptMerge(ctx context.Context, webhook pkggithub.RepoSender
 	mergeableState := freshPR.GetMergeableState()
 	log.Infof("PR mergeable state is %q", mergeableState)
 
+	// Every branch below assigns to err rather than returning directly: the deferred cleanup only
+	// sees failures through that variable, and a transient error inside cancelMerge would otherwise
+	// leave the PR labelled and silent — the very thing this check exists to prevent.
 	switch mergeableState {
 	case pkggithub.MergeableStateDirty:
-		// Assigning to err (rather than returning directly) lets the deferred cleanup catch a
-		// transient failure inside cancelMerge instead of leaving the PR labelled and silent.
 		err = s.cancelMerge(ctx, webhook, pr.GetNumber(), "This PR has merge conflicts with the base branch.")
 		return err
 	case pkggithub.MergeableStateDraft:
-		// Assigning to err (rather than returning directly) lets the deferred cleanup catch a
-		// transient failure inside cancelMerge instead of leaving the PR labelled and silent.
 		err = s.cancelMerge(ctx, webhook, pr.GetNumber(), "This PR is still a draft.")
 		return err
 	case pkggithub.MergeableStateBehind:
-		// Assigning to err (rather than returning directly) lets the deferred cleanup catch a
-		// transient failure inside cancelMerge instead of leaving the PR labelled and silent.
 		err = s.cancelMerge(ctx, webhook, pr.GetNumber(), "This branch is out of date with the base branch.")
 		return err
 	case pkggithub.MergeableStateBlocked:
 		// The base branch comes from the refreshed PR: a webhook payload does not always carry one.
-		// Assigning to err (rather than returning directly) lets the deferred cleanup catch a
-		// failure inside handleBlockedMerge, e.g. a transient error from AreAllCheckRunsDone,
-		// instead of leaving the PR labelled with nothing left to retry it.
 		err = s.handleBlockedMerge(ctx, webhook, pr, freshPR.GetBase().GetRef())
 		return err
 	}
