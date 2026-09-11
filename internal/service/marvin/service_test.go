@@ -450,6 +450,25 @@ blabla
 							err := svc.OnPullRequest(ctx, &prEvent)
 							Expect(err).NotTo(HaveOccurred())
 						})
+
+						It("removes the label and comments when checking whether checks are done fails", func(ctx SpecContext) {
+							// The first ListCheckRunsForRef expectation (declared in the enclosing
+							// BeforeEach) covers Marvin's own check run; gomock matches expectations
+							// in declaration order, so this second one is the AreAllCheckRunsDone call.
+							mockGithub.EXPECT().ListCheckRunsForRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+								Return(nil, nil, errors.New("some kind of error"))
+							mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).
+								Return([]*gogithub.Label{mergeGHLabel}, nil, nil).Times(1)
+							mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), gomock.Any(), github.LabelMerge).
+								Return(nil, nil).Times(1)
+							mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(),
+								gomock.Cond(func(comment *gogithub.IssueComment) bool {
+									return strings.Contains(comment.GetBody(), "Unexpected error.")
+								})).Return(nil, nil, nil).Times(1)
+
+							err := svc.OnPullRequest(ctx, &prEvent)
+							Expect(err).To(HaveOccurred())
+						})
 					})
 				})
 			})

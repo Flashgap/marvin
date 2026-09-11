@@ -704,7 +704,11 @@ func (s *service) attemptMerge(ctx context.Context, webhook pkggithub.RepoSender
 		return s.cancelMerge(ctx, webhook, pr.GetNumber(), "This branch is out of date with the base branch.")
 	case pkggithub.MergeableStateBlocked:
 		// The base branch comes from the refreshed PR: a webhook payload does not always carry one.
-		return s.handleBlockedMerge(ctx, webhook, pr, freshPR.GetBase().GetRef())
+		// Assigning to err (rather than returning directly) lets the deferred cleanup catch a
+		// failure inside handleBlockedMerge, e.g. a transient error from AreAllCheckRunsDone,
+		// instead of leaving the PR labelled with nothing left to retry it.
+		err = s.handleBlockedMerge(ctx, webhook, pr, freshPR.GetBase().GetRef())
+		return err
 	}
 
 	log.Infof("Merging the PR")
