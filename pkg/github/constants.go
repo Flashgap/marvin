@@ -22,6 +22,17 @@ const (
 	PullRequestReviewStateApproved         = "approved"
 	PullRequestReviewStateChangesRequested = "changes_requested"
 
+	// Pull request merge states, as reported by the mergeable_state field. GitHub computes them
+	// lazily and only populates them on a single-PR GET, never on a list or a webhook payload.
+	MergeableStateBehind   = "behind"
+	MergeableStateBlocked  = "blocked"
+	MergeableStateClean    = "clean"
+	MergeableStateDirty    = "dirty"
+	MergeableStateDraft    = "draft"
+	MergeableStateHasHooks = "has_hooks"
+	MergeableStateUnknown  = "unknown"
+	MergeableStateUnstable = "unstable"
+
 	// MaxPerPage is the max number of results per page
 	MaxPerPage = 100
 )

@@ -668,6 +668,33 @@ func (s *service) attemptMerge(ctx context.Context, webhook pkggithub.RepoSender
 		}
 	}
 
+	// GitHub's async merge endpoint only runs basic state checks before accepting the request:
+	// branch protections and rulesets are evaluated later, in the background, and a rejection
+	// there reaches us as nothing at all. Read the merge state up front so a blocked PR gets a
+	// comment instead of sitting labelled and untouched.
+	//
+	// The pull request handed to us cannot be trusted for this: mergeable_state is computed
+	// lazily by GitHub and only populated on a single-PR GET, so a webhook payload almost always
+	// carries "unknown". The refreshed PR is read-only here — the merge below keeps using the
+	// original one, whose head SHA is the revision Marvin ran its checks against.
+	freshPR, _, prErr := s.githubService.PR(ctx, webhook, pr.GetNumber())
+	if prErr != nil {
+		err = fmt.Errorf("error fetching PR state before merge: %w", prErr)
+		return err
+	}
+
+	mergeableState := freshPR.GetMergeableState()
+	log.Infof("PR mergeable state is %q", mergeableState)
+
+	switch mergeableState {
+	case pkggithub.MergeableStateDirty:
+		return s.cancelMerge(ctx, webhook, pr.GetNumber(), "This PR has merge conflicts with the base branch.")
+	case pkggithub.MergeableStateDraft:
+		return s.cancelMerge(ctx, webhook, pr.GetNumber(), "This PR is still a draft.")
+	case pkggithub.MergeableStateBehind:
+		return s.cancelMerge(ctx, webhook, pr.GetNumber(), "This branch is out of date with the base branch.")
+	}
+
 	log.Infof("Merging the PR")
 	// Purposefully assigning to err so our deferred function can catch it
 	err = s.githubService.UpdateAndMergePR(ctx, webhook, pr)
