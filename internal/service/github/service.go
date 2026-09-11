@@ -42,6 +42,7 @@ type Service interface {
 	HasCheckRunSucceeded(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, checkName string) (bool, error)
 	AreAllCheckRunsDone(ctx context.Context, webhook github.RepoSenderGetter, prNumber int) (bool, error)
 	HasEnoughApprovals(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest) (bool, error)
+	BranchRequirements(ctx context.Context, webhook github.RepoSenderGetter, branch string) ([]string, error)
 	HasAIReviewed(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, aiLogins []string) (bool, error)
 	HasAIReviewStatusSucceeded(ctx context.Context, webhook github.RepoSenderGetter, ref string, contexts []string) (bool, error)
 	ReRequestChangesRequested(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, aiLogins []string) ([]string, error)
