@@ -346,6 +346,33 @@ blabla
 						Entry("out of date", pkggithub.MergeableStateBehind, "out of date"),
 					)
 
+					It("still triggers the deferred cleanup when cancelMerge fails to remove the label", func(ctx SpecContext) {
+						// Regression test: the MergeableStateDirty/Draft/Behind branches must assign
+						// to attemptMerge's local err instead of returning cancelMerge's result
+						// directly, otherwise a transient failure inside cancelMerge (here,
+						// RemovePRLabel returning an error) never reaches the deferred cleanup and
+						// the PR is left labelled with no comment at all.
+						prEvent.PullRequest.Body = &prBody
+
+						mockGithub.EXPECT().PR(gomock.Any(), gomock.Any(), gomock.Any()).
+							Return(&gogithub.PullRequest{MergeableState: utils.Ptr(pkggithub.MergeableStateDirty)}, nil, nil)
+						mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).
+							Return([]*gogithub.Label{mergeGHLabel}, nil, nil).Times(2)
+						// The first RemovePRLabel attempt (inside the Dirty case's cancelMerge) fails,
+						// the second (inside the deferred cleanup's own cancelMerge call) succeeds.
+						mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), gomock.Any(), github.LabelMerge).
+							Return(nil, errors.New("some kind of error")).Times(1)
+						mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), gomock.Any(), github.LabelMerge).
+							Return(nil, nil).Times(1)
+						mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(),
+							gomock.Cond(func(comment *gogithub.IssueComment) bool {
+								return strings.Contains(comment.GetBody(), "Unexpected error.")
+							})).Return(nil, nil, nil).Times(1)
+
+						err := svc.OnPullRequest(ctx, &prEvent)
+						Expect(err).To(HaveOccurred())
+					})
+
 					DescribeTable("merges anyway",
 						func(ctx SpecContext, state string) {
 							prEvent.PullRequest.Body = &prBody
@@ -365,6 +392,7 @@ blabla
 						Entry("unknown", pkggithub.MergeableStateUnknown),
 						Entry("unstable", pkggithub.MergeableStateUnstable),
 						Entry("clean", pkggithub.MergeableStateClean),
+						Entry("has hooks", pkggithub.MergeableStateHasHooks),
 					)
 
 					When("the PR is blocked", func() {

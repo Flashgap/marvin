@@ -40,7 +40,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   request before evaluating branch protections and rulesets, and reports a rejection through no
   webhook at all, so a PR blocked by an unresolved conversation or a missing approval used to keep
   the *Merge 🚀* label with nothing happening. Marvin now removes the label and comments with the
-  requirements configured on the base branch.
+  requirements configured on the base branch. Merge conflicts, drafts, and branches that are out of
+  date with their base are also caught before the merge is requested, each with its own explanatory
+  comment.
 
 ## [1.0.0] — 2026-03-24
 
