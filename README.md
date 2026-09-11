@@ -367,6 +367,14 @@ Merges the PR using squash when the **Merge 🚀** label is added. Waits for all
 
 The PR must have no labels other than `dependencies`, `hotfix`, and `Merge 🚀` to be merged.
 
+Before requesting the merge, Marvin reads the PR's merge state from GitHub, because GitHub
+evaluates branch protections and rulesets *after* accepting a merge request and reports a
+rejection to nobody. If the PR has merge conflicts, is still a draft, or is out of date with its
+base branch, Marvin removes the label and comments saying which. If GitHub reports the PR as
+blocked while status checks are still running, Marvin keeps the label and retries when they
+finish. If it is blocked once every check is done — an unresolved conversation, a missing
+approval — Marvin removes the label and comments with the list of what the base branch requires.
+
 ### `auto_review_assign`
 
 When the **Ready for review 👌** label is added, Marvin resolves which team(s) should review based
