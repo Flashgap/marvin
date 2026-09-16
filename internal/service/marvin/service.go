@@ -30,7 +30,16 @@ const (
 	// comments on PR
 	commentNotMergeable = `Hey @%s, you added the merge label but the PR is not ready to be merged yet. 
 I removed this label, please add it back when the PR is ready to be merged!`
-	commentNotMergeableYet        = "Hey @%s, you added the merge label but the PR is not ready to be merged yet. I'll try when all status check succeed."
+	commentNotMergeableYet = "Hey @%s, you added the merge label but the PR is not ready to be merged yet. I'll try when all status check succeed."
+	commentMergeBlocked    = `GitHub is refusing to merge this PR. This usually means one of:
+- an unresolved review conversation
+- not enough approvals
+- a required status check that hasn't passed
+- a branch ruleset restriction
+
+Check the merge box at the bottom of the PR for the exact reason, then re-apply the label.`
+	commentMergeBlockedHeader     = "GitHub is refusing to merge this PR. The %s branch requires:\n"
+	commentMergeBlockedFooter     = "\nCheck which of these isn't satisfied, then re-apply the label."
 	commentCheckTimeSpent         = "Hey @%s, you added the merge label but you might forgot to update the time spent. Please take a look at it."
 	commentErrorsToFix            = "Hey @%s, thanks for your PR! It contains some errors to fix:\n %s"
 	commentNotEnoughReviewers     = "Hey @%s, I didn't find enough reviewers for your PR. Please take a look at it!"
@@ -668,10 +677,97 @@ func (s *service) attemptMerge(ctx context.Context, webhook pkggithub.RepoSender
 		}
 	}
 
+	// GitHub's async merge endpoint only runs basic state checks before accepting the request:
+	// branch protections and rulesets are evaluated later, in the background, and a rejection
+	// there reaches us as nothing at all. Read the merge state up front so a blocked PR gets a
+	// comment instead of sitting labelled and untouched.
+	//
+	// The pull request handed to us cannot be trusted for this: mergeable_state is computed
+	// lazily by GitHub and only populated on a single-PR GET, so a webhook payload almost always
+	// carries "unknown". The refreshed PR is read-only here — the merge below keeps using the
+	// original one, whose head SHA is the revision Marvin ran its checks against.
+	freshPR, _, prErr := s.githubService.PR(ctx, webhook, pr.GetNumber())
+	if prErr != nil {
+		err = fmt.Errorf("error fetching PR state before merge: %w", prErr)
+		return err
+	}
+
+	mergeableState := freshPR.GetMergeableState()
+	log.Infof("PR mergeable state is %q", mergeableState)
+
+	// Every branch below assigns to err rather than returning directly: the deferred cleanup only
+	// sees failures through that variable, and a transient error inside cancelMerge would otherwise
+	// leave the PR labelled and silent — the very thing this check exists to prevent.
+	switch mergeableState {
+	case pkggithub.MergeableStateDirty:
+		err = s.cancelMerge(ctx, webhook, pr.GetNumber(), "This PR has merge conflicts with the base branch.")
+		return err
+	case pkggithub.MergeableStateDraft:
+		err = s.cancelMerge(ctx, webhook, pr.GetNumber(), "This PR is still a draft.")
+		return err
+	case pkggithub.MergeableStateBehind:
+		err = s.cancelMerge(ctx, webhook, pr.GetNumber(), "This branch is out of date with the base branch.")
+		return err
+	case pkggithub.MergeableStateBlocked:
+		// The base branch comes from the refreshed PR: a webhook payload does not always carry one.
+		err = s.handleBlockedMerge(ctx, webhook, pr, freshPR.GetBase().GetRef())
+		return err
+	}
+
 	log.Infof("Merging the PR")
 	// Purposefully assigning to err so our deferred function can catch it
 	err = s.githubService.UpdateAndMergePR(ctx, webhook, pr)
 	return err
+}
+
+// handleBlockedMerge reacts to a PR that GitHub reports as blocked.
+//
+// A required status check that has not finished yet is also reported as blocked, and that case
+// resolves itself: the check run completing re-enters attemptMerge through OnCheckRun. Anything
+// else — an unresolved conversation, a missing approval — will never re-trigger a merge on its own,
+// so the label comes off and the developer gets told what to look at.
+func (s *service) handleBlockedMerge(ctx context.Context, webhook pkggithub.RepoSenderGetter, pr *gogithub.PullRequest, baseBranch string) error {
+	log := middlewares.LoggerFromGHContext(ctx, "marvin.handleBlockedMerge")
+
+	allChecksDone, err := s.githubService.AreAllCheckRunsDone(ctx, webhook, pr.GetNumber())
+	if err != nil {
+		return fmt.Errorf("error checking whether all check runs are done: %w", err)
+	}
+
+	if !allChecksDone {
+		log.Info("PR is blocked while checks are still running, delaying the merge")
+		return s.delayMerge(ctx, webhook, pr.GetNumber())
+	}
+
+	log.Info("PR is blocked and all checks are done, cancelling the merge")
+	return s.cancelMerge(ctx, webhook, pr.GetNumber(), s.blockedMergeDescription(ctx, webhook, baseBranch))
+}
+
+// blockedMergeDescription lists what the base branch requires, so the developer knows where to
+// look. It never fails: a branch whose rules Marvin cannot read still yields a useful checklist,
+// because a vague explanation beats cancelling a merge without one.
+func (s *service) blockedMergeDescription(ctx context.Context, webhook pkggithub.RepoSenderGetter, branch string) string {
+	log := middlewares.LoggerFromGHContext(ctx, "marvin.blockedMergeDescription")
+
+	requirements, err := s.githubService.BranchRequirements(ctx, webhook, branch)
+	if err != nil {
+		log.Warnf("cannot read the requirements of branch %q, falling back to a generic explanation: %v", branch, err)
+		return commentMergeBlocked
+	}
+
+	if len(requirements) == 0 {
+		log.Infof("branch %q has no reportable requirements, falling back to a generic explanation", branch)
+		return commentMergeBlocked
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, commentMergeBlockedHeader, branch)
+	for _, requirement := range requirements {
+		fmt.Fprintf(&b, "- %s\n", requirement)
+	}
+	b.WriteString(commentMergeBlockedFooter)
+
+	return b.String()
 }
 
 func (s *service) cancelMerge(

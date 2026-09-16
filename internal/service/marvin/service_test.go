@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	gogithub "github.com/google/go-github/v90/github"
@@ -263,6 +264,8 @@ blabla
 `, prBody)
 
 					prEvent.PullRequest.Body = &prBody
+					mockGithub.EXPECT().PR(gomock.Any(), gomock.Any(), gomock.Any()).
+						Return(&gogithub.PullRequest{MergeableState: utils.Ptr(pkggithub.MergeableStateClean)}, nil, nil)
 					mockGithub.EXPECT().MergePRAsync(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Cond(func(body pkggithub.PullRequestMergeAsyncRequest) bool {
 						return body.GetCommitMessage() == "- hello world"
 					})).Return(&pkggithub.PullRequestMergeAsyncResult{Status: utils.Ptr(pkggithub.MergeAsyncStatusMerged)}, nil, nil)
@@ -283,6 +286,8 @@ blabla
 `, prBody)
 
 					prEvent.PullRequest.Body = &prBody
+					mockGithub.EXPECT().PR(gomock.Any(), gomock.Any(), gomock.Any()).
+						Return(&gogithub.PullRequest{MergeableState: utils.Ptr(pkggithub.MergeableStateClean)}, nil, nil)
 					mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{mergeGHLabel}, nil, nil).Times(1)
 					mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), gomock.Any(), github.LabelMerge).Return(nil, nil).Times(1)
 					mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, nil).Times(1)
@@ -302,10 +307,196 @@ blabla
 						})
 
 						prEvent.PullRequest.Body = &prBody
+						mockGithub.EXPECT().PR(gomock.Any(), gomock.Any(), gomock.Any()).
+							Return(&gogithub.PullRequest{MergeableState: utils.Ptr(pkggithub.MergeableStateClean)}, nil, nil)
 						mockGithub.EXPECT().MergePRAsync(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, errors.New("some kind of error"))
 						mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 						err := svc.OnPullRequest(ctx, &prEvent)
 						Expect(err).NotTo(HaveOccurred())
+					})
+				})
+
+				When("GitHub reports the PR as not mergeable", func() {
+					prBody := githubtest.BuildPrBody(githubtest.PrData{
+						TimeSpent:   "0.25",
+						LinearLink:  "https://linear.app/your-org/issue/ENG-353",
+						Description: "- hello world",
+					})
+
+					DescribeTable("cancels the merge and explains why",
+						func(ctx SpecContext, state string, expectedComment string) {
+							prEvent.PullRequest.Body = &prBody
+
+							mockGithub.EXPECT().PR(gomock.Any(), gomock.Any(), gomock.Any()).
+								Return(&gogithub.PullRequest{MergeableState: utils.Ptr(state)}, nil, nil)
+							mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).
+								Return([]*gogithub.Label{mergeGHLabel}, nil, nil).Times(1)
+							mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), gomock.Any(), github.LabelMerge).
+								Return(nil, nil).Times(1)
+							mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(),
+								gomock.Cond(func(comment *gogithub.IssueComment) bool {
+									return strings.Contains(comment.GetBody(), expectedComment)
+								})).Return(nil, nil, nil).Times(1)
+
+							err := svc.OnPullRequest(ctx, &prEvent)
+							Expect(err).NotTo(HaveOccurred())
+						},
+						Entry("conflicts", pkggithub.MergeableStateDirty, "merge conflicts"),
+						Entry("draft", pkggithub.MergeableStateDraft, "still a draft"),
+						Entry("out of date", pkggithub.MergeableStateBehind, "out of date"),
+					)
+
+					It("still triggers the deferred cleanup when cancelMerge fails to remove the label", func(ctx SpecContext) {
+						// Regression test: the MergeableStateDirty/Draft/Behind branches must assign
+						// to attemptMerge's local err instead of returning cancelMerge's result
+						// directly, otherwise a transient failure inside cancelMerge (here,
+						// RemovePRLabel returning an error) never reaches the deferred cleanup and
+						// the PR is left labelled with no comment at all.
+						prEvent.PullRequest.Body = &prBody
+
+						mockGithub.EXPECT().PR(gomock.Any(), gomock.Any(), gomock.Any()).
+							Return(&gogithub.PullRequest{MergeableState: utils.Ptr(pkggithub.MergeableStateDirty)}, nil, nil)
+						mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).
+							Return([]*gogithub.Label{mergeGHLabel}, nil, nil).Times(2)
+						// The first RemovePRLabel attempt (inside the Dirty case's cancelMerge) fails,
+						// the second (inside the deferred cleanup's own cancelMerge call) succeeds.
+						mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), gomock.Any(), github.LabelMerge).
+							Return(nil, errors.New("some kind of error")).Times(1)
+						mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), gomock.Any(), github.LabelMerge).
+							Return(nil, nil).Times(1)
+						mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(),
+							gomock.Cond(func(comment *gogithub.IssueComment) bool {
+								return strings.Contains(comment.GetBody(), "Unexpected error.")
+							})).Return(nil, nil, nil).Times(1)
+
+						err := svc.OnPullRequest(ctx, &prEvent)
+						Expect(err).To(HaveOccurred())
+					})
+
+					DescribeTable("merges anyway",
+						func(ctx SpecContext, state string) {
+							prEvent.PullRequest.Body = &prBody
+
+							mockGithub.EXPECT().PR(gomock.Any(), gomock.Any(), gomock.Any()).
+								Return(&gogithub.PullRequest{MergeableState: utils.Ptr(state)}, nil, nil)
+							mockGithub.EXPECT().MergePRAsync(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+								Return(&pkggithub.PullRequestMergeAsyncResult{
+									Status: utils.Ptr(pkggithub.MergeAsyncStatusMerged),
+								}, nil, nil)
+
+							err := svc.OnPullRequest(ctx, &prEvent)
+							Expect(err).NotTo(HaveOccurred())
+						},
+						// unknown means GitHub has not computed mergeability yet, and unstable means the
+						// PR is mergeable with a non-required check failing. Neither may stop a merge.
+						Entry("unknown", pkggithub.MergeableStateUnknown),
+						Entry("unstable", pkggithub.MergeableStateUnstable),
+						Entry("clean", pkggithub.MergeableStateClean),
+						Entry("has hooks", pkggithub.MergeableStateHasHooks),
+					)
+
+					When("the PR is blocked", func() {
+						BeforeEach(func() {
+							prEvent.PullRequest.Body = &prBody
+							mockGithub.EXPECT().PR(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+								&gogithub.PullRequest{
+									MergeableState: utils.Ptr(pkggithub.MergeableStateBlocked),
+									Base:           &gogithub.PullRequestBranch{Ref: utils.Ptr("master")},
+								}, nil, nil)
+						})
+
+						It("keeps the label and waits when checks are still running", func(ctx SpecContext) {
+							mockGithub.EXPECT().ListCheckRunsForRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+								Return(&gogithub.ListCheckRunsResults{
+									CheckRuns: []*gogithub.CheckRun{
+										{Name: utils.Ptr("build"), Status: utils.Ptr("in_progress")},
+									},
+								}, nil, nil)
+							mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(),
+								gomock.Cond(func(comment *gogithub.IssueComment) bool {
+									return strings.Contains(comment.GetBody(), "I'll try when all status check succeed")
+								})).Return(nil, nil, nil).Times(1)
+
+							err := svc.OnPullRequest(ctx, &prEvent)
+							Expect(err).NotTo(HaveOccurred())
+						})
+
+						It("cancels the merge and lists the branch requirements when checks are done", func(ctx SpecContext) {
+							mockGithub.EXPECT().ListCheckRunsForRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+								Return(&gogithub.ListCheckRunsResults{
+									CheckRuns: []*gogithub.CheckRun{
+										{Name: utils.Ptr("build"), Status: utils.Ptr(pkggithub.CheckRunStatusCompleted)},
+									},
+								}, nil, nil)
+							mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), "master").
+								Return(nil, nil, gogithub.ErrBranchNotProtected)
+							mockGithub.EXPECT().GetRulesForBranch(gomock.Any(), gomock.Any(), "master").
+								Return(&gogithub.BranchRules{
+									PullRequest: []*gogithub.PullRequestBranchRule{
+										{
+											Parameters: gogithub.PullRequestRuleParameters{
+												RequiredReviewThreadResolution: true,
+												RequiredApprovingReviewCount:   1,
+											},
+										},
+									},
+								}, nil, nil)
+							mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).
+								Return([]*gogithub.Label{mergeGHLabel}, nil, nil).Times(1)
+							mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), gomock.Any(), github.LabelMerge).
+								Return(nil, nil).Times(1)
+							mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(),
+								gomock.Cond(func(comment *gogithub.IssueComment) bool {
+									body := comment.GetBody()
+									return strings.Contains(body, "The master branch requires:") &&
+										strings.Contains(body, "- conversation resolution on all review threads") &&
+										strings.Contains(body, "- 1 approving review")
+								})).Return(nil, nil, nil).Times(1)
+
+							err := svc.OnPullRequest(ctx, &prEvent)
+							Expect(err).NotTo(HaveOccurred())
+						})
+
+						It("falls back to a generic explanation when the branch has no readable rules", func(ctx SpecContext) {
+							mockGithub.EXPECT().ListCheckRunsForRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+								Return(&gogithub.ListCheckRunsResults{
+									CheckRuns: []*gogithub.CheckRun{
+										{Name: utils.Ptr("build"), Status: utils.Ptr(pkggithub.CheckRunStatusCompleted)},
+									},
+								}, nil, nil)
+							mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), "master").
+								Return(nil, nil, errors.New("no access"))
+							mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).
+								Return([]*gogithub.Label{mergeGHLabel}, nil, nil).Times(1)
+							mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), gomock.Any(), github.LabelMerge).
+								Return(nil, nil).Times(1)
+							mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(),
+								gomock.Cond(func(comment *gogithub.IssueComment) bool {
+									return strings.Contains(comment.GetBody(), "an unresolved review conversation")
+								})).Return(nil, nil, nil).Times(1)
+
+							err := svc.OnPullRequest(ctx, &prEvent)
+							Expect(err).NotTo(HaveOccurred())
+						})
+
+						It("removes the label and comments when checking whether checks are done fails", func(ctx SpecContext) {
+							// The first ListCheckRunsForRef expectation (declared in the enclosing
+							// BeforeEach) covers Marvin's own check run; gomock matches expectations
+							// in declaration order, so this second one is the AreAllCheckRunsDone call.
+							mockGithub.EXPECT().ListCheckRunsForRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+								Return(nil, nil, errors.New("some kind of error"))
+							mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).
+								Return([]*gogithub.Label{mergeGHLabel}, nil, nil).Times(1)
+							mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), gomock.Any(), github.LabelMerge).
+								Return(nil, nil).Times(1)
+							mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), gomock.Any(),
+								gomock.Cond(func(comment *gogithub.IssueComment) bool {
+									return strings.Contains(comment.GetBody(), "Unexpected error.")
+								})).Return(nil, nil, nil).Times(1)
+
+							err := svc.OnPullRequest(ctx, &prEvent)
+							Expect(err).To(HaveOccurred())
+						})
 					})
 				})
 			})
