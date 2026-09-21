@@ -48,10 +48,8 @@ type openPRsWithReviewersQuery struct {
 	} `graphql:"repository(owner: $owner, name: $name)"`
 }
 
-// ListOpenPRsWithReviewers returns, for every open PR of the repository the webhook comes from, its
-// size (additions) and the set of logins who have reviewed it or are requested to review it. It
-// replaces what would otherwise be 1 (list PRs) + 3 REST calls per open PR (get PR, list reviews,
-// list requested reviewers) with a single GraphQL round trip.
+// ListOpenPRsWithReviewers returns, for every open PR of the repository, its
+// size (additions) and the set of logins who have reviewed it or are requested to review it.
 func (h *client) ListOpenPRsWithReviewers(ctx context.Context, webhook RepoSenderGetter) ([]OpenPRReviewLoad, error) {
 	var query openPRsWithReviewersQuery
 	variables := map[string]any{
