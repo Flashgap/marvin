@@ -200,6 +200,23 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 		}
 		return true, errs
 	case pkggithub.EventPullRequestActionReadyForReview:
+		if err := s.checkAndFormatPR(ctx, event, action, pr, config, false); err != nil {
+			return true, err
+		}
+
+		// When an AI review is required, check the gate before flipping the label to Ready for
+		// review: otherwise the label flips WIP -> Ready for review -> WIP within the same webhook
+		// handling the moment the gate blocks, which is confusing to watch happen on GitHub.
+		if config.AutoReviewAssign {
+			proceed, err := s.aiReviewGatePassed(ctx, event, pr, config)
+			if err != nil {
+				return true, err
+			}
+			if !proceed {
+				return true, nil
+			}
+		}
+
 		var errs error
 		if err := s.githubService.RemoveLabel(ctx, event, pr.GetNumber(), github.LabelWorkInProgress); err != nil {
 			errs = errors.Join(errs, err)
@@ -210,22 +227,14 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 		if errs != nil {
 			return true, errs
 		}
-		if err := s.checkAndFormatPR(ctx, event, action, pr, config, false); err != nil {
-			return true, err
-		}
+
 		if config.AutoReviewAssign {
-			proceed, err := s.aiReviewGatePassed(ctx, event, pr, config)
+			reviewTeams, err := s.resolveReviewTeams(ctx, event, pr.GetNumber(), config)
 			if err != nil {
 				return true, err
 			}
-			if proceed {
-				reviewTeams, err := s.resolveReviewTeams(ctx, event, pr.GetNumber(), config)
-				if err != nil {
-					return true, err
-				}
-				if _, err := s.githubService.FindAndAssignReviewers(ctx, event, pr, reviewTeams); err != nil {
-					return true, err
-				}
+			if _, err := s.githubService.FindAndAssignReviewers(ctx, event, pr, reviewTeams); err != nil {
+				return true, err
 			}
 		}
 		return true, nil

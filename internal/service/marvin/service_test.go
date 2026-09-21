@@ -1293,7 +1293,7 @@ blabla
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("should block reviewer assignment and revert to WIP when require_ai_review is enabled and no AI review is found", func(ctx SpecContext) {
+			It("should block reviewer assignment and never flip to Ready for review when require_ai_review is enabled and no AI review is found", func(ctx SpecContext) {
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoDraftLabels:  true,
 					AutoReviewAssign: true,
@@ -1312,9 +1312,7 @@ blabla
 				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
 					{Name: github.LabelWorkInProgress},
 					{Name: github.LabelReadyForReview},
-				}, nil, nil).Times(4)
-				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelWorkInProgress).Return(nil, nil).Times(1)
-				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelReadyForReview}).Return(nil, nil, nil).Times(1)
+				}, nil, nil).Times(2)
 				// checkAndFormatPR (hotfix path)
 				mockGithub.EXPECT().CreateCheckRun(gomock.Any(), gomock.Any(), gogithub.CreateCheckRunOptions{
 					Name:       marvin.CheckName,
@@ -1334,7 +1332,9 @@ blabla
 						CommitID: utils.Ptr("mybranch"),
 					},
 				}, nil, nil).Times(1)
-				// gate blocked: revert to WIP and comment
+				// gate blocked: the WIP -> Ready for review swap never happens, only the defensive
+				// revert (Ready for review was never added, so this is a no-op on GitHub's side) and
+				// the explanatory comment.
 				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelReadyForReview).Return(nil, nil).Times(1)
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelWorkInProgress}).Return(nil, nil, nil).Times(1)
 				mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(nil, nil, nil).Times(1)
