@@ -58,8 +58,8 @@ var _ = Describe("FindAndAssignReviewers", func() {
 			Return(&gogithub.Protection{
 				RequiredPullRequestReviews: &gogithub.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: requiredReview},
 			}, nil, nil)
-		mockClient.EXPECT().ListPR(gomock.Any(), event, gomock.Any()).
-			Return([]*gogithub.PullRequest{}, nil, nil)
+		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), event).
+			Return([]pkggithub.OpenPRReviewLoad{}, nil)
 	})
 
 	AfterEach(func() { mockCtrl.Finish() })

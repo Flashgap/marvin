@@ -1220,7 +1220,7 @@ blabla
 				mockGithub.EXPECT().ListReviews(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(nil, nil, nil).Times(1)
 				mockGithub.EXPECT().ListReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(&gogithub.Reviewers{}, nil, nil).Times(1)
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "my-team", gomock.Any()).Return(nil, nil, nil).Times(1)
-				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 
 				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
@@ -1281,7 +1281,7 @@ blabla
 					Return([]*gogithub.User{{Login: utils.Ptr("alice")}}, nil, nil).Times(1)
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "data-team", gomock.Any()).
 					Return([]*gogithub.User{{Login: utils.Ptr("bob")}}, nil, nil).Times(1)
-				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).DoAndReturn(
 					func(_ context.Context, _ pkggithub.RepoSenderGetter, _ int, reviewers []string) (*gogithub.PullRequest, *gogithub.Response, error) {
 						Expect(reviewers).To(ConsistOf("alice", "bob"))
@@ -1397,7 +1397,7 @@ blabla
 				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Return(protection, nil, nil).Times(1)
 				mockGithub.EXPECT().ListReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(&gogithub.Reviewers{}, nil, nil).Times(1)
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "my-team", gomock.Any()).Return(nil, nil, nil).Times(1)
-				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 
 				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
@@ -1456,7 +1456,7 @@ blabla
 				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Return(protection, nil, nil).Times(1)
 				mockGithub.EXPECT().ListReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(&gogithub.Reviewers{}, nil, nil).Times(1)
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "my-team", gomock.Any()).Return(nil, nil, nil).Times(1)
-				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 
 				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
@@ -1544,7 +1544,7 @@ blabla
 				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
-				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+				mockGithub.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Times(0)
 
 				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
@@ -1594,7 +1594,7 @@ blabla
 				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
-				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+				mockGithub.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Times(0)
 
 				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)
@@ -1798,7 +1798,7 @@ blabla
 				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
-				mockGithub.EXPECT().ListPR(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+				mockGithub.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Times(0)
 
 				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
 				err := svc.OnPullRequest(ctx, &prEvent)

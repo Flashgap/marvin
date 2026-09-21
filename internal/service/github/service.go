@@ -236,33 +236,18 @@ func (s *service) RankUsersByReviewLoad(ctx context.Context, webhook github.Repo
 		scores[userLogin] = 0
 	}
 
-	prs, _, err := s.ListPR(ctx, webhook, &gogithub.PullRequestListOptions{
-		State:       "open",
-		ListOptions: gogithub.ListOptions{PerPage: github.MaxPerPage},
-	})
+	prs, err := s.ListOpenPRsWithReviewers(ctx, webhook)
 	if err != nil {
-		return nil, fmt.Errorf("error listing pull requests: %w", err)
+		return nil, fmt.Errorf("error listing open pull requests with reviewers: %w", err)
 	}
 
 	log.Infof("got %d opened PR's", len(prs))
 
 	for _, pr := range prs {
-		prNumber := pr.GetNumber()
-		// Fetch extra information for the PR
-		pr, _, err = s.PR(ctx, webhook, prNumber)
-		if err != nil {
-			return nil, fmt.Errorf("error getting PR: %w", err)
-		}
-
-		reviewers, err := s.ListAllReviewers(ctx, webhook, prNumber)
-		if err != nil {
-			return nil, fmt.Errorf("error listing reviewers: %w", err)
-		}
-
-		for reviewer := range reviewers {
-			log.Infof("%s is reviewing PR #%d", reviewer, prNumber)
+		for reviewer := range pr.Reviewers {
+			log.Infof("%s is reviewing PR #%d", reviewer, pr.Number)
 			if _, ok := scores[reviewer]; ok {
-				scores[reviewer] += pr.GetAdditions()
+				scores[reviewer] += pr.Additions
 			}
 		}
 	}

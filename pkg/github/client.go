@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/go-github/v90/github"
+	"github.com/shurcooL/graphql"
 )
 
 // RepoSenderGetter is the missing interface from GitHub sdk. It allows us to get data on all webhook types.
@@ -12,12 +13,18 @@ type RepoSenderGetter interface {
 	GetSender() *github.User
 }
 
+const graphQLAPIURL = "https://api.github.com/graphql"
+
 type client struct {
 	*github.Client
+	graphql *graphql.Client
 }
 
 func NewClient(ghClient *github.Client) Client {
-	return &client{Client: ghClient}
+	return &client{
+		Client:  ghClient,
+		graphql: graphql.NewClient(graphQLAPIURL, ghClient.Client()),
+	}
 }
 
 func (h *client) ListLabels(ctx context.Context, webhook RepoSenderGetter, opts *github.ListOptions) ([]*github.Label, *github.Response, error) {

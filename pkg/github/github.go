@@ -22,6 +22,7 @@ type Client interface {
 	CreateCheckRun(ctx context.Context, webhook RepoSenderGetter, opts github.CreateCheckRunOptions) (*github.CheckRun, *github.Response, error)
 	RequestReviewers(ctx context.Context, webhook RepoSenderGetter, prNumber int, reviewers []string) (*github.PullRequest, *github.Response, error)
 	ListPR(ctx context.Context, webhook RepoSenderGetter, opts *github.PullRequestListOptions) ([]*github.PullRequest, *github.Response, error)
+	ListOpenPRsWithReviewers(ctx context.Context, webhook RepoSenderGetter) ([]OpenPRReviewLoad, error)
 	ListPRFiles(ctx context.Context, webhook RepoSenderGetter, prNumber int, opts *github.ListOptions) ([]*github.CommitFile, *github.Response, error)
 	ListPRCommits(ctx context.Context, webhook RepoSenderGetter, prNumber int, opts *github.ListOptions) ([]*github.RepositoryCommit, *github.Response, error)
 	ListCheckSuites(ctx context.Context, prEvent *github.PullRequestEvent, opts *github.ListCheckSuiteOptions) (*github.ListCheckSuiteResults, *github.Response, error)

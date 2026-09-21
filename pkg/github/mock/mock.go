@@ -330,6 +330,21 @@ func (mr *MockClientMockRecorder) ListLabels(ctx, webhook, opts any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListLabels", reflect.TypeOf((*MockClient)(nil).ListLabels), ctx, webhook, opts)
 }
 
+// ListOpenPRsWithReviewers mocks base method.
+func (m *MockClient) ListOpenPRsWithReviewers(ctx context.Context, webhook github.RepoSenderGetter) ([]github.OpenPRReviewLoad, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOpenPRsWithReviewers", ctx, webhook)
+	ret0, _ := ret[0].([]github.OpenPRReviewLoad)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOpenPRsWithReviewers indicates an expected call of ListOpenPRsWithReviewers.
+func (mr *MockClientMockRecorder) ListOpenPRsWithReviewers(ctx, webhook any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOpenPRsWithReviewers", reflect.TypeOf((*MockClient)(nil).ListOpenPRsWithReviewers), ctx, webhook)
+}
+
 // ListPR mocks base method.
 func (m *MockClient) ListPR(ctx context.Context, webhook github.RepoSenderGetter, opts *github0.PullRequestListOptions) ([]*github0.PullRequest, *github0.Response, error) {
 	m.ctrl.T.Helper()
