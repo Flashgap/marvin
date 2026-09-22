@@ -13,6 +13,7 @@ import (
 	"github.com/Flashgap/marvin/internal/middlewares"
 	"github.com/Flashgap/marvin/internal/service/github"
 	"github.com/Flashgap/marvin/internal/service/jira"
+	"github.com/Flashgap/marvin/internal/service/marvin/prstate"
 	slacksvc "github.com/Flashgap/marvin/internal/service/slack"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 	"github.com/Flashgap/marvin/pkg/linear"
@@ -189,16 +190,20 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 		if !pr.GetDraft() {
 			return false, nil
 		}
-		return true, s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelWorkInProgress)
+		next, ok := prstate.Transition(prstate.None, prstate.OpenedDraft, prstate.Guards{})
+		if !ok {
+			return true, nil
+		}
+		return true, s.enterState(ctx, event, pr.GetNumber(), next)
 	case pkggithub.EventPullRequestActionConvertedToDraft:
-		var errs error
-		if err := s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelWorkInProgress); err != nil {
-			errs = errors.Join(errs, err)
+		// A converted-to-draft PR's prior lifecycle state isn't reliably knowable from the webhook
+		// payload; ReadyForReview is the one AutoDraftLabels itself can put a PR in, so it's the
+		// only label this ever needs to clear.
+		next, ok := prstate.Transition(prstate.ReadyForReview, prstate.ConvertedToDraft, prstate.Guards{})
+		if !ok {
+			return true, nil
 		}
-		if err := s.githubService.RemoveLabel(ctx, event, pr.GetNumber(), github.LabelReadyForReview); err != nil {
-			errs = errors.Join(errs, err)
-		}
-		return true, errs
+		return true, s.enterState(ctx, event, pr.GetNumber(), next, prstate.ReadyForReview)
 	case pkggithub.EventPullRequestActionReadyForReview:
 		if err := s.checkAndFormatPR(ctx, event, action, pr, config, false); err != nil {
 			return true, err
@@ -207,25 +212,31 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 		// When an AI review is required, check the gate before flipping the label to Ready for
 		// review: otherwise the label flips WIP -> Ready for review -> WIP within the same webhook
 		// handling the moment the gate blocks, which is confusing to watch happen on GitHub.
+		allowed := true
 		if config.AutoReviewAssign {
-			proceed, err := s.aiReviewGatePassed(ctx, event, pr, config)
+			var err error
+			allowed, err = s.aiReviewGateOK(ctx, event, pr, config)
 			if err != nil {
 				return true, err
 			}
-			if !proceed {
-				return true, nil
-			}
 		}
 
-		var errs error
-		if err := s.githubService.RemoveLabel(ctx, event, pr.GetNumber(), github.LabelWorkInProgress); err != nil {
-			errs = errors.Join(errs, err)
+		next, ok := prstate.Transition(prstate.WorkInProgress, prstate.ReadyRequested, prstate.Guards{Allowed: allowed})
+		if !ok {
+			return true, nil
 		}
-		if err := s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelReadyForReview); err != nil {
-			errs = errors.Join(errs, err)
+
+		if next == prstate.WorkInProgress {
+			// Gate blocked: revert to WIP (undoing nothing, since the Ready label was never
+			// applied yet) and tell the author why, instead of assigning reviewers.
+			if err := s.enterState(ctx, event, pr.GetNumber(), next, prstate.ReadyForReview); err != nil {
+				return true, err
+			}
+			return true, s.commentAIReviewRequired(ctx, event, pr)
 		}
-		if errs != nil {
-			return true, errs
+
+		if err := s.enterState(ctx, event, pr.GetNumber(), next, prstate.WorkInProgress); err != nil {
+			return true, err
 		}
 
 		if config.AutoReviewAssign {
@@ -326,8 +337,14 @@ func (s *service) OnPullRequestReview(ctx context.Context, event *gogithub.PullR
 				if err := s.notifyChangesRequestedBySlack(ctx, event.GetSender().GetLogin(), pr, pr.GetUser().GetLogin(), config); err != nil {
 					errs = errors.Join(errs, err)
 				}
-				if err := s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelChangesRequired); err != nil {
-					errs = errors.Join(errs, err)
+
+				// The prior lifecycle state (ReadyForReview or Approved) isn't reliably knowable
+				// from this event's sparse PR payload, so both are cleared unconditionally —
+				// same defensive pattern as the Approved branch below.
+				if next, ok := prstate.Transition(prstate.ReadyForReview, prstate.ReviewChangesRequested, prstate.Guards{}); ok {
+					if err := s.enterState(ctx, event, pr.GetNumber(), next, prstate.ReadyForReview, prstate.Approved); err != nil {
+						errs = errors.Join(errs, err)
+					}
 				}
 
 				return errs
@@ -343,16 +360,13 @@ func (s *service) OnPullRequestReview(ctx context.Context, event *gogithub.PullR
 				}
 
 				if config.AutoApprove {
-					if err = s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelApproved); err != nil {
-						return fmt.Errorf("error adding approved label: %w", err)
-					}
-
-					if err = s.githubService.RemoveLabel(ctx, event, pr.GetNumber(), github.LabelReadyForReview); err != nil {
-						return fmt.Errorf("error removing ready for review label: %w", err)
-					}
-
-					if err = s.githubService.RemoveLabel(ctx, event, pr.GetNumber(), github.LabelChangesRequired); err != nil {
-						return fmt.Errorf("error removing changes required label: %w", err)
+					// The prior lifecycle state (ReadyForReview or ChangesRequired) isn't
+					// reliably knowable from this event's sparse PR payload, so both are
+					// cleared unconditionally.
+					if next, ok := prstate.Transition(prstate.ReadyForReview, prstate.ReviewApproved, prstate.Guards{Allowed: true}); ok {
+						if err = s.enterState(ctx, event, pr.GetNumber(), next, prstate.ReadyForReview, prstate.ChangesRequired); err != nil {
+							return fmt.Errorf("error applying approved state: %w", err)
+						}
 					}
 				}
 
@@ -492,16 +506,16 @@ func (s *service) checkAndFormatPR(ctx context.Context, webhook pkggithub.RepoSe
 	return errs
 }
 
-// aiReviewGatePassed returns true if reviewer assignment should proceed. When RequireAIReview is
+// aiReviewGateOK returns true if reviewer assignment should proceed. When RequireAIReview is
 // disabled it always returns true. When enabled, it checks whether a known AI reviewer has already
-// reviewed the PR's current HEAD commit; if not, it reverts the PR to Work in progress, removes the
-// Ready for review label, and comments explaining why, then returns false.
-func (s *service) aiReviewGatePassed(ctx context.Context, webhook pkggithub.RepoSenderGetter, pr *gogithub.PullRequest, config *GitHubRepositoryConfiguration) (bool, error) {
+// reviewed the PR's current HEAD commit. It has no side effects: the caller is responsible for
+// reacting (via prstate.Transition and commentAIReviewRequired) when the gate blocks.
+func (s *service) aiReviewGateOK(ctx context.Context, webhook pkggithub.RepoSenderGetter, pr *gogithub.PullRequest, config *GitHubRepositoryConfiguration) (bool, error) {
 	if !config.RequireAIReview {
 		return true, nil
 	}
 
-	log := middlewares.LoggerFromGHContext(ctx, "marvin.aiReviewGatePassed")
+	log := middlewares.LoggerFromGHContext(ctx, "marvin.aiReviewGateOK")
 
 	reviewed, err := s.githubService.HasAIReviewed(ctx, webhook, pr, config.AIReviewerLogins)
 	if err != nil {
@@ -522,29 +536,23 @@ func (s *service) aiReviewGatePassed(ctx context.Context, webhook pkggithub.Repo
 	}
 
 	log.Info("require_ai_review is enabled and no AI review was found on the current commit, blocking reviewer assignment")
+	return false, nil
+}
 
-	// Tag whoever triggered this (they're the one who just tried to move the PR to ready), unless
-	// that's a bot/automation account that can't act on an @-mention, in which case fall back to
-	// the PR author.
+// commentAIReviewRequired tells the PR why it was bounced back to Work in progress by the AI
+// review gate. Tags whoever triggered the event (they're the one who just tried to move the PR to
+// ready), unless that's a bot/automation account that can't act on an @-mention, in which case it
+// falls back to the PR author.
+func (s *service) commentAIReviewRequired(ctx context.Context, webhook pkggithub.RepoSenderGetter, pr *gogithub.PullRequest) error {
 	notifyLogin := webhook.GetSender().GetLogin()
 	if webhook.GetSender().GetType() == "Bot" {
 		notifyLogin = pr.GetUser().GetLogin()
 	}
 
-	var errs error
-	if err := s.githubService.RemoveLabel(ctx, webhook, pr.GetNumber(), github.LabelReadyForReview); err != nil {
-		errs = errors.Join(errs, err)
-	}
-	if err := s.githubService.AddLabel(ctx, webhook, pr.GetNumber(), github.LabelWorkInProgress); err != nil {
-		errs = errors.Join(errs, err)
-	}
-	if _, _, err := s.githubService.CreatePRComment(ctx, webhook, pr.GetNumber(), &gogithub.IssueComment{
+	_, _, err := s.githubService.CreatePRComment(ctx, webhook, pr.GetNumber(), &gogithub.IssueComment{
 		Body: utils.Ptr(fmt.Sprintf(commentRequireAIReview, notifyLogin)),
-	}); err != nil {
-		errs = errors.Join(errs, err)
-	}
-
-	return false, errs
+	})
+	return err
 }
 
 func (s *service) labelActions(ctx context.Context, webhook pkggithub.RepoSenderGetter, pr *gogithub.PullRequest, addedLabel *gogithub.Label, config *GitHubRepositoryConfiguration) error {
@@ -555,41 +563,56 @@ func (s *service) labelActions(ctx context.Context, webhook pkggithub.RepoSender
 
 	switch {
 	case pkggithub.IsLabel(addedLabel, github.LabelReadyForReview):
+		// The Ready for review label is already on the PR by the time this runs (GitHub applied
+		// it before sending the webhook); this only decides whether to accept or bounce it back.
 		hasChangesRequired := pkggithub.IsLabelInList(pr.Labels, github.LabelChangesRequired)
 
 		if config.AutoReviewAssign {
-			proceed, err := s.aiReviewGatePassed(ctx, webhook, pr, config)
+			allowed, err := s.aiReviewGateOK(ctx, webhook, pr, config)
 			if err != nil {
 				return err
 			}
-			if proceed {
-				if config.AutoChangesRequired && hasChangesRequired {
-					if err := s.githubService.RemoveLabel(ctx, webhook, pr.GetNumber(), github.LabelChangesRequired); err != nil {
-						return fmt.Errorf("error removing changes required label: %w", err)
-					}
-					if _, err := s.githubService.ReRequestChangesRequested(ctx, webhook, pr, config.AIReviewerLogins); err != nil {
-						return fmt.Errorf("error re-requesting reviewers: %w", err)
-					}
-				}
 
-				reviewTeams, err := s.resolveReviewTeams(ctx, webhook, pr.GetNumber(), config)
-				if err != nil {
+			next, ok := prstate.Transition(prstate.WorkInProgress, prstate.ReadyRequested, prstate.Guards{Allowed: allowed})
+			if !ok {
+				return nil
+			}
+
+			if next == prstate.WorkInProgress {
+				// Gate blocked: revert to WIP and tell the author why, instead of assigning
+				// reviewers. The Ready label just applied is removed again.
+				if err := s.enterState(ctx, webhook, pr.GetNumber(), next, prstate.ReadyForReview); err != nil {
 					return err
 				}
+				return s.commentAIReviewRequired(ctx, webhook, pr)
+			}
 
-				success, err := s.githubService.FindAndAssignReviewers(ctx, webhook, pr, reviewTeams)
-				if err != nil {
-					return err
+			if config.AutoChangesRequired && hasChangesRequired {
+				if err := s.githubService.RemoveLabel(ctx, webhook, pr.GetNumber(), github.LabelChangesRequired); err != nil {
+					return fmt.Errorf("error removing changes required label: %w", err)
 				}
-				if !success {
-					log.Info("didn't get enough reviewers to request")
-					if _, _, err := s.githubService.CreatePRComment(ctx, webhook, pr.GetNumber(), &gogithub.IssueComment{
-						Body: utils.Ptr(
-							fmt.Sprintf(commentNotEnoughReviewers, webhook.GetSender().GetLogin()),
-						),
-					}); err != nil {
-						return fmt.Errorf("cannot add comment to ask for reviewers: %w", err)
-					}
+				if _, err := s.githubService.ReRequestChangesRequested(ctx, webhook, pr, config.AIReviewerLogins); err != nil {
+					return fmt.Errorf("error re-requesting reviewers: %w", err)
+				}
+			}
+
+			reviewTeams, err := s.resolveReviewTeams(ctx, webhook, pr.GetNumber(), config)
+			if err != nil {
+				return err
+			}
+
+			success, err := s.githubService.FindAndAssignReviewers(ctx, webhook, pr, reviewTeams)
+			if err != nil {
+				return err
+			}
+			if !success {
+				log.Info("didn't get enough reviewers to request")
+				if _, _, err := s.githubService.CreatePRComment(ctx, webhook, pr.GetNumber(), &gogithub.IssueComment{
+					Body: utils.Ptr(
+						fmt.Sprintf(commentNotEnoughReviewers, webhook.GetSender().GetLogin()),
+					),
+				}); err != nil {
+					return fmt.Errorf("cannot add comment to ask for reviewers: %w", err)
 				}
 			}
 		} else if config.AutoChangesRequired && hasChangesRequired {
