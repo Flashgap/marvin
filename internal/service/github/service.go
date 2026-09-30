@@ -190,55 +190,115 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 	if err != nil {
 		return false, fmt.Errorf("error getting required reviewer count: %w", err)
 	}
-	if len(consideredReviewers) >= requiredReviewers {
-		log.Infof("PR has enough reviewers: %d / %d", len(consideredReviewers), requiredReviewers)
-		return true, nil
-	}
 
-	nbReviewersToFind := requiredReviewers - len(consideredReviewers)
-	log.Infof("PR is ready to be reviewed but doesn't have enough reviewers: %d needs to request: %d reviewers", len(consideredReviewers), requiredReviewers)
-
-	rankedDevs, err := s.RankUsersByReviewLoad(ctx, webhook, prNumber, teamMembersLogins)
-
-	if err != nil {
-		return false, fmt.Errorf("error ranking devs by review load: %w", err)
-	}
-
-	addedReviewers := make([]string, 0, nbReviewersToFind)
-	for _, dev := range rankedDevs {
-		if _, ok := consideredReviewers[dev]; !ok && dev != prOwner {
-			addedReviewers = append(addedReviewers, dev)
+	// Open PRs are needed both to spot the parent of a stacked PR and to rank by review load: fetch them at most once
+	var openPRs []github.OpenPRReviewLoad
+	openPRsLoaded := false
+	loadOpenPRs := func() ([]github.OpenPRReviewLoad, error) {
+		if !openPRsLoaded {
+			prs, err := s.ListOpenPRsWithReviewers(ctx, webhook)
+			if err != nil {
+				return nil, fmt.Errorf("error listing open pull requests with reviewers: %w", err)
+			}
+			openPRs, openPRsLoaded = prs, true
 		}
+		return openPRs, nil
+	}
 
-		if len(addedReviewers) >= nbReviewersToFind {
+	// In a stack, nobody can meaningfully review a PR without the context of the PR below it,
+	// so the parent's reviewers come first, whatever their team or current load.
+	inheritedReviewers := make(map[string]struct{})
+	if baseRef := pr.GetBase().GetRef(); baseRef != "" && baseRef != webhook.GetRepo().GetDefaultBranch() {
+		prs, err := loadOpenPRs()
+		if err != nil {
+			return false, err
+		}
+		for _, candidate := range prs {
+			if candidate.HeadRef != baseRef {
+				continue
+			}
+			for login := range candidate.Reviewers {
+				if login != prOwner {
+					inheritedReviewers[login] = struct{}{}
+				}
+			}
+			log.Infof("PR is stacked on #%d, inheriting its reviewers: %v", candidate.Number, inheritedReviewers)
 			break
 		}
 	}
 
-	if len(addedReviewers) > 0 {
-		if _, _, err = s.RequestReviewers(ctx, webhook, prNumber, addedReviewers); err != nil {
+	covered := make(map[string]struct{}, len(consideredReviewers)+len(inheritedReviewers))
+	for login := range consideredReviewers {
+		covered[login] = struct{}{}
+	}
+	toRequest := make([]string, 0, requiredReviewers)
+	for login := range inheritedReviewers {
+		covered[login] = struct{}{}
+		if _, alreadyReviewer := allReviewers[login]; !alreadyReviewer {
+			toRequest = append(toRequest, login)
+		}
+	}
+
+	if len(covered) >= requiredReviewers {
+		log.Infof("PR has enough reviewers: %d / %d", len(covered), requiredReviewers)
+		if len(toRequest) > 0 {
+			if _, _, err = s.RequestReviewers(ctx, webhook, prNumber, toRequest); err != nil {
+				return false, fmt.Errorf("error requesting reviewers: %w", err)
+			}
+			log.Infof("inherited reviewers requested")
+		}
+		return true, nil
+	}
+
+	nbReviewersToFind := requiredReviewers - len(covered)
+	log.Infof("PR is ready to be reviewed but doesn't have enough reviewers: %d needs to request: %d reviewers", len(covered), requiredReviewers)
+
+	prs, err := loadOpenPRs()
+	if err != nil {
+		return false, err
+	}
+	rankedDevs := rankByReviewLoad(ctx, prs, teamMembersLogins)
+
+	addedCount := 0
+	for _, dev := range rankedDevs {
+		if _, ok := covered[dev]; !ok && dev != prOwner {
+			toRequest = append(toRequest, dev)
+			addedCount++
+		}
+
+		if addedCount >= nbReviewersToFind {
+			break
+		}
+	}
+
+	if len(toRequest) > 0 {
+		if _, _, err = s.RequestReviewers(ctx, webhook, prNumber, toRequest); err != nil {
 			return false, fmt.Errorf("error requesting reviewers: %w", err)
 		}
 		log.Infof("reviewers requested")
 	}
 
-	return len(addedReviewers) >= nbReviewersToFind, nil
+	return addedCount >= nbReviewersToFind, nil
 }
 
 // RankUsersByReviewLoad ranks all members of the given team by current review load.
 // To do so, we calculate scores by looking at every open PR where a dev has either reviewed or is requested to review,
 // and tally the number of additions in these PRs.
 func (s *service) RankUsersByReviewLoad(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, usersLogin []string) ([]string, error) {
+	prs, err := s.ListOpenPRsWithReviewers(ctx, webhook)
+	if err != nil {
+		return nil, fmt.Errorf("error listing open pull requests with reviewers: %w", err)
+	}
+
+	return rankByReviewLoad(ctx, prs, usersLogin), nil
+}
+
+func rankByReviewLoad(ctx context.Context, prs []github.OpenPRReviewLoad, usersLogin []string) []string {
 	log := middlewares.LoggerFromGHContext(ctx, "github.RankUsersByReviewLoad")
 
 	scores := make(map[string]int, len(usersLogin))
 	for _, userLogin := range usersLogin {
 		scores[userLogin] = 0
-	}
-
-	prs, err := s.ListOpenPRsWithReviewers(ctx, webhook)
-	if err != nil {
-		return nil, fmt.Errorf("error listing open pull requests with reviewers: %w", err)
 	}
 
 	log.Infof("got %d opened PR's", len(prs))
@@ -272,7 +332,7 @@ func (s *service) RankUsersByReviewLoad(ctx context.Context, webhook github.Repo
 		rankedDevs[i] = devScores[i].dev
 	}
 
-	return rankedDevs, nil
+	return rankedDevs
 }
 
 // RemoveLabel attempts to match the label given with existing labels in the repository by case-insensitive prefix.

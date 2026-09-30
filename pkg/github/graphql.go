@@ -7,10 +7,11 @@ import (
 	"github.com/shurcooL/graphql"
 )
 
-// OpenPRReviewLoad holds, for one open pull request, its size and the logins of everyone who has
+// OpenPRReviewLoad holds, for one open pull request, its head branch, its size and the logins of everyone who has
 // either reviewed it or is currently requested to review it.
 type OpenPRReviewLoad struct {
 	Number    int
+	HeadRef   string
 	Additions int
 	Reviewers map[string]struct{}
 }

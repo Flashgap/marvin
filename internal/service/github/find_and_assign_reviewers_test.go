@@ -27,6 +27,7 @@ var _ = Describe("FindAndAssignReviewers", func() {
 		svc        svcgithub.Service
 		pr         *gogithub.PullRequest
 		event      *gogithub.PullRequestEvent
+		openPRs    []pkggithub.OpenPRReviewLoad
 	)
 
 	member := func(login string) *gogithub.User {
@@ -58,8 +59,11 @@ var _ = Describe("FindAndAssignReviewers", func() {
 			Return(&gogithub.Protection{
 				RequiredPullRequestReviews: &gogithub.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: requiredReview},
 			}, nil, nil)
+		openPRs = []pkggithub.OpenPRReviewLoad{}
 		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), event).
-			Return([]pkggithub.OpenPRReviewLoad{}, nil)
+			DoAndReturn(func(context.Context, pkggithub.RepoSenderGetter) ([]pkggithub.OpenPRReviewLoad, error) {
+				return openPRs, nil
+			})
 	})
 
 	AfterEach(func() { mockCtrl.Finish() })
@@ -78,6 +82,74 @@ var _ = Describe("FindAndAssignReviewers", func() {
 				})
 
 			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team", "data-team"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+		})
+	})
+
+	When("the PR is stacked on top of another open PR", func() {
+		parentReviewers := func(logins ...string) map[string]struct{} {
+			set := make(map[string]struct{}, len(logins))
+			for _, login := range logins {
+				set[login] = struct{}{}
+			}
+			return set
+		}
+
+		BeforeEach(func() {
+			pr.Base = &gogithub.PullRequestBranch{Ref: utils.Ptr("alice/part-1")}
+			mockClient.EXPECT().ListTeamMembers(gomock.Any(), event, "backend-team", gomock.Any()).
+				Return([]*gogithub.User{member("alice"), member("bob"), member("carol"), member("dave"), member("frank")}, nil, nil)
+		})
+
+		It("requests the reviewers of the parent PR first, then fills the rest by review load", func(ctx SpecContext) {
+			openPRs = []pkggithub.OpenPRReviewLoad{
+				{Number: 70, HeadRef: "alice/part-1", Additions: 10, Reviewers: parentReviewers("bob", "erin")},
+				{Number: 71, HeadRef: "unrelated", Additions: 500, Reviewers: parentReviewers("carol", "dave", "frank")},
+			}
+
+			mockClient.EXPECT().RequestReviewers(gomock.Any(), event, prNumber, gomock.Any()).
+				DoAndReturn(func(_ context.Context, _ pkggithub.RepoSenderGetter, _ int, reviewers []string) (*gogithub.PullRequest, *gogithub.Response, error) {
+					// bob and erin inherited (erin is not in the team), alice fills the last slot: lightest load
+					Expect(reviewers).To(ConsistOf("bob", "erin", "alice"))
+					return pr, nil, nil
+				})
+
+			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+		})
+
+		It("never requests the PR author, even if they review the parent PR", func(ctx SpecContext) {
+			openPRs = []pkggithub.OpenPRReviewLoad{
+				{Number: 70, HeadRef: "alice/part-1", Additions: 1000, Reviewers: parentReviewers("dave", "bob")},
+				{Number: 71, HeadRef: "unrelated", Additions: 500, Reviewers: parentReviewers("carol")},
+				{Number: 72, HeadRef: "unrelated-2", Additions: 900, Reviewers: parentReviewers("frank")},
+			}
+
+			mockClient.EXPECT().RequestReviewers(gomock.Any(), event, prNumber, gomock.Any()).
+				DoAndReturn(func(_ context.Context, _ pkggithub.RepoSenderGetter, _ int, reviewers []string) (*gogithub.PullRequest, *gogithub.Response, error) {
+					Expect(reviewers).To(ConsistOf("bob", "alice", "carol"))
+					return pr, nil, nil
+				})
+
+			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+		})
+
+		It("behaves as usual when no open PR matches the base branch", func(ctx SpecContext) {
+			openPRs = []pkggithub.OpenPRReviewLoad{
+				{Number: 71, HeadRef: "unrelated", Additions: 500, Reviewers: parentReviewers("frank")},
+			}
+
+			mockClient.EXPECT().RequestReviewers(gomock.Any(), event, prNumber, gomock.Any()).
+				DoAndReturn(func(_ context.Context, _ pkggithub.RepoSenderGetter, _ int, reviewers []string) (*gogithub.PullRequest, *gogithub.Response, error) {
+					Expect(reviewers).To(ConsistOf("alice", "bob", "carol"))
+					return pr, nil, nil
+				})
+
+			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ok).To(BeTrue())
 		})
