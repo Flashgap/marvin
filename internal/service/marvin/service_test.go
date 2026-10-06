@@ -1293,6 +1293,54 @@ blabla
 				Expect(err).ToNot(HaveOccurred())
 			})
 
+			It("should keep the reviewer of the layer below on a stacked PR when sticky_stack_reviewers is enabled", func(ctx SpecContext) {
+				cfg := marvin.GitHubRepositoryConfiguration{
+					AutoDraftLabels:      true,
+					AutoReviewAssign:     true,
+					StickyStackReviewers: true,
+					DefaultTeam:          "my-team",
+				}
+				cfgs := marvin.StaticRepoConfigProvider{
+					repoName: &cfg,
+				}
+
+				prEvent := getDraftEvent(pkggithub.EventPullRequestActionReadyForReview, false)
+				prEvent.PullRequest.Labels = []*gogithub.Label{
+					{Name: github.LabelHotfix},
+				}
+				prEvent.PullRequest.Stack = &gogithub.PullRequestStack{Number: utils.Ptr(15), Position: utils.Ptr(2), Size: utils.Ptr(2)}
+
+				protection := &gogithub.Protection{
+					RequiredPullRequestReviews: &gogithub.PullRequestReviewsEnforcement{
+						RequiredApprovingReviewCount: 1,
+					},
+				}
+
+				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
+					{Name: github.LabelWorkInProgress},
+					{Name: github.LabelReadyForReview},
+				}, nil, nil).Times(2)
+				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), gomock.Any(), prNumber, github.LabelWorkInProgress).Return(nil, nil).Times(1)
+				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelReadyForReview}).Return(nil, nil, nil).Times(1)
+				// checkAndFormatPR (hotfix path)
+				mockGithub.EXPECT().CreateCheckRun(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+				// FindAndAssignReviewers: bob reviews the layer below, so he is kept without ranking anybody by load
+				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Return(protection, nil, nil).Times(1)
+				mockGithub.EXPECT().ListReviews(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(nil, nil, nil).Times(1)
+				mockGithub.EXPECT().ListReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(&gogithub.Reviewers{}, nil, nil).Times(1)
+				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "my-team", gomock.Any()).
+					Return([]*gogithub.User{{Login: utils.Ptr("alice")}, {Login: utils.Ptr("bob")}}, nil, nil).Times(1)
+				mockGithub.EXPECT().ListStackLayers(gomock.Any(), gomock.Any(), prNumber).Return([]pkggithub.StackLayer{
+					{Number: prNumber - 1, Position: 1, Reviewers: []string{"bob"}},
+					{Number: prNumber, Position: 2},
+				}, nil).Times(1)
+				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), prNumber, []string{"bob"}).Return(nil, nil, nil).Times(1)
+
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				err := svc.OnPullRequest(ctx, &prEvent)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
 			It("should block reviewer assignment and never flip to Ready for review when require_ai_review is enabled and no AI review is found", func(ctx SpecContext) {
 				cfg := marvin.GitHubRepositoryConfiguration{
 					AutoDraftLabels:  true,

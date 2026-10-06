@@ -233,7 +233,7 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 			if err != nil {
 				return true, err
 			}
-			if _, err := s.githubService.FindAndAssignReviewers(ctx, event, pr, reviewTeams); err != nil {
+			if _, err := s.githubService.FindAndAssignReviewers(ctx, event, pr, reviewTeams, config.StickyStackReviewers); err != nil {
 				return true, err
 			}
 		}
@@ -577,7 +577,7 @@ func (s *service) labelActions(ctx context.Context, webhook pkggithub.RepoSender
 					return err
 				}
 
-				success, err := s.githubService.FindAndAssignReviewers(ctx, webhook, pr, reviewTeams)
+				success, err := s.githubService.FindAndAssignReviewers(ctx, webhook, pr, reviewTeams, config.StickyStackReviewers)
 				if err != nil {
 					return err
 				}
