@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/shurcooL/graphql"
 )
@@ -126,7 +127,7 @@ type stackLayersQuery struct {
 }
 
 // ListStackLayers returns every layer of the stack the given PR belongs to, or nil when it isn't stacked.
-// Each layer's reviewers are deduped, listed in order of first appearance: reviews first, then pending requests.
+// Each layer's reviewers are deduped and sorted.
 func (h *client) ListStackLayers(ctx context.Context, webhook RepoSenderGetter, prNumber int) ([]StackLayer, error) {
 	var query stackLayersQuery
 	variables := map[string]any{
@@ -146,21 +147,19 @@ func (h *client) ListStackLayers(ctx context.Context, webhook RepoSenderGetter, 
 
 	layers := make([]StackLayer, 0, len(stack.Entries.Nodes))
 	for _, entry := range stack.Entries.Nodes {
-		seen := make(map[string]struct{})
 		reviewers := make([]string, 0, len(entry.PullRequest.Reviews.Nodes)+len(entry.PullRequest.ReviewRequests.Nodes))
-		addReviewer := func(login string) {
-			if _, ok := seen[login]; login == "" || ok {
-				return
-			}
-			seen[login] = struct{}{}
-			reviewers = append(reviewers, login)
-		}
 		for _, review := range entry.PullRequest.Reviews.Nodes {
-			addReviewer(string(review.Author.Login))
+			if login := string(review.Author.Login); login != "" {
+				reviewers = append(reviewers, login)
+			}
 		}
 		for _, reviewRequest := range entry.PullRequest.ReviewRequests.Nodes {
-			addReviewer(string(reviewRequest.RequestedReviewer.Login))
+			if login := string(reviewRequest.RequestedReviewer.Login); login != "" {
+				reviewers = append(reviewers, login)
+			}
 		}
+		slices.Sort(reviewers)
+		reviewers = slices.Compact(reviewers)
 
 		layers = append(layers, StackLayer{
 			Number:    int(entry.PullRequest.Number),

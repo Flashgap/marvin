@@ -3,7 +3,6 @@ package github
 import (
 	"context"
 	"slices"
-	"sort"
 
 	gogithub "github.com/google/go-github/v90/github"
 
@@ -32,8 +31,7 @@ func (s *service) stackReviewers(ctx context.Context, webhook github.RepoSenderG
 }
 
 // nearestLayerReviewers walks the stack away from prNumber's layer, first down towards the bottom then up,
-// and returns the eligible reviewers of the first layer that has any, sorted, along with that layer's
-// PR number. It returns nil when prNumber isn't part of layers or no other layer has an eligible reviewer.
+// and returns the eligible reviewers of the first layer that has any, along with that layer's PR number. It returns nil when prNumber isn't part of layers or no other layer has an eligible reviewer.
 func nearestLayerReviewers(layers []github.StackLayer, prNumber int, eligible func(login string) bool) ([]string, int) {
 	byPosition := make(map[int]github.StackLayer, len(layers))
 	current, top := 0, 0
@@ -58,9 +56,13 @@ func nearestLayerReviewers(layers []github.StackLayer, prNumber int, eligible fu
 
 	for _, position := range order {
 		layer := byPosition[position]
-		reviewers := slices.DeleteFunc(slices.Clone(layer.Reviewers), func(login string) bool { return !eligible(login) })
+		var reviewers []string
+		for _, login := range layer.Reviewers {
+			if eligible(login) {
+				reviewers = append(reviewers, login)
+			}
+		}
 		if len(reviewers) > 0 {
-			sort.Strings(reviewers)
 			return reviewers, layer.Number
 		}
 	}
