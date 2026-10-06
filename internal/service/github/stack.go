@@ -30,33 +30,19 @@ func (s *service) reviewersFromStack(ctx context.Context, webhook github.RepoSen
 	return reviewers
 }
 
-// nearestLayerReviewers walks the stack away from prNumber's layer, first down towards the bottom then up,
-// and returns the reviewers of the first layer that has any among candidates. It returns nil when prNumber
-// isn't part of layers or no other layer has a candidate reviewer.
+// nearestLayerReviewers returns the candidates reviewing the layer closest to prNumber's in its stack: the
+// layers below first, nearest first, then the layers above. It returns nil when prNumber isn't part of
+// layers or no other layer has a candidate reviewer.
 func nearestLayerReviewers(layers []github.StackLayer, prNumber int, candidates map[string]struct{}) []string {
-	byPosition := make(map[int]github.StackLayer, len(layers))
-	current, top := 0, 0
-	for _, layer := range layers {
-		byPosition[layer.Position] = layer
-		top = max(top, layer.Position)
-		if layer.Number == prNumber {
-			current = layer.Position
-		}
-	}
-	if current == 0 {
+	layers = slices.SortedFunc(slices.Values(layers), func(a, b github.StackLayer) int { return a.Position - b.Position })
+	current := slices.IndexFunc(layers, func(layer github.StackLayer) bool { return layer.Number == prNumber })
+	if current < 0 {
 		return nil
 	}
 
-	order := make([]int, 0, len(layers))
-	for position := current - 1; position >= 1; position-- {
-		order = append(order, position)
-	}
-	for position := current + 1; position <= top; position++ {
-		order = append(order, position)
-	}
-
-	for _, position := range order {
-		layer := byPosition[position]
+	below := layers[:current]
+	slices.Reverse(below) // layers is our own sorted copy, the caller's slice is untouched
+	for _, layer := range slices.Concat(below, layers[current+1:]) {
 		var reviewers []string
 		for _, login := range layer.Reviewers {
 			if _, ok := candidates[login]; ok {
