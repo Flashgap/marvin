@@ -34,6 +34,7 @@ and a repository with no `.marvin.yaml` has Marvin fully disabled on it.
 | `auto_assignee` | Assigns the PR opener as assignee if none is set |
 | `auto_draft_labels` | Automatically manages *Work in progress* and *Ready for review* labels based on GitHub draft state |
 | `auto_review_assign` | Requests reviewers from a configured team when the *Ready for review* label is added |
+| `sticky_stack_reviewers` | On a stacked PR, makes `auto_review_assign` keep the reviewers of the nearest layer of the stack before falling back to review load |
 | `auto_approve` | Adds the *Approved* label and removes *Ready for review* once enough approvals are in |
 | `auto_changes_required` | Adds the *Changes required* label and notifies via Slack when a review requests changes; removes it and re-requests the affected human reviewers when *Ready for review* is re-applied |
 | `require_ai_review` | Blocks `auto_review_assign` until a recognized AI reviewer (CodeRabbit, Graphite, etc.) has reviewed the PR at least once, or reported completion via a success commit status; reverts to *Work in progress* and comments if triggered early |
@@ -388,6 +389,23 @@ Within the resolved team pool, the algorithm assigns people with the smallest cu
 (load = total additions across open PRs assigned to them).
 The number of reviewers to assign is derived from the branch's required approving review count —
 Marvin supports both classic branch protection rules and repository rulesets.
+
+### `sticky_stack_reviewers`
+
+Keeps the same reviewers across the layers of a [stacked pull request](https://docs.github.com/en/pull-requests/get-started/about-stacked-prs),
+so nobody has to review a layer without the context of the ones below it. When `auto_review_assign`
+runs on a stacked PR, Marvin walks the stack away from the PR, down towards the bottom first, then
+up, and takes the reviewers of the first layer that has any (merged layers included). For example,
+with layer 1 reviewed by Maxime and layer 2 by Clem, layer 3 gets Clem.
+
+- Only members of the PR's resolved team pool count, so AI reviewer bots, people outside the teams
+  and the PR author are never carried over.
+- Stack reviewers fill the open slots first. If the layer has more than needed, the least loaded
+  ones are picked; if it has fewer, the remaining slots are filled by review load as usual.
+- If the stack can't be read, Marvin logs a warning and falls back to review load.
+
+Only GitHub's native stacks (e.g. created with `gh stack`) are detected. Has no effect unless
+`auto_review_assign` is also enabled.
 
 ### `auto_draft_labels`
 
