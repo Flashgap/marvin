@@ -60,6 +60,7 @@ type GitHubRepositoryConfiguration struct {
 	SlackNotify            bool
 	AutoCapReport          bool
 	RequireAIReview        bool
+	StickyStackReviewers   bool
 	AIReviewerLogins       []string
 	AIReviewStatusContexts []string
 	GithubToSlack          map[string]string
@@ -79,6 +80,10 @@ func withAutoMerge(c *GitHubRepositoryConfiguration) {
 
 func withAutoReviewAssign(c *GitHubRepositoryConfiguration) {
 	c.AutoReviewAssign = true
+}
+
+func withStickyStackReviewers(c *GitHubRepositoryConfiguration) {
+	c.StickyStackReviewers = true
 }
 
 func withAutoDraftLabels(c *GitHubRepositoryConfiguration) {
@@ -136,23 +141,24 @@ func withRequireAIReview(c *GitHubRepositoryConfiguration) {
 type optionFunc func(c *GitHubRepositoryConfiguration)
 
 var configToFunc = map[string]optionFunc{
-	"auto_approve":          withAutoApprove,
-	"auto_changes_required": withAutoChangesRequired,
-	"auto_merge":            withAutoMerge,
-	"auto_review_assign":    withAutoReviewAssign,
-	"auto_draft_labels":     withAutoDraftLabels,
-	"update_title":          withUpdateTitle,
-	"check_title":           withCheckTitle,
-	"check_description":     withCheckDescription,
-	"check_time_spent":      withCheckTimeSpent,
-	"check_linear_link":     withCheckLinear,
-	"check_linear_project":  withCheckLinearProject,
-	"check_changelog":       withCheckChangelog,
-	"update_linear_link":    withUpdateLinearLink,
-	"auto_assignee":         withAutoAssignee,
-	"slack_notify":          withSlackNotify,
-	"auto_cap_report":       withAutoCapReport,
-	"require_ai_review":     withRequireAIReview,
+	"auto_approve":           withAutoApprove,
+	"auto_changes_required":  withAutoChangesRequired,
+	"auto_merge":             withAutoMerge,
+	"auto_review_assign":     withAutoReviewAssign,
+	"sticky_stack_reviewers": withStickyStackReviewers,
+	"auto_draft_labels":      withAutoDraftLabels,
+	"update_title":           withUpdateTitle,
+	"check_title":            withCheckTitle,
+	"check_description":      withCheckDescription,
+	"check_time_spent":       withCheckTimeSpent,
+	"check_linear_link":      withCheckLinear,
+	"check_linear_project":   withCheckLinearProject,
+	"check_changelog":        withCheckChangelog,
+	"update_linear_link":     withUpdateLinearLink,
+	"auto_assignee":          withAutoAssignee,
+	"slack_notify":           withSlackNotify,
+	"auto_cap_report":        withAutoCapReport,
+	"require_ai_review":      withRequireAIReview,
 }
 
 // applyFeatures turns a list of feature-name strings (as declared under `features:` in a repo's

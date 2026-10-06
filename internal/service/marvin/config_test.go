@@ -97,6 +97,22 @@ var _ = Describe("RepoConfigProvider", func() {
 		Expect(cfg.AutoMerge).To(BeTrue())
 	})
 
+	It("enables StickyStackReviewers from the sticky_stack_reviewers feature", func() {
+		expectListInstalledRepos()
+		mockGithub.EXPECT().
+			GetFileContent(gomock.Any(), gomock.Any(), marvin.RepoConfigFileName, defaultBranch).
+			Return("features: [auto_review_assign, sticky_stack_reviewers]", &gogithub.Response{}, nil).
+			Times(1)
+
+		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
+		provider.Start(context.Background(), 0)
+
+		cfg, warning := provider.Get(webhook)
+		Expect(warning).To(BeNil())
+		Expect(cfg.AutoReviewAssign).To(BeTrue())
+		Expect(cfg.StickyStackReviewers).To(BeTrue())
+	})
+
 	It("enables RequireAIReview and carries the default AI reviewer logins plus the configured ones", func() {
 		expectListInstalledRepos()
 		mockGithub.EXPECT().
