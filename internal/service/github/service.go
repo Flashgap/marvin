@@ -207,7 +207,7 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 				candidates[login] = struct{}{}
 			}
 		}
-		stackReviewers = s.stackReviewers(ctx, webhook, pr, candidates)
+		stackReviewers = s.reviewersFromStack(ctx, webhook, pr, candidates)
 	}
 
 	rankedDevs, err := s.RankUsersByReviewLoad(ctx, webhook, prNumber, teamMembersLogins)

@@ -100,14 +100,8 @@ var _ = Describe("FindAndAssignReviewers", func() {
 		// Review load of each team member: the lower, the sooner they get picked by load
 		loads := map[string]int{"alice": 0, "bob": 10, "carol": 20, "maxime": 30, "clem": 1000}
 
-		requestedReviewers := func() *[]string {
-			var requested []string
-			mockClient.EXPECT().RequestReviewers(gomock.Any(), event, prNumber, gomock.Any()).
-				DoAndReturn(func(_ context.Context, _ pkggithub.RepoSenderGetter, _ int, reviewers []string) (*gogithub.PullRequest, *gogithub.Response, error) {
-					requested = reviewers
-					return pr, nil, nil
-				})
-			return &requested
+		expectRequested := func(reviewers ...string) {
+			mockClient.EXPECT().RequestReviewers(gomock.Any(), event, prNumber, reviewers).Return(pr, nil, nil)
 		}
 
 		stackLayers := func(layers ...pkggithub.StackLayer) {
@@ -130,12 +124,11 @@ var _ = Describe("FindAndAssignReviewers", func() {
 				pkggithub.StackLayer{Number: 76, Position: 2, Reviewers: []string{"clem"}},
 				pkggithub.StackLayer{Number: prNumber, Position: 3},
 			)
-			requested := requestedReviewers()
+			expectRequested("clem")
 
 			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"}, true)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ok).To(BeTrue())
-			Expect(*requested).To(Equal([]string{"clem"}))
 		})
 
 		It("ignores AI bots, people outside the teams and the PR author on a layer", func(ctx SpecContext) {
@@ -144,12 +137,11 @@ var _ = Describe("FindAndAssignReviewers", func() {
 				pkggithub.StackLayer{Number: 76, Position: 2, Reviewers: []string{"coderabbitai[bot]", "outsider", "dave"}},
 				pkggithub.StackLayer{Number: prNumber, Position: 3},
 			)
-			requested := requestedReviewers()
+			expectRequested("maxime")
 
 			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"}, true)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ok).To(BeTrue())
-			Expect(*requested).To(Equal([]string{"maxime"}))
 		})
 
 		It("does not count a stack reviewer already reviewing the PR twice", func(ctx SpecContext) {
@@ -160,12 +152,11 @@ var _ = Describe("FindAndAssignReviewers", func() {
 				pkggithub.StackLayer{Number: 76, Position: 2, Reviewers: []string{"clem"}},
 				pkggithub.StackLayer{Number: prNumber, Position: 3},
 			)
-			requested := requestedReviewers()
+			expectRequested("maxime")
 
 			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"}, true)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ok).To(BeTrue())
-			Expect(*requested).To(Equal([]string{"maxime"}))
 		})
 
 		It("picks the least loaded stack reviewers when the layer has more than needed", func(ctx SpecContext) {
@@ -173,12 +164,11 @@ var _ = Describe("FindAndAssignReviewers", func() {
 				pkggithub.StackLayer{Number: 76, Position: 2, Reviewers: []string{"clem", "maxime"}},
 				pkggithub.StackLayer{Number: prNumber, Position: 3},
 			)
-			requested := requestedReviewers()
+			expectRequested("maxime")
 
 			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"}, true)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ok).To(BeTrue())
-			Expect(*requested).To(Equal([]string{"maxime"}))
 		})
 
 		It("fills the slots stack reviewers leave open by review load", func(ctx SpecContext) {
@@ -187,32 +177,29 @@ var _ = Describe("FindAndAssignReviewers", func() {
 				pkggithub.StackLayer{Number: 76, Position: 2, Reviewers: []string{"clem"}},
 				pkggithub.StackLayer{Number: prNumber, Position: 3},
 			)
-			requested := requestedReviewers()
+			expectRequested("clem", "alice", "bob")
 
 			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"}, true)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ok).To(BeTrue())
-			Expect(*requested).To(Equal([]string{"clem", "alice", "bob"}))
 		})
 
 		It("falls back to review load when the stack cannot be read", func(ctx SpecContext) {
 			mockClient.EXPECT().ListStackLayers(gomock.Any(), event, prNumber).Return(nil, errors.New("boom"))
-			requested := requestedReviewers()
+			expectRequested("alice")
 
 			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"}, true)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ok).To(BeTrue())
-			Expect(*requested).To(Equal([]string{"alice"}))
 		})
 
 		It("ignores the stack when the feature is disabled", func(ctx SpecContext) {
 			// No ListStackLayers expectation: the strict mock fails the spec if the stack is read
-			requested := requestedReviewers()
+			expectRequested("alice")
 
 			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"}, false)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ok).To(BeTrue())
-			Expect(*requested).To(Equal([]string{"alice"}))
 		})
 	})
 
