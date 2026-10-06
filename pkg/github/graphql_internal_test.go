@@ -51,21 +51,14 @@ var _ = Describe("ListStackLayers", func() {
 		server.Close()
 	})
 
-	It("queries the stack of the given PR", func(ctx context.Context) {
-		response = `{"data":{"repository":{"pullRequest":{"stack":null}}}}`
-
-		_, err := c.ListStackLayers(ctx, webhook, 14)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(gotQuery).To(ContainSubstring("pullRequest(number: $number){stack{entries(first: 100)"))
-		Expect(gotVars).To(Equal(map[string]any{"owner": "Flashgap", "name": "marvin", "number": float64(14)}))
-	})
-
-	It("returns nil when the PR isn't stacked", func(ctx context.Context) {
+	It("queries the stack of the given PR, and returns nil when it isn't stacked", func(ctx context.Context) {
 		response = `{"data":{"repository":{"pullRequest":{"stack":null}}}}`
 
 		layers, err := c.ListStackLayers(ctx, webhook, 12)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(layers).To(BeNil())
+		Expect(gotQuery).To(ContainSubstring("pullRequest(number: $number){stack{entries(first: 100)"))
+		Expect(gotVars).To(Equal(map[string]any{"owner": "Flashgap", "name": "marvin", "number": float64(12)}))
 	})
 
 	It("returns every layer with its deduped reviewers, merged layers included", func(ctx context.Context) {

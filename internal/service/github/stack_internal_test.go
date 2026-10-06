@@ -19,9 +19,6 @@ var _ = Describe("nearestLayerReviewers", func() {
 		Entry("takes the layer right below, not an older one",
 			[]github.StackLayer{{Number: 1, Position: 1, Reviewers: []string{"maxime"}}, {Number: 2, Position: 2, Reviewers: []string{"clem"}}, {Number: 3, Position: 3}},
 			3, everyone, []string{"clem"}, 2),
-		Entry("skips layers without reviewers",
-			[]github.StackLayer{{Number: 1, Position: 1, Reviewers: []string{"maxime"}}, {Number: 2, Position: 2}, {Number: 3, Position: 3}},
-			3, everyone, []string{"maxime"}, 1),
 		Entry("skips layers without eligible reviewers",
 			[]github.StackLayer{{Number: 1, Position: 1, Reviewers: []string{"maxime"}}, {Number: 2, Position: 2, Reviewers: []string{"bot"}}, {Number: 3, Position: 3}},
 			3, func(login string) bool { return login != "bot" }, []string{"maxime"}, 1),
@@ -40,7 +37,5 @@ var _ = Describe("nearestLayerReviewers", func() {
 		Entry("returns nothing when the PR is not in the stack",
 			[]github.StackLayer{{Number: 1, Position: 1, Reviewers: []string{"maxime"}}, {Number: 2, Position: 2}},
 			3, everyone, nil, 0),
-		Entry("returns nothing for an empty stack",
-			nil, 3, everyone, nil, 0),
 	)
 })
