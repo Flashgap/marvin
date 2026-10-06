@@ -10,10 +10,10 @@ import (
 	"github.com/Flashgap/marvin/pkg/github"
 )
 
-// stackReviewers returns the eligible reviewers of the layer of pr's stack closest to it, so a stacked PR
+// stackReviewers returns the candidates reviewing the layer of pr's stack closest to it, so a stacked PR
 // keeps the reviewers who already have the context of the layers around it. Fetching the stack is best
 // effort: stacked PRs are a GitHub preview feature, and failing to read one must never block assignment.
-func (s *service) stackReviewers(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, eligible func(login string) bool) []string {
+func (s *service) stackReviewers(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, candidates map[string]struct{}) []string {
 	log := middlewares.LoggerFromGHContext(ctx, "github.stackReviewers")
 
 	layers, err := s.ListStackLayers(ctx, webhook, pr.GetNumber())
@@ -22,7 +22,7 @@ func (s *service) stackReviewers(ctx context.Context, webhook github.RepoSenderG
 		return nil
 	}
 
-	reviewers, fromPR := nearestLayerReviewers(layers, pr.GetNumber(), eligible)
+	reviewers, fromPR := nearestLayerReviewers(layers, pr.GetNumber(), candidates)
 	if len(reviewers) > 0 {
 		log.Infof("PR is stacked, keeping the reviewers of layer #%d: %v", fromPR, reviewers)
 	}
@@ -31,8 +31,9 @@ func (s *service) stackReviewers(ctx context.Context, webhook github.RepoSenderG
 }
 
 // nearestLayerReviewers walks the stack away from prNumber's layer, first down towards the bottom then up,
-// and returns the eligible reviewers of the first layer that has any, along with that layer's PR number. It returns nil when prNumber isn't part of layers or no other layer has an eligible reviewer.
-func nearestLayerReviewers(layers []github.StackLayer, prNumber int, eligible func(login string) bool) ([]string, int) {
+// and returns the reviewers of the first layer that has any among candidates, along with that layer's PR
+// number. It returns nil when prNumber isn't part of layers or no other layer has a candidate reviewer.
+func nearestLayerReviewers(layers []github.StackLayer, prNumber int, candidates map[string]struct{}) ([]string, int) {
 	byPosition := make(map[int]github.StackLayer, len(layers))
 	current, top := 0, 0
 	for _, layer := range layers {
@@ -58,7 +59,7 @@ func nearestLayerReviewers(layers []github.StackLayer, prNumber int, eligible fu
 		layer := byPosition[position]
 		var reviewers []string
 		for _, login := range layer.Reviewers {
-			if eligible(login) {
+			if _, ok := candidates[login]; ok {
 				reviewers = append(reviewers, login)
 			}
 		}

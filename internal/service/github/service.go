@@ -201,11 +201,13 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 
 	var stackReviewers []string
 	if preferStackReviewers && pr.GetStack() != nil {
-		stackReviewers = s.stackReviewers(ctx, webhook, pr, func(login string) bool {
-			_, inTeams := teamMembersSet[login]
-			_, alreadyReviewer := consideredReviewers[login]
-			return inTeams && !alreadyReviewer && login != prOwner
-		})
+		candidates := make(map[string]struct{}, len(teamMembersSet))
+		for login := range teamMembersSet {
+			if _, alreadyReviewer := consideredReviewers[login]; !alreadyReviewer && login != prOwner {
+				candidates[login] = struct{}{}
+			}
+		}
+		stackReviewers = s.stackReviewers(ctx, webhook, pr, candidates)
 	}
 
 	rankedDevs, err := s.RankUsersByReviewLoad(ctx, webhook, prNumber, teamMembersLogins)
