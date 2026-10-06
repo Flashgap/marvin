@@ -1324,7 +1324,7 @@ blabla
 				mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{github.LabelReadyForReview}).Return(nil, nil, nil).Times(1)
 				// checkAndFormatPR (hotfix path)
 				mockGithub.EXPECT().CreateCheckRun(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-				// FindAndAssignReviewers: bob reviews the layer below, so he is kept without ranking anybody by load
+				// FindAndAssignReviewers: bob reviews the layer below, so he is kept whatever his load
 				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Return(protection, nil, nil).Times(1)
 				mockGithub.EXPECT().ListReviews(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(nil, nil, nil).Times(1)
 				mockGithub.EXPECT().ListReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(&gogithub.Reviewers{}, nil, nil).Times(1)
@@ -1333,6 +1333,9 @@ blabla
 				mockGithub.EXPECT().ListStackLayers(gomock.Any(), gomock.Any(), prNumber).Return([]pkggithub.StackLayer{
 					{Number: prNumber - 1, Position: 1, Reviewers: []string{"bob"}},
 					{Number: prNumber, Position: 2},
+				}, nil).Times(1)
+				mockGithub.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Return([]pkggithub.OpenPRReviewLoad{
+					{Number: prNumber + 1, Additions: 500, Reviewers: map[string]struct{}{"bob": {}}},
 				}, nil).Times(1)
 				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), prNumber, []string{"bob"}).Return(nil, nil, nil).Times(1)
 

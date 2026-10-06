@@ -30,7 +30,6 @@ var _ = Describe("FindAndAssignReviewers", func() {
 		requiredReview   int
 		currentReviewers []*gogithub.User
 		openPRs          []pkggithub.OpenPRReviewLoad
-		rankingCall      *gomock.Call
 	)
 
 	member := func(login string) *gogithub.User {
@@ -70,7 +69,7 @@ var _ = Describe("FindAndAssignReviewers", func() {
 					RequiredPullRequestReviews: &gogithub.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: requiredReview},
 				}, nil, nil
 			})
-		rankingCall = mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), event).
+		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), event).
 			DoAndReturn(func(context.Context, pkggithub.RepoSenderGetter) ([]pkggithub.OpenPRReviewLoad, error) {
 				return openPRs, nil
 			})
@@ -125,13 +124,12 @@ var _ = Describe("FindAndAssignReviewers", func() {
 				Return([]*gogithub.User{member("alice"), member("bob"), member("carol"), member("maxime"), member("clem"), member("dave")}, nil, nil)
 		})
 
-		It("takes the reviewer of the nearest layer below, whatever their load, without ranking anybody", func(ctx SpecContext) {
+		It("takes the reviewer of the nearest layer below, whatever their load", func(ctx SpecContext) {
 			stackLayers(
 				pkggithub.StackLayer{Number: 75, Position: 1, Reviewers: []string{"maxime"}},
 				pkggithub.StackLayer{Number: 76, Position: 2, Reviewers: []string{"clem"}},
 				pkggithub.StackLayer{Number: prNumber, Position: 3},
 			)
-			rankingCall.Times(0)
 			requested := requestedReviewers()
 
 			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"}, true)
@@ -146,7 +144,6 @@ var _ = Describe("FindAndAssignReviewers", func() {
 				pkggithub.StackLayer{Number: 76, Position: 2, Reviewers: []string{"coderabbitai[bot]", "outsider", "dave"}},
 				pkggithub.StackLayer{Number: prNumber, Position: 3},
 			)
-			rankingCall.Times(0)
 			requested := requestedReviewers()
 
 			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"}, true)
@@ -163,7 +160,6 @@ var _ = Describe("FindAndAssignReviewers", func() {
 				pkggithub.StackLayer{Number: 76, Position: 2, Reviewers: []string{"clem"}},
 				pkggithub.StackLayer{Number: prNumber, Position: 3},
 			)
-			rankingCall.Times(0)
 			requested := requestedReviewers()
 
 			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"}, true)

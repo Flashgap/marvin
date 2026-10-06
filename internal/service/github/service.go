@@ -208,15 +208,6 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 		})
 	}
 
-	// Exactly as many stack reviewers as needed: no need to rank anybody
-	if len(stackReviewers) == nbReviewersToFind {
-		if _, _, err = s.RequestReviewers(ctx, webhook, prNumber, stackReviewers); err != nil {
-			return false, fmt.Errorf("error requesting reviewers: %w", err)
-		}
-		log.Infof("stack reviewers requested")
-		return true, nil
-	}
-
 	rankedDevs, err := s.RankUsersByReviewLoad(ctx, webhook, prNumber, teamMembersLogins)
 
 	if err != nil {
