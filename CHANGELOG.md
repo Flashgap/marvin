@@ -13,8 +13,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   before falling back to review load, so each layer is reviewed by someone who already has the context
   of the ones around it. Only members of the PR's resolved team pool are carried over. Opt-in per
   repository via `.marvin.yaml`'s `features`.
-- The `FindAndAssignReviewers` signature (internal `github.Service` interface) takes a new
-  `preferStackReviewers bool` argument.
 
 ## [2.2.0] — 2026-09-16
 
