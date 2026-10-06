@@ -131,6 +131,33 @@ var _ = Describe("FindAndAssignReviewers", func() {
 			Expect(ok).To(BeTrue())
 		})
 
+		It("prefers a layer below over a layer above", func(ctx SpecContext) {
+			stackLayers(
+				pkggithub.StackLayer{Number: 75, Position: 1, Reviewers: []string{"maxime"}},
+				pkggithub.StackLayer{Number: prNumber, Position: 2},
+				pkggithub.StackLayer{Number: 78, Position: 3, Reviewers: []string{"clem"}},
+			)
+			expectRequested("maxime")
+
+			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"}, true)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+		})
+
+		It("falls back to the nearest layer above when no layer below has reviewers", func(ctx SpecContext) {
+			stackLayers(
+				pkggithub.StackLayer{Number: 75, Position: 1},
+				pkggithub.StackLayer{Number: prNumber, Position: 2},
+				pkggithub.StackLayer{Number: 78, Position: 3, Reviewers: []string{"clem"}},
+				pkggithub.StackLayer{Number: 79, Position: 4, Reviewers: []string{"bob"}},
+			)
+			expectRequested("clem")
+
+			ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"}, true)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+		})
+
 		It("ignores AI bots, people outside the teams and the PR author on a layer", func(ctx SpecContext) {
 			stackLayers(
 				pkggithub.StackLayer{Number: 75, Position: 1, Reviewers: []string{"maxime"}},
