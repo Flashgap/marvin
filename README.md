@@ -107,14 +107,28 @@ and a repository with no `.marvin.yaml` has Marvin fully disabled on it.
         "bot_user": {
             "display_name": "Marvin",
             "always_online": false
-        }
+        },
+        "slash_commands": [
+            {
+                "command": "/lock",
+                "url": "https://your-marvin-url.com/marvin/_webhook/slack/lock",
+                "description": "Report an unlocked laptop, or show the leaderboard",
+                "usage_hint": "@someone",
+                "should_escape": true
+            }
+        ]
     },
     "oauth_config": {
         "scopes": {
             "bot": [
-                "calls:write",
+                "channels:history",
+                "channels:read",
+                "chat:write",
+                "commands",
+                "groups:history",
+                "groups:read",
                 "im:write",
-                "incoming-webhook"
+                "users:read"
             ]
         },
         "pkce_enabled": false
@@ -127,7 +141,19 @@ and a repository with no `.marvin.yaml` has Marvin fully disabled on it.
 }
 ```
 
+   Replace `your-marvin-url.com` with your Marvin host in the [`/lock` slash command](#slack-lock-slash-command-optional) URL.
+
+   What the bot scopes are for:
+   - `chat:write`, `im:write`: send DMs (`slack_notify`, `auto_changes_required`, `/lock`, the standup reminder).
+   - `users:read`: look up users (`/lock`, the standup reminder).
+   - `commands`: the [`/lock` slash command](#slack-lock-slash-command-optional).
+   - `channels:read`, `channels:history` (public channel) or `groups:read`, `groups:history` (private channel):
+     read the [standup channel](#daily-standup-reminder-optional). Keep the pair matching your channel, or both.
+
 3. Install the app to your workspace and grab the **Bot User OAuth Token** → `MARVIN_SLACK_BOT_TOKEN`.
+
+4. For the standup reminder, invite Marvin to the standup channel (`/invite @Marvin`): a bot can only read the
+   channels it is a member of.
 
 ---
 
