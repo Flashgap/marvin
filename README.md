@@ -270,6 +270,69 @@ The endpoint is **gated on the database**: without `DB_HOST`, requests return
 |----------|-------------|
 | `MARVIN_SLACK_SIGNING_SECRET` | Slack app signing secret used to verify the `X-Slack-Signature` header. Required outside dev. |
 
+### Daily standup reminder (optional)
+
+A standup bot (Geekbot replacement): on standup days, a cron calls Marvin, which DMs every member of
+the standup channel who hasn't posted their standup there yet today. The DM quotes the *Today:*
+section of their last update and gives them a template to copy, fill in and post in the channel:
+
+```
+Yesterday: …
+Today: …
+Blockers: …
+```
+
+- A day is a UTC day: any top-level message posted in the channel since 00:00 UTC counts as today's
+  standup. Thread replies, bot posts and channel events (joins, topic changes…) don't count.
+- Each member's latest post from the last 14 days is stored as their last update and quoted in their
+  next reminder. Members who haven't posted in that window keep the update stored before.
+- A member is reminded at most once per UTC day, so a retry only DMs the people a previous run missed.
+- Bots and deactivated users are skipped, as is anyone Marvin can never DM (e.g. `cannot_dm_bot`).
+
+The endpoint is **gated on the database**: without `DB_HOST` or `MARVIN_STANDUP_CHANNEL_ID`, requests
+return `501 Not Implemented`.
+
+**Slack app configuration**
+- Bot token scopes: `channels:read` and `channels:history` for a public channel, `groups:read` and
+  `groups:history` for a private one (adding both pairs is harmless), plus `users:read`, `im:write`
+  and `chat:write`.
+- Invite Marvin to the standup channel (`/invite @Marvin`). A bot can only read the channels it is a
+  member of: otherwise every run fails with `not_in_channel` or `channel_not_found`.
+- Install Marvin as its own app in your workspace (see [Slack App setup](#slack-app-setup)): Slack's
+  2025 rate limits on `conversations.history` only apply to commercially distributed apps, so don't
+  share one Marvin app across several workspaces.
+
+**Env vars**
+
+| Variable | Description |
+|----------|-------------|
+| `MARVIN_STANDUP_CHANNEL_ID` | ID (not name) of the standup channel, e.g. `C0123456789`. Empty disables the feature. |
+| `MARVIN_TASKS_SECRET` | Bearer secret required on every `/marvin/_task/*` route, sent as `Authorization: Bearer <secret>`. Required outside dev. |
+
+In local dev, point `MARVIN_STANDUP_CHANNEL_ID` at a test channel: the local bot token is the real
+one, so a run DMs real people.
+
+**Scheduling**
+
+Call `POST /marvin/_task/standup/remind` on standup days, e.g. with Cloud Scheduler:
+
+```bash
+gcloud scheduler jobs create http marvin-standup \
+  --schedule="0 9 * * 1-5" --time-zone="Europe/Paris" \
+  --uri="https://<your-marvin>/marvin/_task/standup/remind" --http-method=POST \
+  --headers="Authorization=Bearer <MARVIN_TASKS_SECRET>" \
+  --attempt-deadline=300s --max-retry-attempts=3 --min-backoff=60s
+```
+
+- `--max-retry-attempts` is required: Cloud Scheduler doesn't retry by default, and Marvin answers
+  `500` when a run partly fails (a DM or database write failed) so that the retry finishes the job.
+- `--attempt-deadline=300s` matches Cloud Run's default request timeout (Scheduler's default is `180s`).
+- Don't configure an OIDC or OAuth token on the job: Cloud Scheduler then overrides the
+  `Authorization` header.
+
+A successful run answers `200` with its counters, e.g.
+`{"members":12,"reminded":7,"already_posted":3,"already_reminded":0,"ignored":2}`.
+
 ---
 
 ## Repository configuration (`.marvin.yaml`)
