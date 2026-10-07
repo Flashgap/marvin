@@ -425,6 +425,21 @@ func (mr *MockClientMockRecorder) ListReviews(ctx, webhook, prNumber, opts any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReviews", reflect.TypeOf((*MockClient)(nil).ListReviews), ctx, webhook, prNumber, opts)
 }
 
+// ListStackLayers mocks base method.
+func (m *MockClient) ListStackLayers(ctx context.Context, webhook github.RepoSenderGetter, prNumber int) ([]github.StackLayer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListStackLayers", ctx, webhook, prNumber)
+	ret0, _ := ret[0].([]github.StackLayer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListStackLayers indicates an expected call of ListStackLayers.
+func (mr *MockClientMockRecorder) ListStackLayers(ctx, webhook, prNumber any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStackLayers", reflect.TypeOf((*MockClient)(nil).ListStackLayers), ctx, webhook, prNumber)
+}
+
 // ListTeamMembers mocks base method.
 func (m *MockClient) ListTeamMembers(ctx context.Context, webhook github.RepoSenderGetter, teamSlug string, opts *github0.TeamListTeamMembersOptions) ([]*github0.User, *github0.Response, error) {
 	m.ctrl.T.Helper()

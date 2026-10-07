@@ -34,7 +34,7 @@ var (
 
 type Service interface {
 	github.Client // This could be removed by defining the interface on the requesters side
-	FindAndAssignReviewers(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, fromTeams []string) (bool, error)
+	FindAndAssignReviewers(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, fromTeams []string, preferStackReviewers bool) (bool, error)
 	AddLabel(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, label string) error
 	RemoveLabel(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, label string) error
 	UpdateAndMergePR(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest) error
@@ -144,8 +144,9 @@ func (s *service) requiredReviewCountFromRuleset(ctx context.Context, webhook gi
 
 // FindAndAssignReviewers attempts to assign reviewers to the given PR. It returns true if it succeeded
 // All members of the given teams are pooled together and considered after being ranked by current review load.
+// With preferStackReviewers, a stacked PR first takes the team members reviewing the nearest layer of its stack.
 // Succeeding in assigning reviewers means that we found and assigned at least enough reviewers to satisfy the main branch protection
-func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, fromTeams []string) (bool, error) {
+func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, fromTeams []string, preferStackReviewers bool) (bool, error) {
 	prNumber := pr.GetNumber()
 	prOwner := pr.GetUser().GetLogin()
 
@@ -198,6 +199,17 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 	nbReviewersToFind := requiredReviewers - len(consideredReviewers)
 	log.Infof("PR is ready to be reviewed but doesn't have enough reviewers: %d needs to request: %d reviewers", len(consideredReviewers), requiredReviewers)
 
+	var stackReviewers []string
+	if preferStackReviewers && pr.GetStack() != nil {
+		candidates := make(map[string]struct{}, len(teamMembersSet))
+		for login := range teamMembersSet {
+			if _, alreadyReviewer := consideredReviewers[login]; !alreadyReviewer && login != prOwner {
+				candidates[login] = struct{}{}
+			}
+		}
+		stackReviewers = s.reviewersFromStack(ctx, webhook, pr, candidates)
+	}
+
 	rankedDevs, err := s.RankUsersByReviewLoad(ctx, webhook, prNumber, teamMembersLogins)
 
 	if err != nil {
@@ -205,7 +217,7 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 	}
 
 	addedReviewers := make([]string, 0, nbReviewersToFind)
-	for _, dev := range rankedDevs {
+	for _, dev := range preferredFirst(rankedDevs, stackReviewers) {
 		if _, ok := consideredReviewers[dev]; !ok && dev != prOwner {
 			addedReviewers = append(addedReviewers, dev)
 		}
