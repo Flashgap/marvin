@@ -15,6 +15,7 @@ import (
 	"github.com/Flashgap/marvin/internal/service/lock"
 	"github.com/Flashgap/marvin/internal/service/marvin"
 	slacksvc "github.com/Flashgap/marvin/internal/service/slack"
+	"github.com/Flashgap/marvin/internal/service/standup"
 	"github.com/Flashgap/marvin/pkg/database"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 	pkgjira "github.com/Flashgap/marvin/pkg/jira"
@@ -24,13 +25,14 @@ import (
 )
 
 type Services struct {
-	errorClient   *errorreporting.Client
-	DB            database.Client
-	SlackService  slacksvc.Service
-	GithubService github.Service
-	JiraService   jira.Service
-	MarvinService marvin.Service
-	LockService   lock.Service
+	errorClient    *errorreporting.Client
+	DB             database.Client
+	SlackService   slacksvc.Service
+	GithubService  github.Service
+	JiraService    jira.Service
+	MarvinService  marvin.Service
+	LockService    lock.Service
+	StandupService standup.Service
 }
 
 func (s *Services) initialize(ctx context.Context, cfg *Config) error {
@@ -52,7 +54,7 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 
 	// SlackService is the single integration point for Slack. It wraps the
 	// thin pkg/slack client and is shared across every service that needs to
-	// talk to Slack (currently MarvinService and LockService).
+	// talk to Slack (currently MarvinService, LockService and StandupService).
 	if s.SlackService == nil {
 		s.SlackService = slacksvc.NewService(slack.NewClient(cfg.SlackBotToken))
 	}
@@ -63,6 +65,17 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 			return fmt.Errorf("cannot init lock service: %w", err)
 		}
 		s.LockService = lockSvc
+	}
+
+	if s.StandupService == nil && s.DB != nil && cfg.StandupEnabled() {
+		standupSvc, err := standup.NewService(ctx, s.DB, s.SlackService, cfg.StandupChannelID, migrations.FS)
+		if err != nil {
+			return fmt.Errorf("cannot init standup service: %w", err)
+		}
+		s.StandupService = standupSvc
+	}
+	if s.DB == nil && cfg.StandupEnabled() {
+		logger.WithContext(ctx).Warn("MARVIN_STANDUP_CHANNEL_ID is set but the database is disabled (no DB_HOST): the standup reminder is off")
 	}
 
 	if s.GithubService == nil {
