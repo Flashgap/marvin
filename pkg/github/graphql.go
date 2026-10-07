@@ -87,8 +87,8 @@ func (h *client) ListOpenPRsWithReviewers(ctx context.Context, webhook RepoSende
 	return prs, nil
 }
 
-// StackLayer is one pull request of a stack, with the logins of everyone who has either reviewed it or
-// is currently requested to review it. Merged layers stay in their stack and keep their reviews.
+// StackLayer is one pull request of a stack, with the logins of everyone who has either given it a verdict
+// or is currently requested to review it. Merged layers stay in their stack and keep their reviews.
 type StackLayer struct {
 	Number    int
 	Position  int // 1-based, 1 being the bottom of the stack
@@ -110,7 +110,7 @@ type stackLayersQuery struct {
 										Login graphql.String
 									}
 								}
-							} `graphql:"reviews(first: 100)"`
+							} `graphql:"reviews(first: 100, states: [APPROVED, CHANGES_REQUESTED, DISMISSED])"`
 							ReviewRequests struct {
 								Nodes []struct {
 									RequestedReviewer struct {
@@ -127,7 +127,9 @@ type stackLayersQuery struct {
 }
 
 // ListStackLayers returns every layer of the stack the given PR belongs to, or nil when it isn't stacked.
-// Each layer's reviewers are deduped and sorted.
+// Each layer's reviewers are deduped and sorted. Only reviews with a verdict count: COMMENTED ones include
+// authors replying in review threads, and DISMISSED keeps approvals dismissed by a later push, which is
+// common once a stack gets rebased.
 func (h *client) ListStackLayers(ctx context.Context, webhook RepoSenderGetter, prNumber int) ([]StackLayer, error) {
 	var query stackLayersQuery
 	variables := map[string]any{
