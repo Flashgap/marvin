@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 
 	gogithub "github.com/google/go-github/v90/github"
 
 	"github.com/Flashgap/marvin/internal/middlewares"
+	"github.com/Flashgap/marvin/internal/service/reviewload"
 	"github.com/Flashgap/marvin/pkg/github"
 	"github.com/Flashgap/marvin/pkg/utils"
 )
@@ -237,16 +237,10 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 	return len(addedReviewers) >= nbReviewersToFind, nil
 }
 
-// RankUsersByReviewLoad ranks all members of the given team by current review load.
-// To do so, we calculate scores by looking at every open PR where a dev has either reviewed or is requested to review,
-// and tally the number of additions in these PRs.
+// RankUsersByReviewLoad ranks all members of the given team by current review load, lowest first.
+// See reviewload.Rank for how the load is scored.
 func (s *service) RankUsersByReviewLoad(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, usersLogin []string) ([]string, error) {
 	log := middlewares.LoggerFromGHContext(ctx, "github.RankUsersByReviewLoad")
-
-	scores := make(map[string]int, len(usersLogin))
-	for _, userLogin := range usersLogin {
-		scores[userLogin] = 0
-	}
 
 	prs, err := s.ListOpenPRsWithReviewers(ctx, webhook)
 	if err != nil {
@@ -255,33 +249,13 @@ func (s *service) RankUsersByReviewLoad(ctx context.Context, webhook github.Repo
 
 	log.Infof("got %d opened PR's", len(prs))
 
-	for _, pr := range prs {
-		for reviewer := range pr.Reviewers {
-			log.Infof("%s is reviewing PR #%d", reviewer, pr.Number)
-			if _, ok := scores[reviewer]; ok {
-				scores[reviewer] += pr.Additions
-			}
-		}
-	}
+	reviewers := reviewload.Rank(prs, usersLogin)
 
-	// Arrange our dev and scores in a sortable struct
-	type devScore struct {
-		dev   string
-		score int
-	}
-	devScores := make([]devScore, 0, len(scores))
-	for dev, score := range scores {
-		devScores = append(devScores, devScore{dev, score})
-	}
-	sort.Slice(devScores, func(i, j int) bool {
-		return devScores[i].score < devScores[j].score
-	})
+	log.Infof("here's the score of our developers: %+v", reviewers)
 
-	log.Infof("here's the score of our developers: %+v", devScores)
-
-	rankedDevs := make([]string, len(devScores))
-	for i := 0; i < len(devScores); i++ {
-		rankedDevs[i] = devScores[i].dev
+	rankedDevs := make([]string, len(reviewers))
+	for i, reviewer := range reviewers {
+		rankedDevs[i] = reviewer.Login
 	}
 
 	return rankedDevs, nil

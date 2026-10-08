@@ -21,13 +21,6 @@ func NewService(githubClient pkggithub.Client) Service {
 	return &service{githubClient: githubClient}
 }
 
-// reviewer is one line of the response: a login, its review load score and the PRs it comes from.
-type reviewer struct {
-	login string
-	score int
-	prs   []int
-}
-
 func (s *service) ReviewLoad(ctx context.Context, cmd slack.SlashCommand) (*slack.Msg, error) {
 	repos, err := s.listInstalledRepos(ctx)
 	if err != nil {
@@ -45,7 +38,7 @@ func (s *service) ReviewLoad(ctx context.Context, cmd slack.SlashCommand) (*slac
 		return nil, fmt.Errorf("listing open pull requests with reviewers: %w", err)
 	}
 
-	return ephemeral(format(repo, rank(prs))), nil
+	return ephemeral(format(repo, Rank(prs, nil))), nil
 }
 
 func (s *service) listInstalledRepos(ctx context.Context) ([]*gogithub.Repository, error) {
@@ -81,38 +74,52 @@ func findRepo(repos []*gogithub.Repository, name string) *gogithub.Repository {
 	return nil
 }
 
-// rank scores every reviewer the same way RankUsersByReviewLoad does: the sum of the additions of the
-// open PRs they review. Ties are broken by login so the output is stable.
-func rank(prs []pkggithub.OpenPRReviewLoad) []reviewer {
-	byLogin := make(map[string]*reviewer)
+// Reviewer is a login with its review load score: the sum of the additions of the open PRs it reviews.
+type Reviewer struct {
+	Login string
+	Score int
+	PRs   []int // Numbers of the open PRs making up Score, sorted
+}
+
+// Rank scores reviewers by review load, lowest first, ties broken by login. With nil members, everyone
+// reviewing an open PR is ranked. Otherwise only members are, including those reviewing nothing.
+func Rank(prs []pkggithub.OpenPRReviewLoad, members []string) []Reviewer {
+	byLogin := make(map[string]*Reviewer, len(members))
+	for _, login := range members {
+		byLogin[login] = &Reviewer{Login: login}
+	}
+
 	for _, pr := range prs {
 		for login := range pr.Reviewers {
 			r, ok := byLogin[login]
 			if !ok {
-				r = &reviewer{login: login}
+				if members != nil {
+					continue
+				}
+				r = &Reviewer{Login: login}
 				byLogin[login] = r
 			}
-			r.score += pr.Additions
-			r.prs = append(r.prs, pr.Number)
+			r.Score += pr.Additions
+			r.PRs = append(r.PRs, pr.Number)
 		}
 	}
 
-	reviewers := make([]reviewer, 0, len(byLogin))
+	reviewers := make([]Reviewer, 0, len(byLogin))
 	for _, r := range byLogin {
-		sort.Ints(r.prs)
+		sort.Ints(r.PRs)
 		reviewers = append(reviewers, *r)
 	}
 	sort.Slice(reviewers, func(i, j int) bool {
-		if reviewers[i].score != reviewers[j].score {
-			return reviewers[i].score < reviewers[j].score
+		if reviewers[i].Score != reviewers[j].Score {
+			return reviewers[i].Score < reviewers[j].Score
 		}
-		return reviewers[i].login < reviewers[j].login
+		return reviewers[i].Login < reviewers[j].Login
 	})
 
 	return reviewers
 }
 
-func format(repo *gogithub.Repository, reviewers []reviewer) string {
+func format(repo *gogithub.Repository, reviewers []Reviewer) string {
 	if len(reviewers) == 0 {
 		return fmt.Sprintf("Nobody is reviewing an open PR of *%s*.", repo.GetFullName())
 	}
@@ -120,11 +127,11 @@ func format(repo *gogithub.Repository, reviewers []reviewer) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "*Review load of %s* (additions of the open PRs each person reviews, lowest is picked first)\n", repo.GetFullName())
 	for _, r := range reviewers {
-		links := make([]string, 0, len(r.prs))
-		for _, number := range r.prs {
+		links := make([]string, 0, len(r.PRs))
+		for _, number := range r.PRs {
 			links = append(links, fmt.Sprintf("<%s/pull/%d|#%d>", repo.GetHTMLURL(), number, number))
 		}
-		fmt.Fprintf(&b, "• *%s* — %d — %s\n", r.login, r.score, strings.Join(links, ", "))
+		fmt.Fprintf(&b, "• *%s* — %d — %s\n", r.Login, r.Score, strings.Join(links, ", "))
 	}
 
 	return b.String()

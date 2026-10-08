@@ -88,3 +88,25 @@ var _ = Describe("ReviewLoad", func() {
 		Expect(err).To(MatchError(ContainSubstring("boom")))
 	})
 })
+
+var _ = Describe("Rank", func() {
+	prs := []pkggithub.OpenPRReviewLoad{
+		{Number: 2, Additions: 10, Reviewers: map[string]struct{}{"bob": {}, "outsider": {}}},
+		{Number: 1, Additions: 5, Reviewers: map[string]struct{}{"bob": {}}},
+	}
+
+	It("ranks everyone reviewing an open PR without members", func() {
+		Expect(reviewload.Rank(prs, nil)).To(Equal([]reviewload.Reviewer{
+			{Login: "outsider", Score: 10, PRs: []int{2}},
+			{Login: "bob", Score: 15, PRs: []int{1, 2}},
+		}))
+	})
+
+	It("ranks only members, including those reviewing nothing", func() {
+		Expect(reviewload.Rank(prs, []string{"bob", "carol", "alice"})).To(Equal([]reviewload.Reviewer{
+			{Login: "alice"},
+			{Login: "carol"},
+			{Login: "bob", Score: 15, PRs: []int{1, 2}},
+		}))
+	})
+})
