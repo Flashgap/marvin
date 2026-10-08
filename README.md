@@ -273,9 +273,7 @@ The endpoint is **gated on the database**: without `DB_HOST`, requests return
 ### Slack `/review-load` slash command (optional)
 
 `/review-load <repository>` shows, as an ephemeral message, everyone reviewing an open PR of the
-repository with the score `auto_review_assign` ranks reviewers by (the sum of the additions of the
-open PRs they review), lowest first, each with links to those PRs. The repository is matched by name or full name, case-insensitively, among the repositories the
-GitHub App is installed on. Without a repository, or with an unknown one, it lists them.
+repository with the score `auto_review_assign` ranks reviewers by, lowest first, each with links to those PRs.
 
 Team members reviewing nothing aren't listed: they score 0.
 

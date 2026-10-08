@@ -7,7 +7,6 @@ import (
 	gogithub "github.com/google/go-github/v90/github"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/slack-go/slack"
 	"go.uber.org/mock/gomock"
 
 	"github.com/Flashgap/marvin/internal/service/reviewload"
@@ -20,14 +19,13 @@ func Test(t *testing.T) {
 	RunSpecs(t, "Review load service test suite")
 }
 
-var _ = Describe("ReviewLoad", func() {
+var _ = Describe("RepoReviewLoad", func() {
 	var (
 		mockClient *mock_github.MockClient
 		svc        reviewload.Service
 		backend    = &gogithub.Repository{
 			Name:     gogithub.Ptr("backend"),
 			FullName: gogithub.Ptr("hector-finance/backend"),
-			HTMLURL:  gogithub.Ptr("https://github.com/hector-finance/backend"),
 			Owner:    &gogithub.User{Login: gogithub.Ptr("hector-finance")},
 		}
 		marvinRepo = &gogithub.Repository{Name: gogithub.Ptr("marvin"), FullName: gogithub.Ptr("hector-finance/marvin")}
@@ -40,51 +38,46 @@ var _ = Describe("ReviewLoad", func() {
 			Return(&gogithub.ListRepositories{Repositories: []*gogithub.Repository{marvinRepo, backend}}, &gogithub.Response{}, nil)
 	})
 
-	It("ranks reviewers lowest score first with links to their PRs", func(ctx SpecContext) {
-		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ any, webhook pkggithub.RepoSenderGetter) ([]pkggithub.OpenPRReviewLoad, error) {
-				Expect(webhook.GetRepo()).To(Equal(backend))
-				return []pkggithub.OpenPRReviewLoad{
-					{Number: 373, Additions: 153, Reviewers: map[string]struct{}{"lebascou": {}, "leoregino": {}}},
-					{Number: 371, Additions: 1, Reviewers: map[string]struct{}{"lebascou": {}}},
-					{Number: 320, Additions: 90, Reviewers: map[string]struct{}{"0rax": {}}},
-					{Number: 286, Additions: 500, Reviewers: map[string]struct{}{}},
-				}, nil
-			})
+	DescribeTable("ranks everyone reviewing an open PR of the matching repository",
+		func(ctx SpecContext, name string) {
+			mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ any, webhook pkggithub.RepoSenderGetter) ([]pkggithub.OpenPRReviewLoad, error) {
+					Expect(webhook.GetRepo()).To(Equal(backend))
+					return []pkggithub.OpenPRReviewLoad{
+						{Number: 373, Additions: 153, Reviewers: map[string]struct{}{"lebascou": {}, "leoregino": {}}},
+						{Number: 371, Additions: 1, Reviewers: map[string]struct{}{"lebascou": {}}},
+						{Number: 286, Additions: 500, Reviewers: map[string]struct{}{}},
+					}, nil
+				})
 
-		msg, err := svc.ReviewLoad(ctx, slack.SlashCommand{Text: " Backend "})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(msg.ResponseType).To(Equal(slack.ResponseTypeEphemeral))
-		Expect(msg.Text).To(Equal("*Review load of hector-finance/backend* (additions of the open PRs each person reviews, lowest is picked first)\n" +
-			"• *0rax* — 90 — <https://github.com/hector-finance/backend/pull/320|#320>\n" +
-			"• *leoregino* — 153 — <https://github.com/hector-finance/backend/pull/373|#373>\n" +
-			"• *lebascou* — 154 — <https://github.com/hector-finance/backend/pull/371|#371>, <https://github.com/hector-finance/backend/pull/373|#373>\n"))
-	})
+			repo, reviewers, err := svc.RepoReviewLoad(ctx, name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo).To(Equal(backend))
+			Expect(reviewers).To(Equal([]reviewload.Reviewer{
+				{Login: "leoregino", Score: 153, PRs: []int{373}},
+				{Login: "lebascou", Score: 154, PRs: []int{371, 373}},
+			}))
+		},
+		Entry("by name, ignoring case", "Backend"),
+		Entry("by full name", "hector-finance/backend"),
+	)
 
-	It("matches the repository's full name", func(ctx SpecContext) {
-		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Return(nil, nil)
+	DescribeTable("returns the installed repositories when none matches",
+		func(ctx SpecContext, name string) {
+			_, _, err := svc.RepoReviewLoad(ctx, name)
 
-		msg, err := svc.ReviewLoad(ctx, slack.SlashCommand{Text: "hector-finance/backend"})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(msg.Text).To(Equal("Nobody is reviewing an open PR of *hector-finance/backend*."))
-	})
-
-	It("shows the usage with the installed repositories when no repository is given", func(ctx SpecContext) {
-		msg, err := svc.ReviewLoad(ctx, slack.SlashCommand{})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(msg.Text).To(Equal("Usage: `/review-load <repository>`. Repositories: `backend`, `marvin`"))
-	})
-
-	It("rejects an unknown repository", func(ctx SpecContext) {
-		msg, err := svc.ReviewLoad(ctx, slack.SlashCommand{Text: "frontend"})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(msg.Text).To(Equal("Unknown repository `frontend`. Repositories: `backend`, `marvin`"))
-	})
+			var unknownRepo *reviewload.UnknownRepositoryError
+			Expect(errors.As(err, &unknownRepo)).To(BeTrue())
+			Expect(unknownRepo).To(Equal(&reviewload.UnknownRepositoryError{Name: name, Repositories: []string{"backend", "marvin"}}))
+		},
+		Entry("no name", ""),
+		Entry("unknown name", "frontend"),
+	)
 
 	It("surfaces GitHub errors", func(ctx SpecContext) {
 		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Return(nil, errors.New("boom"))
 
-		_, err := svc.ReviewLoad(ctx, slack.SlashCommand{Text: "backend"})
+		_, _, err := svc.RepoReviewLoad(ctx, "backend")
 		Expect(err).To(MatchError(ContainSubstring("boom")))
 	})
 })

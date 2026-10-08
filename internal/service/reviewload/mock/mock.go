@@ -15,7 +15,7 @@ import (
 
 	reviewload "github.com/Flashgap/marvin/internal/service/reviewload"
 	github "github.com/Flashgap/marvin/pkg/github"
-	slack "github.com/slack-go/slack"
+	github0 "github.com/google/go-github/v90/github"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -58,17 +58,18 @@ func (mr *MockServiceMockRecorder) Rank(ctx, webhook, members any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rank", reflect.TypeOf((*MockService)(nil).Rank), ctx, webhook, members)
 }
 
-// ReviewLoad mocks base method.
-func (m *MockService) ReviewLoad(ctx context.Context, cmd slack.SlashCommand) (*slack.Msg, error) {
+// RepoReviewLoad mocks base method.
+func (m *MockService) RepoReviewLoad(ctx context.Context, name string) (*github0.Repository, []reviewload.Reviewer, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReviewLoad", ctx, cmd)
-	ret0, _ := ret[0].(*slack.Msg)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "RepoReviewLoad", ctx, name)
+	ret0, _ := ret[0].(*github0.Repository)
+	ret1, _ := ret[1].([]reviewload.Reviewer)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
-// ReviewLoad indicates an expected call of ReviewLoad.
-func (mr *MockServiceMockRecorder) ReviewLoad(ctx, cmd any) *gomock.Call {
+// RepoReviewLoad indicates an expected call of RepoReviewLoad.
+func (mr *MockServiceMockRecorder) RepoReviewLoad(ctx, name any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReviewLoad", reflect.TypeOf((*MockService)(nil).ReviewLoad), ctx, cmd)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RepoReviewLoad", reflect.TypeOf((*MockService)(nil).RepoReviewLoad), ctx, name)
 }

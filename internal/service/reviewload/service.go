@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	gogithub "github.com/google/go-github/v90/github"
-	"github.com/slack-go/slack"
 
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 )
@@ -21,24 +20,71 @@ func NewService(githubClient pkggithub.Client) Service {
 	return &service{githubClient: githubClient}
 }
 
-func (s *service) ReviewLoad(ctx context.Context, cmd slack.SlashCommand) (*slack.Msg, error) {
+func (s *service) RepoReviewLoad(ctx context.Context, name string) (*gogithub.Repository, []Reviewer, error) {
 	repos, err := s.listInstalledRepos(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("listing installed repositories: %w", err)
+		return nil, nil, fmt.Errorf("listing installed repositories: %w", err)
 	}
 
-	name := strings.TrimSpace(cmd.Text)
 	repo := findRepo(repos, name)
 	if repo == nil {
-		return ephemeral(usage(name, repos)), nil
+		names := make([]string, 0, len(repos))
+		for _, r := range repos {
+			names = append(names, r.GetName())
+		}
+		sort.Strings(names)
+
+		return nil, nil, &UnknownRepositoryError{Name: name, Repositories: names}
 	}
 
 	reviewers, err := s.Rank(ctx, installedRepo{repo: repo}, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return ephemeral(format(repo, reviewers)), nil
+	return repo, reviewers, nil
+}
+
+func (s *service) Rank(ctx context.Context, webhook pkggithub.RepoSenderGetter, members []string) ([]Reviewer, error) {
+	prs, err := s.githubClient.ListOpenPRsWithReviewers(ctx, webhook)
+	if err != nil {
+		return nil, fmt.Errorf("listing open pull requests with reviewers: %w", err)
+	}
+
+	byLogin := make(map[string]*Reviewer, len(members))
+	for _, login := range members {
+		byLogin[login] = &Reviewer{Login: login}
+	}
+
+	for _, pr := range prs {
+		for login := range pr.Reviewers {
+			r, ok := byLogin[login]
+			if !ok {
+				if members != nil {
+					continue
+				}
+				r = &Reviewer{Login: login}
+				byLogin[login] = r
+			}
+			r.Score += pr.Additions
+			r.PRs = append(r.PRs, pr.Number)
+		}
+	}
+
+	reviewers := make([]Reviewer, 0, len(byLogin))
+	for _, r := range byLogin {
+		sort.Ints(r.PRs)
+		reviewers = append(reviewers, *r)
+	}
+
+	sort.Slice(reviewers, func(i, j int) bool {
+		if reviewers[i].Score != reviewers[j].Score {
+			return reviewers[i].Score < reviewers[j].Score
+		}
+		return reviewers[i].Login < reviewers[j].Login
+	})
+
+	return reviewers, nil
 }
 
 func (s *service) listInstalledRepos(ctx context.Context) ([]*gogithub.Repository, error) {
@@ -74,93 +120,8 @@ func findRepo(repos []*gogithub.Repository, name string) *gogithub.Repository {
 	return nil
 }
 
-// Reviewer is a login with its review load score: the sum of the additions of the open PRs it reviews.
-type Reviewer struct {
-	Login string
-	Score int
-	PRs   []int // Numbers of the open PRs making up Score, sorted
-}
-
-func (s *service) Rank(ctx context.Context, webhook pkggithub.RepoSenderGetter, members []string) ([]Reviewer, error) {
-	prs, err := s.githubClient.ListOpenPRsWithReviewers(ctx, webhook)
-	if err != nil {
-		return nil, fmt.Errorf("listing open pull requests with reviewers: %w", err)
-	}
-
-	byLogin := make(map[string]*Reviewer, len(members))
-	for _, login := range members {
-		byLogin[login] = &Reviewer{Login: login}
-	}
-
-	for _, pr := range prs {
-		for login := range pr.Reviewers {
-			r, ok := byLogin[login]
-			if !ok {
-				if members != nil {
-					continue
-				}
-				r = &Reviewer{Login: login}
-				byLogin[login] = r
-			}
-			r.Score += pr.Additions
-			r.PRs = append(r.PRs, pr.Number)
-		}
-	}
-
-	reviewers := make([]Reviewer, 0, len(byLogin))
-	for _, r := range byLogin {
-		sort.Ints(r.PRs)
-		reviewers = append(reviewers, *r)
-	}
-	sort.Slice(reviewers, func(i, j int) bool {
-		if reviewers[i].Score != reviewers[j].Score {
-			return reviewers[i].Score < reviewers[j].Score
-		}
-		return reviewers[i].Login < reviewers[j].Login
-	})
-
-	return reviewers, nil
-}
-
-func format(repo *gogithub.Repository, reviewers []Reviewer) string {
-	if len(reviewers) == 0 {
-		return fmt.Sprintf("Nobody is reviewing an open PR of *%s*.", repo.GetFullName())
-	}
-
-	var b strings.Builder
-	fmt.Fprintf(&b, "*Review load of %s* (additions of the open PRs each person reviews, lowest is picked first)\n", repo.GetFullName())
-	for _, r := range reviewers {
-		links := make([]string, 0, len(r.PRs))
-		for _, number := range r.PRs {
-			links = append(links, fmt.Sprintf("<%s/pull/%d|#%d>", repo.GetHTMLURL(), number, number))
-		}
-		fmt.Fprintf(&b, "• *%s* — %d — %s\n", r.Login, r.Score, strings.Join(links, ", "))
-	}
-
-	return b.String()
-}
-
-func usage(name string, repos []*gogithub.Repository) string {
-	names := make([]string, 0, len(repos))
-	for _, repo := range repos {
-		names = append(names, "`"+repo.GetName()+"`")
-	}
-	sort.Strings(names)
-
-	prefix := "Usage: `/review-load <repository>`."
-	if name != "" {
-		prefix = fmt.Sprintf("Unknown repository `%s`.", name)
-	}
-
-	return fmt.Sprintf("%s Repositories: %s", prefix, strings.Join(names, ", "))
-}
-
-func ephemeral(text string) *slack.Msg {
-	return &slack.Msg{ResponseType: slack.ResponseTypeEphemeral, Text: text}
-}
-
 // installedRepo adapts a repository from the installation listing into a pkggithub.RepoSenderGetter.
-// It carries no sender since a slash command isn't attributable to any GitHub user.
+// It carries no sender since a review load lookup isn't attributable to any GitHub user.
 type installedRepo struct {
 	repo *gogithub.Repository
 }
