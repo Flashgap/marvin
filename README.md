@@ -270,6 +270,20 @@ The endpoint is **gated on the database**: without `DB_HOST`, requests return
 |----------|-------------|
 | `MARVIN_SLACK_SIGNING_SECRET` | Slack app signing secret used to verify the `X-Slack-Signature` header. Required outside dev. |
 
+### Slack `/review-load` slash command (optional)
+
+`/review-load [repository]` shows, as an ephemeral table, everyone reviewing an open PR of the
+repository with the score `auto_review_assign` ranks reviewers by, lowest first, each with links to those PRs.
+The repository is matched by name or full name, ignoring case. Without one, every non-archived repository the
+GitHub App is installed on is ranked, each in its own section of the table.
+
+Team members reviewing nothing aren't listed: they score 0.
+
+**Slack app configuration**
+- Add a slash command `/review-load` with the request URL
+  `https://<your-marvin>/marvin/_webhook/slack/review-load`.
+- Requests are verified with `MARVIN_SLACK_SIGNING_SECRET`, as for `/lock`.
+
 ---
 
 ## Repository configuration (`.marvin.yaml`)
