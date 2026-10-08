@@ -51,14 +51,14 @@ func (s *service) RepoReviewLoad(ctx context.Context, name string) (*gogithub.Re
 	return repo, reviewers, nil
 }
 
-func (s *service) ReviewLoad(ctx context.Context) ([]Reviewer, error) {
+func (s *service) ReviewLoad(ctx context.Context) ([]RepositoryReviewers, error) {
 	repos, err := s.listInstalledRepos(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing installed repositories: %w", err)
 	}
 
-	// One query per repository: run them concurrently so the slash command answers within Slack's 3s
-	perRepo := make([][]openPR, len(repos))
+	// One query per repository: run them concurrently
+	perRepo := make([][]Reviewer, len(repos))
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(maxConcurrentRepos)
 	for i, repo := range repos {
@@ -66,8 +66,8 @@ func (s *service) ReviewLoad(ctx context.Context) ([]Reviewer, error) {
 			continue
 		}
 		g.Go(func() error {
-			prs, err := s.openPRs(gctx, installedRepo{repo: repo})
-			perRepo[i] = prs
+			reviewers, err := s.Rank(gctx, installedRepo{repo: repo}, nil)
+			perRepo[i] = reviewers
 			return err
 		})
 	}
@@ -75,7 +75,17 @@ func (s *service) ReviewLoad(ctx context.Context) ([]Reviewer, error) {
 		return nil, err
 	}
 
-	return rank(slices.Concat(perRepo...), nil), nil
+	var result []RepositoryReviewers
+	for i, reviewers := range perRepo {
+		if len(reviewers) > 0 {
+			result = append(result, RepositoryReviewers{Repo: repos[i], Reviewers: reviewers})
+		}
+	}
+	slices.SortFunc(result, func(a, b RepositoryReviewers) int {
+		return cmp.Compare(a.Repo.GetName(), b.Repo.GetName())
+	})
+
+	return result, nil
 }
 
 func (s *service) Rank(ctx context.Context, webhook pkggithub.RepoSenderGetter, members []string) ([]Reviewer, error) {
@@ -105,7 +115,6 @@ func (s *service) openPRs(ctx context.Context, webhook pkggithub.RepoSenderGette
 	for _, load := range loads {
 		prs = append(prs, openPR{
 			PullRequest: PullRequest{
-				Repo:   repo.GetName(),
 				Number: load.Number,
 				URL:    fmt.Sprintf("%s/pull/%d", repo.GetHTMLURL(), load.Number),
 			},
@@ -143,7 +152,7 @@ func rank(prs []openPR, members []string) []Reviewer {
 	reviewers := make([]Reviewer, 0, len(byLogin))
 	for _, r := range byLogin {
 		slices.SortFunc(r.PRs, func(a, b PullRequest) int {
-			return cmp.Or(cmp.Compare(a.Repo, b.Repo), cmp.Compare(a.Number, b.Number))
+			return cmp.Compare(a.Number, b.Number)
 		})
 		reviewers = append(reviewers, *r)
 	}

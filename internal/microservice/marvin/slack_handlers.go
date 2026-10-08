@@ -50,12 +50,12 @@ func (ctrl *Controller) reviewLoadHandler(c *gin.Context) {
 
 	name := strings.TrimSpace(cmd.Text)
 	if name == "" {
-		reviewers, err := ctrl.reviewLoad.ReviewLoad(c.Request.Context())
+		repos, err := ctrl.reviewLoad.ReviewLoad(c.Request.Context())
 		if ctrl.Error(c, err) {
 			return
 		}
 
-		c.JSON(http.StatusOK, reviewLoadMessage("all repositories", reviewers, true))
+		c.JSON(http.StatusOK, reviewLoadMessage("every repository", repos, true))
 		return
 	}
 
@@ -68,23 +68,22 @@ func (ctrl *Controller) reviewLoadHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, reviewLoadMessage(repo.GetFullName(), reviewers, false))
+	var repos []reviewload.RepositoryReviewers
+	if len(reviewers) > 0 {
+		repos = []reviewload.RepositoryReviewers{{Repo: repo, Reviewers: reviewers}}
+	}
+	c.JSON(http.StatusOK, reviewLoadMessage(repo.GetFullName(), repos, false))
 }
 
 // maxTableRows is Slack's limit on a table block's rows, header included.
 const maxTableRows = 100
 
-// reviewLoadMessage renders reviewers as a table block, one row per reviewer with links to their PRs.
-// withRepo prefixes each PR link with its repository, for rankings spanning several repositories.
-func reviewLoadMessage(scope string, reviewers []reviewload.Reviewer, withRepo bool) *slack.Msg {
-	if len(reviewers) == 0 {
+// reviewLoadMessage renders repos as a single table block, Slack allowing only one per message: one row
+// per reviewer with links to their PRs. With repoRows, each repository's reviewers follow a row holding
+// its name.
+func reviewLoadMessage(scope string, repos []reviewload.RepositoryReviewers, repoRows bool) *slack.Msg {
+	if len(repos) == 0 {
 		return ephemeral(fmt.Sprintf("Nobody is reviewing an open PR of *%s*.", scope))
-	}
-
-	title := fmt.Sprintf("*Review load of %s*", scope)
-	if len(reviewers) > maxTableRows-1 {
-		title += fmt.Sprintf(" (lowest %d of %d)", maxTableRows-1, len(reviewers))
-		reviewers = reviewers[:maxTableRows-1]
 	}
 
 	table := slack.NewTableBlock("").
@@ -94,24 +93,40 @@ func reviewLoadMessage(scope string, reviewers []reviewload.Reviewer, withRepo b
 			slack.ColumnSetting{Align: slack.ColumnAlignmentLeft, IsWrapped: true},
 		).
 		AddRow(boldCell("Reviewer"), boldCell("Score"), boldCell("PRs"))
-	for _, r := range reviewers {
-		links := make([]slack.RichTextSectionElement, 0, 2*len(r.PRs))
-		for i, pr := range r.PRs {
-			if i > 0 {
-				links = append(links, slack.NewRichTextSectionTextElement(", ", nil))
-			}
-			text := fmt.Sprintf("#%d", pr.Number)
-			if withRepo {
-				text = pr.Repo + text
-			}
-			links = append(links, slack.NewRichTextSectionLinkElement(pr.URL, text, nil))
-		}
 
-		table.AddRow(
-			slack.NewTableRawTextCell(r.Login),
-			slack.NewTableRawTextCell(strconv.Itoa(r.Score)),
-			slack.NewTableRichTextCell(slack.NewRichTextSection(links...)),
-		)
+	truncated := false
+	addRow := func(cells ...slack.TableCell) {
+		if len(table.Rows) == maxTableRows {
+			truncated = true
+			return
+		}
+		table.AddRow(cells...)
+	}
+
+	for _, repo := range repos {
+		if repoRows {
+			addRow(boldCell(repo.Repo.GetName()), slack.NewTableRawTextCell(""), slack.NewTableRawTextCell(""))
+		}
+		for _, r := range repo.Reviewers {
+			links := make([]slack.RichTextSectionElement, 0, 2*len(r.PRs))
+			for i, pr := range r.PRs {
+				if i > 0 {
+					links = append(links, slack.NewRichTextSectionTextElement(", ", nil))
+				}
+				links = append(links, slack.NewRichTextSectionLinkElement(pr.URL, fmt.Sprintf("#%d", pr.Number), nil))
+			}
+
+			addRow(
+				slack.NewTableRawTextCell(r.Login),
+				slack.NewTableRawTextCell(strconv.Itoa(r.Score)),
+				slack.NewTableRichTextCell(slack.NewRichTextSection(links...)),
+			)
+		}
+	}
+
+	title := fmt.Sprintf("*Review load of %s*", scope)
+	if truncated {
+		title += fmt.Sprintf(" (first %d rows)", maxTableRows-1)
 	}
 
 	msg := ephemeral(title)

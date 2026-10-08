@@ -133,12 +133,14 @@ var _ = Describe("POST /marvin/_webhook/slack/review-load", func() {
 	}
 
 	backend := &gogithub.Repository{
+		Name:     gogithub.Ptr("backend"),
 		FullName: gogithub.Ptr("hector-finance/backend"),
 		HTMLURL:  gogithub.Ptr("https://github.com/hector-finance/backend"),
 	}
+	frontend := &gogithub.Repository{Name: gogithub.Ptr("frontend"), FullName: gogithub.Ptr("hector-finance/frontend")}
 
 	pr := func(repo string, number int) reviewload.PullRequest {
-		return reviewload.PullRequest{Repo: repo, Number: number, URL: fmt.Sprintf("https://github.com/hector-finance/%s/pull/%d", repo, number)}
+		return reviewload.PullRequest{Number: number, URL: fmt.Sprintf("https://github.com/hector-finance/%s/pull/%d", repo, number)}
 	}
 
 	It("lists reviewers in a table with links to their PRs", func() {
@@ -192,25 +194,63 @@ var _ = Describe("POST /marvin/_webhook/slack/review-load", func() {
 		Expect(respond("backend", http.StatusOK).Text).To(Equal("Nobody is reviewing an open PR of *hector-finance/backend*."))
 	})
 
-	It("ranks every repository when no repository is given, prefixing PR links with their repository", func() {
-		mockReviewLoad.EXPECT().ReviewLoad(gomock.Any()).Return([]reviewload.Reviewer{
-			{Login: "Jane", Score: 155, PRs: []reviewload.PullRequest{pr("backend", 373), pr("marvin", 18)}},
+	It("ranks every repository in one table, each repository's reviewers after a row naming it", func() {
+		mockReviewLoad.EXPECT().ReviewLoad(gomock.Any()).Return([]reviewload.RepositoryReviewers{
+			{Repo: backend, Reviewers: []reviewload.Reviewer{{Login: "0rax", Score: 90, PRs: []reviewload.PullRequest{pr("backend", 320)}}}},
+			{Repo: frontend, Reviewers: []reviewload.Reviewer{{Login: "Jane", Score: 307, PRs: []reviewload.PullRequest{pr("frontend", 211)}}}},
 		}, nil)
 
 		msg := respond(" ", http.StatusOK)
-		Expect(msg.Text).To(Equal("*Review load of all repositories*"))
+		Expect(msg.Text).To(Equal("*Review load of every repository*"))
 		Expect(msg.Blocks.BlockSet).To(HaveLen(2))
 
 		table, err := json.Marshal(msg.Blocks.BlockSet[1])
 		Expect(err).NotTo(HaveOccurred())
-		Expect(string(table)).To(ContainSubstring(`{"type":"link","url":"https://github.com/hector-finance/backend/pull/373","text":"backend#373"}`))
-		Expect(string(table)).To(ContainSubstring(`{"type":"link","url":"https://github.com/hector-finance/marvin/pull/18","text":"marvin#18"}`))
+		Expect(table).To(MatchJSON(`{
+			"type": "table",
+			"column_settings": [
+				{"align": "left", "is_wrapped": false},
+				{"align": "right", "is_wrapped": false},
+				{"align": "left", "is_wrapped": true}
+			],
+			"rows": [
+				[
+					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "Reviewer", "style": {"bold": true}}]}]},
+					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "Score", "style": {"bold": true}}]}]},
+					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "PRs", "style": {"bold": true}}]}]}
+				],
+				[
+					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "backend", "style": {"bold": true}}]}]},
+					{"type": "raw_text", "text": ""},
+					{"type": "raw_text", "text": ""}
+				],
+				[
+					{"type": "raw_text", "text": "0rax"},
+					{"type": "raw_text", "text": "90"},
+					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [
+						{"type": "link", "url": "https://github.com/hector-finance/backend/pull/320", "text": "#320"}
+					]}]}
+				],
+				[
+					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "frontend", "style": {"bold": true}}]}]},
+					{"type": "raw_text", "text": ""},
+					{"type": "raw_text", "text": ""}
+				],
+				[
+					{"type": "raw_text", "text": "Jane"},
+					{"type": "raw_text", "text": "307"},
+					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [
+						{"type": "link", "url": "https://github.com/hector-finance/frontend/pull/211", "text": "#211"}
+					]}]}
+				]
+			]
+		}`))
 	})
 
 	It("says when nobody is reviewing in any repository", func() {
 		mockReviewLoad.EXPECT().ReviewLoad(gomock.Any()).Return(nil, nil)
 
-		Expect(respond("", http.StatusOK).Text).To(Equal("Nobody is reviewing an open PR of *all repositories*."))
+		Expect(respond("", http.StatusOK).Text).To(Equal("Nobody is reviewing an open PR of *every repository*."))
 	})
 
 	It("rejects an unknown repository", func() {

@@ -21,7 +21,7 @@ func Test(t *testing.T) {
 }
 
 func pr(repo string, number int) reviewload.PullRequest {
-	return reviewload.PullRequest{Repo: repo, Number: number, URL: fmt.Sprintf("https://github.com/hector-finance/%s/pull/%d", repo, number)}
+	return reviewload.PullRequest{Number: number, URL: fmt.Sprintf("https://github.com/hector-finance/%s/pull/%d", repo, number)}
 }
 
 func repository(name string) *gogithub.Repository {
@@ -99,6 +99,7 @@ var _ = Describe("ReviewLoad", func() {
 		backend    = repository("backend")
 		marvinRepo = repository("marvin")
 		archived   = repository("legacy")
+		quiet      = repository("quiet") // Nobody reviewing its open PRs
 	)
 
 	BeforeEach(func() {
@@ -106,10 +107,10 @@ var _ = Describe("ReviewLoad", func() {
 		mockClient = mock_github.NewMockClient(gomock.NewController(GinkgoT()))
 		svc = reviewload.NewService(mockClient)
 		mockClient.EXPECT().ListInstalledRepos(gomock.Any(), gomock.Any()).
-			Return(&gogithub.ListRepositories{Repositories: []*gogithub.Repository{marvinRepo, archived, backend}}, &gogithub.Response{}, nil)
+			Return(&gogithub.ListRepositories{Repositories: []*gogithub.Repository{marvinRepo, quiet, archived, backend}}, &gogithub.Response{}, nil)
 	})
 
-	It("sums review load across every non-archived installed repository", func(ctx SpecContext) {
+	It("ranks reviewers per non-archived installed repository someone is reviewing", func(ctx SpecContext) {
 		loads := map[string][]pkggithub.OpenPRReviewLoad{
 			"backend": {
 				{Number: 373, Additions: 100, Reviewers: map[string]struct{}{"Jane": {}, "leoregino": {}}},
@@ -119,14 +120,19 @@ var _ = Describe("ReviewLoad", func() {
 				{Number: 18, Additions: 5, Reviewers: map[string]struct{}{"Jane": {}}},
 			},
 		}
-		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Times(2).
+		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Times(3).
 			DoAndReturn(func(_ any, webhook pkggithub.RepoSenderGetter) ([]pkggithub.OpenPRReviewLoad, error) {
 				return loads[webhook.GetRepo().GetName()], nil
 			})
 
-		Expect(svc.ReviewLoad(ctx)).To(Equal([]reviewload.Reviewer{
-			{Login: "leoregino", Score: 100, PRs: []reviewload.PullRequest{pr("backend", 373)}},
-			{Login: "Jane", Score: 155, PRs: []reviewload.PullRequest{pr("backend", 373), pr("marvin", 18), pr("marvin", 20)}},
+		Expect(svc.ReviewLoad(ctx)).To(Equal([]reviewload.RepositoryReviewers{
+			{Repo: backend, Reviewers: []reviewload.Reviewer{
+				{Login: "Jane", Score: 100, PRs: []reviewload.PullRequest{pr("backend", 373)}},
+				{Login: "leoregino", Score: 100, PRs: []reviewload.PullRequest{pr("backend", 373)}},
+			}},
+			{Repo: marvinRepo, Reviewers: []reviewload.Reviewer{
+				{Login: "Jane", Score: 55, PRs: []reviewload.PullRequest{pr("marvin", 18), pr("marvin", 20)}},
+			}},
 		}))
 	})
 

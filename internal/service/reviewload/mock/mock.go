@@ -75,10 +75,10 @@ func (mr *MockServiceMockRecorder) RepoReviewLoad(ctx, name any) *gomock.Call {
 }
 
 // ReviewLoad mocks base method.
-func (m *MockService) ReviewLoad(ctx context.Context) ([]reviewload.Reviewer, error) {
+func (m *MockService) ReviewLoad(ctx context.Context) ([]reviewload.RepositoryReviewers, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReviewLoad", ctx)
-	ret0, _ := ret[0].([]reviewload.Reviewer)
+	ret0, _ := ret[0].([]reviewload.RepositoryReviewers)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
