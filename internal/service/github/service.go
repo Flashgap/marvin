@@ -50,12 +50,14 @@ type Service interface {
 
 type service struct {
 	github.Client
+	reviewLoad reviewload.Service
 }
 
 // NewService returns a new GitHub service
 func NewService(githubClient github.Client) Service {
 	return &service{
-		Client: githubClient,
+		Client:     githubClient,
+		reviewLoad: reviewload.NewService(githubClient),
 	}
 }
 
@@ -210,10 +212,15 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 		stackReviewers = s.reviewersFromStack(ctx, webhook, pr, candidates)
 	}
 
-	rankedDevs, err := s.RankUsersByReviewLoad(ctx, webhook, prNumber, teamMembersLogins)
-
+	rankedReviewers, err := s.reviewLoad.Rank(ctx, webhook, teamMembersLogins)
 	if err != nil {
 		return false, fmt.Errorf("error ranking devs by review load: %w", err)
+	}
+	log.Infof("review load of team members: %+v", rankedReviewers)
+
+	rankedDevs := make([]string, len(rankedReviewers))
+	for i, reviewer := range rankedReviewers {
+		rankedDevs[i] = reviewer.Login
 	}
 
 	addedReviewers := make([]string, 0, nbReviewersToFind)
@@ -235,30 +242,6 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 	}
 
 	return len(addedReviewers) >= nbReviewersToFind, nil
-}
-
-// RankUsersByReviewLoad ranks all members of the given team by current review load, lowest first.
-// See reviewload.Rank for how the load is scored.
-func (s *service) RankUsersByReviewLoad(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, usersLogin []string) ([]string, error) {
-	log := middlewares.LoggerFromGHContext(ctx, "github.RankUsersByReviewLoad")
-
-	prs, err := s.ListOpenPRsWithReviewers(ctx, webhook)
-	if err != nil {
-		return nil, fmt.Errorf("error listing open pull requests with reviewers: %w", err)
-	}
-
-	log.Infof("got %d opened PR's", len(prs))
-
-	reviewers := reviewload.Rank(prs, usersLogin)
-
-	log.Infof("here's the score of our developers: %+v", reviewers)
-
-	rankedDevs := make([]string, len(reviewers))
-	for i, reviewer := range reviewers {
-		rankedDevs[i] = reviewer.Login
-	}
-
-	return rankedDevs, nil
 }
 
 // RemoveLabel attempts to match the label given with existing labels in the repository by case-insensitive prefix.

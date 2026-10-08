@@ -33,12 +33,12 @@ func (s *service) ReviewLoad(ctx context.Context, cmd slack.SlashCommand) (*slac
 		return ephemeral(usage(name, repos)), nil
 	}
 
-	prs, err := s.githubClient.ListOpenPRsWithReviewers(ctx, installedRepo{repo: repo})
+	reviewers, err := s.Rank(ctx, installedRepo{repo: repo}, nil)
 	if err != nil {
-		return nil, fmt.Errorf("listing open pull requests with reviewers: %w", err)
+		return nil, err
 	}
 
-	return ephemeral(format(repo, Rank(prs, nil))), nil
+	return ephemeral(format(repo, reviewers)), nil
 }
 
 func (s *service) listInstalledRepos(ctx context.Context) ([]*gogithub.Repository, error) {
@@ -81,9 +81,12 @@ type Reviewer struct {
 	PRs   []int // Numbers of the open PRs making up Score, sorted
 }
 
-// Rank scores reviewers by review load, lowest first, ties broken by login. With nil members, everyone
-// reviewing an open PR is ranked. Otherwise only members are, including those reviewing nothing.
-func Rank(prs []pkggithub.OpenPRReviewLoad, members []string) []Reviewer {
+func (s *service) Rank(ctx context.Context, webhook pkggithub.RepoSenderGetter, members []string) ([]Reviewer, error) {
+	prs, err := s.githubClient.ListOpenPRsWithReviewers(ctx, webhook)
+	if err != nil {
+		return nil, fmt.Errorf("listing open pull requests with reviewers: %w", err)
+	}
+
 	byLogin := make(map[string]*Reviewer, len(members))
 	for _, login := range members {
 		byLogin[login] = &Reviewer{Login: login}
@@ -116,7 +119,7 @@ func Rank(prs []pkggithub.OpenPRReviewLoad, members []string) []Reviewer {
 		return reviewers[i].Login < reviewers[j].Login
 	})
 
-	return reviewers
+	return reviewers, nil
 }
 
 func format(repo *gogithub.Repository, reviewers []Reviewer) string {

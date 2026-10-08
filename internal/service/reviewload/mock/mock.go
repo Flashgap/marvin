@@ -13,6 +13,8 @@ import (
 	context "context"
 	reflect "reflect"
 
+	reviewload "github.com/Flashgap/marvin/internal/service/reviewload"
+	github "github.com/Flashgap/marvin/pkg/github"
 	slack "github.com/slack-go/slack"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -39,6 +41,21 @@ func NewMockService(ctrl *gomock.Controller) *MockService {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
+}
+
+// Rank mocks base method.
+func (m *MockService) Rank(ctx context.Context, webhook github.RepoSenderGetter, members []string) ([]reviewload.Reviewer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Rank", ctx, webhook, members)
+	ret0, _ := ret[0].([]reviewload.Reviewer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Rank indicates an expected call of Rank.
+func (mr *MockServiceMockRecorder) Rank(ctx, webhook, members any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rank", reflect.TypeOf((*MockService)(nil).Rank), ctx, webhook, members)
 }
 
 // ReviewLoad mocks base method.
