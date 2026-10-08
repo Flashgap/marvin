@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -57,25 +58,60 @@ func (ctrl *Controller) reviewLoadHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, ephemeral(reviewLoadText(repo, reviewers)))
+	c.JSON(http.StatusOK, reviewLoadMessage(repo, reviewers))
 }
 
-func reviewLoadText(repo *gogithub.Repository, reviewers []reviewload.Reviewer) string {
+// maxTableRows is Slack's limit on a table block's rows, header included.
+const maxTableRows = 100
+
+// reviewLoadMessage renders reviewers as a table block, one row per reviewer with links to their PRs.
+func reviewLoadMessage(repo *gogithub.Repository, reviewers []reviewload.Reviewer) *slack.Msg {
 	if len(reviewers) == 0 {
-		return fmt.Sprintf("Nobody is reviewing an open PR of *%s*.", repo.GetFullName())
+		return ephemeral(fmt.Sprintf("Nobody is reviewing an open PR of *%s*.", repo.GetFullName()))
 	}
 
-	var b strings.Builder
-	fmt.Fprintf(&b, "*Review load of %s*\n", repo.GetFullName())
+	title := fmt.Sprintf("*Review load of %s*", repo.GetFullName())
+	if len(reviewers) > maxTableRows-1 {
+		title += fmt.Sprintf(" (lowest %d of %d)", maxTableRows-1, len(reviewers))
+		reviewers = reviewers[:maxTableRows-1]
+	}
+
+	table := slack.NewTableBlock("").
+		WithColumnSettings(
+			slack.ColumnSetting{Align: slack.ColumnAlignmentLeft},
+			slack.ColumnSetting{Align: slack.ColumnAlignmentRight},
+			slack.ColumnSetting{Align: slack.ColumnAlignmentLeft, IsWrapped: true},
+		).
+		AddRow(boldCell("Reviewer"), boldCell("Score"), boldCell("PRs"))
 	for _, r := range reviewers {
-		links := make([]string, 0, len(r.PRs))
-		for _, number := range r.PRs {
-			links = append(links, fmt.Sprintf("<%s/pull/%d|#%d>", repo.GetHTMLURL(), number, number))
+		links := make([]slack.RichTextSectionElement, 0, 2*len(r.PRs))
+		for i, number := range r.PRs {
+			if i > 0 {
+				links = append(links, slack.NewRichTextSectionTextElement(", ", nil))
+			}
+			links = append(links, slack.NewRichTextSectionLinkElement(
+				fmt.Sprintf("%s/pull/%d", repo.GetHTMLURL(), number), fmt.Sprintf("#%d", number), nil))
 		}
-		fmt.Fprintf(&b, "• *%s* — %d — %s\n", r.Login, r.Score, strings.Join(links, ", "))
+
+		table.AddRow(
+			slack.NewTableRawTextCell(r.Login),
+			slack.NewTableRawTextCell(strconv.Itoa(r.Score)),
+			slack.NewTableRichTextCell(slack.NewRichTextSection(links...)),
+		)
 	}
 
-	return b.String()
+	msg := ephemeral(title)
+	msg.Blocks = slack.Blocks{BlockSet: []slack.Block{
+		slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, title, false, false), nil, nil),
+		table,
+	}}
+
+	return msg
+}
+
+func boldCell(text string) *slack.TableRichTextCell {
+	return slack.NewTableRichTextCell(slack.NewRichTextSection(
+		slack.NewRichTextSectionTextElement(text, &slack.RichTextSectionTextStyle{Bold: true})))
 }
 
 func reviewLoadUsage(err *reviewload.UnknownRepositoryError) string {

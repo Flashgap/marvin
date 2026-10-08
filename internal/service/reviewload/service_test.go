@@ -44,8 +44,8 @@ var _ = Describe("RepoReviewLoad", func() {
 				DoAndReturn(func(_ any, webhook pkggithub.RepoSenderGetter) ([]pkggithub.OpenPRReviewLoad, error) {
 					Expect(webhook.GetRepo()).To(Equal(backend))
 					return []pkggithub.OpenPRReviewLoad{
-						{Number: 373, Additions: 153, Reviewers: map[string]struct{}{"lebascou": {}, "leoregino": {}}},
-						{Number: 371, Additions: 1, Reviewers: map[string]struct{}{"lebascou": {}}},
+						{Number: 373, Additions: 153, Reviewers: map[string]struct{}{"Jane": {}, "leoregino": {}}},
+						{Number: 371, Additions: 1, Reviewers: map[string]struct{}{"Jane": {}}},
 						{Number: 286, Additions: 500, Reviewers: map[string]struct{}{}},
 					}, nil
 				})
@@ -55,7 +55,7 @@ var _ = Describe("RepoReviewLoad", func() {
 			Expect(repo).To(Equal(backend))
 			Expect(reviewers).To(Equal([]reviewload.Reviewer{
 				{Login: "leoregino", Score: 153, PRs: []int{373}},
-				{Login: "lebascou", Score: 154, PRs: []int{371, 373}},
+				{Login: "Jane", Score: 154, PRs: []int{371, 373}},
 			}))
 		},
 		Entry("by name, ignoring case", "Backend"),

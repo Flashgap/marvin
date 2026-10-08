@@ -136,16 +136,49 @@ var _ = Describe("POST /marvin/_webhook/slack/review-load", func() {
 		HTMLURL:  gogithub.Ptr("https://github.com/hector-finance/backend"),
 	}
 
-	It("lists reviewers with links to their PRs", func() {
+	It("lists reviewers in a table with links to their PRs", func() {
 		mockReviewLoad.EXPECT().RepoReviewLoad(gomock.Any(), "backend").Return(backend, []reviewload.Reviewer{
 			{Login: "0rax", Score: 90, PRs: []int{320}},
 			{Login: "lebascou", Score: 154, PRs: []int{371, 373}},
 		}, nil)
 
-		Expect(respond(" backend ", http.StatusOK).Text).To(Equal(
-			"*Review load of hector-finance/backend* (additions of the open PRs each person reviews, lowest is picked first)\n" +
-				"• *0rax* — 90 — <https://github.com/hector-finance/backend/pull/320|#320>\n" +
-				"• *lebascou* — 154 — <https://github.com/hector-finance/backend/pull/371|#371>, <https://github.com/hector-finance/backend/pull/373|#373>\n"))
+		msg := respond(" backend ", http.StatusOK)
+		Expect(msg.Text).To(Equal("*Review load of hector-finance/backend*"))
+		Expect(msg.Blocks.BlockSet).To(HaveLen(2))
+
+		table, err := json.Marshal(msg.Blocks.BlockSet[1])
+		Expect(err).NotTo(HaveOccurred())
+		Expect(table).To(MatchJSON(`{
+			"type": "table",
+			"column_settings": [
+				{"align": "left", "is_wrapped": false},
+				{"align": "right", "is_wrapped": false},
+				{"align": "left", "is_wrapped": true}
+			],
+			"rows": [
+				[
+					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "Reviewer", "style": {"bold": true}}]}]},
+					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "Score", "style": {"bold": true}}]}]},
+					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "PRs", "style": {"bold": true}}]}]}
+				],
+				[
+					{"type": "raw_text", "text": "0rax"},
+					{"type": "raw_text", "text": "90"},
+					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [
+						{"type": "link", "url": "https://github.com/hector-finance/backend/pull/320", "text": "#320"}
+					]}]}
+				],
+				[
+					{"type": "raw_text", "text": "lebascou"},
+					{"type": "raw_text", "text": "154"},
+					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [
+						{"type": "link", "url": "https://github.com/hector-finance/backend/pull/371", "text": "#371"},
+						{"type": "text", "text": ", "},
+						{"type": "link", "url": "https://github.com/hector-finance/backend/pull/373", "text": "#373"}
+					]}]}
+				]
+			]
+		}`))
 	})
 
 	It("says when nobody is reviewing", func() {
