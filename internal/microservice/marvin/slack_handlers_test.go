@@ -137,7 +137,11 @@ var _ = Describe("POST /marvin/_webhook/slack/review-load", func() {
 		FullName: gogithub.Ptr("hector-finance/backend"),
 		HTMLURL:  gogithub.Ptr("https://github.com/hector-finance/backend"),
 	}
-	frontend := &gogithub.Repository{Name: gogithub.Ptr("frontend"), FullName: gogithub.Ptr("hector-finance/frontend")}
+	frontend := &gogithub.Repository{
+		Name:     gogithub.Ptr("frontend"),
+		FullName: gogithub.Ptr("hector-finance/frontend"),
+		HTMLURL:  gogithub.Ptr("https://github.com/hector-finance/frontend"),
+	}
 
 	pr := func(repo string, number int) reviewload.PullRequest {
 		return reviewload.PullRequest{Number: number, URL: fmt.Sprintf("https://github.com/hector-finance/%s/pull/%d", repo, number)}
@@ -163,11 +167,7 @@ var _ = Describe("POST /marvin/_webhook/slack/review-load", func() {
 				{"align": "left", "is_wrapped": true}
 			],
 			"rows": [
-				[
-					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "Reviewer", "style": {"bold": true}}]}]},
-					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "Score", "style": {"bold": true}}]}]},
-					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "PRs", "style": {"bold": true}}]}]}
-				],
+				[{"type": "raw_text", "text": "Reviewer"}, {"type": "raw_text", "text": "Score"}, {"type": "raw_text", "text": "PRs"}],
 				[
 					{"type": "raw_text", "text": "0rax"},
 					{"type": "raw_text", "text": "90"},
@@ -194,9 +194,12 @@ var _ = Describe("POST /marvin/_webhook/slack/review-load", func() {
 		Expect(respond("backend", http.StatusOK).Text).To(Equal("Nobody is reviewing an open PR of *hector-finance/backend*."))
 	})
 
-	It("ranks every repository in one table, each repository's reviewers after a row naming it", func() {
+	It("ranks every repository in one table, naming each repository on its first row", func() {
 		mockReviewLoad.EXPECT().ReviewLoad(gomock.Any()).Return([]reviewload.RepositoryReviewers{
-			{Repo: backend, Reviewers: []reviewload.Reviewer{{Login: "0rax", Score: 90, PRs: []reviewload.PullRequest{pr("backend", 320)}}}},
+			{Repo: backend, Reviewers: []reviewload.Reviewer{
+				{Login: "0rax", Score: 90, PRs: []reviewload.PullRequest{pr("backend", 320)}},
+				{Login: "lebascou", Score: 154, PRs: []reviewload.PullRequest{pr("backend", 371)}},
+			}},
 			{Repo: frontend, Reviewers: []reviewload.Reviewer{{Login: "Jane", Score: 307, PRs: []reviewload.PullRequest{pr("frontend", 211)}}}},
 		}, nil)
 
@@ -210,21 +213,14 @@ var _ = Describe("POST /marvin/_webhook/slack/review-load", func() {
 			"type": "table",
 			"column_settings": [
 				{"align": "left", "is_wrapped": false},
+				{"align": "left", "is_wrapped": false},
 				{"align": "right", "is_wrapped": false},
 				{"align": "left", "is_wrapped": true}
 			],
 			"rows": [
+				[{"type": "raw_text", "text": "Repository"}, {"type": "raw_text", "text": "Reviewer"}, {"type": "raw_text", "text": "Score"}, {"type": "raw_text", "text": "PRs"}],
 				[
-					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "Reviewer", "style": {"bold": true}}]}]},
-					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "Score", "style": {"bold": true}}]}]},
-					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "PRs", "style": {"bold": true}}]}]}
-				],
-				[
-					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "backend", "style": {"bold": true}}]}]},
-					{"type": "raw_text", "text": ""},
-					{"type": "raw_text", "text": ""}
-				],
-				[
+					{"type": "raw_text", "text": "backend"},
 					{"type": "raw_text", "text": "0rax"},
 					{"type": "raw_text", "text": "90"},
 					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [
@@ -232,11 +228,15 @@ var _ = Describe("POST /marvin/_webhook/slack/review-load", func() {
 					]}]}
 				],
 				[
-					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "frontend", "style": {"bold": true}}]}]},
-					{"type": "raw_text", "text": ""},
-					{"type": "raw_text", "text": ""}
+					{"type": "raw_text", "text": " "},
+					{"type": "raw_text", "text": "lebascou"},
+					{"type": "raw_text", "text": "154"},
+					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [
+						{"type": "link", "url": "https://github.com/hector-finance/backend/pull/371", "text": "#371"}
+					]}]}
 				],
 				[
+					{"type": "raw_text", "text": "frontend"},
 					{"type": "raw_text", "text": "Jane"},
 					{"type": "raw_text", "text": "307"},
 					{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [

@@ -79,48 +79,57 @@ func (ctrl *Controller) reviewLoadHandler(c *gin.Context) {
 const maxTableRows = 100
 
 // reviewLoadMessage renders repos as a single table block, Slack allowing only one per message: one row
-// per reviewer with links to their PRs. With repoRows, each repository's reviewers follow a row holding
-// its name.
-func reviewLoadMessage(scope string, repos []reviewload.RepositoryReviewers, repoRows bool) *slack.Msg {
+// per reviewer with links to their PRs. With repoColumn, a first column names each repository on its
+// first row.
+func reviewLoadMessage(scope string, repos []reviewload.RepositoryReviewers, repoColumn bool) *slack.Msg {
 	if len(repos) == 0 {
 		return ephemeral(fmt.Sprintf("Nobody is reviewing an open PR of *%s*.", scope))
 	}
 
-	table := slack.NewTableBlock("").
-		WithColumnSettings(
-			slack.ColumnSetting{Align: slack.ColumnAlignmentLeft},
-			slack.ColumnSetting{Align: slack.ColumnAlignmentRight},
-			slack.ColumnSetting{Align: slack.ColumnAlignmentLeft, IsWrapped: true},
-		).
-		AddRow(boldCell("Reviewer"), boldCell("Score"), boldCell("PRs"))
+	columns := []slack.ColumnSetting{
+		{Align: slack.ColumnAlignmentLeft},
+		{Align: slack.ColumnAlignmentRight},
+		{Align: slack.ColumnAlignmentLeft, IsWrapped: true},
+	}
+	header := []slack.TableCell{
+		slack.NewTableRawTextCell("Reviewer"), slack.NewTableRawTextCell("Score"), slack.NewTableRawTextCell("PRs"),
+	}
+	if repoColumn {
+		columns = append([]slack.ColumnSetting{{Align: slack.ColumnAlignmentLeft}}, columns...)
+		header = append([]slack.TableCell{slack.NewTableRawTextCell("Repository")}, header...)
+	}
+	table := slack.NewTableBlock("").WithColumnSettings(columns...).AddRow(header...)
 
 	truncated := false
-	addRow := func(cells ...slack.TableCell) {
-		if len(table.Rows) == maxTableRows {
-			truncated = true
-			return
-		}
-		table.AddRow(cells...)
-	}
-
 	for _, repo := range repos {
-		if repoRows {
-			addRow(boldCell(repo.Repo.GetName()), slack.NewTableRawTextCell(""), slack.NewTableRawTextCell(""))
-		}
-		for _, r := range repo.Reviewers {
+		for i, r := range repo.Reviewers {
+			if len(table.Rows) == maxTableRows {
+				truncated = true
+				break
+			}
+
 			links := make([]slack.RichTextSectionElement, 0, 2*len(r.PRs))
-			for i, pr := range r.PRs {
-				if i > 0 {
+			for j, pr := range r.PRs {
+				if j > 0 {
 					links = append(links, slack.NewRichTextSectionTextElement(", ", nil))
 				}
 				links = append(links, slack.NewRichTextSectionLinkElement(pr.URL, fmt.Sprintf("#%d", pr.Number), nil))
 			}
 
-			addRow(
+			row := []slack.TableCell{
 				slack.NewTableRawTextCell(r.Login),
 				slack.NewTableRawTextCell(strconv.Itoa(r.Score)),
 				slack.NewTableRichTextCell(slack.NewRichTextSection(links...)),
-			)
+			}
+			if repoColumn {
+				// Slack rejects empty text: a space blanks the repository on its following rows
+				repoName := " "
+				if i == 0 {
+					repoName = repo.Repo.GetName()
+				}
+				row = append([]slack.TableCell{slack.NewTableRawTextCell(repoName)}, row...)
+			}
+			table.AddRow(row...)
 		}
 	}
 
@@ -136,11 +145,6 @@ func reviewLoadMessage(scope string, repos []reviewload.RepositoryReviewers, rep
 	}}
 
 	return msg
-}
-
-func boldCell(text string) *slack.TableRichTextCell {
-	return slack.NewTableRichTextCell(slack.NewRichTextSection(
-		slack.NewRichTextSectionTextElement(text, &slack.RichTextSectionTextStyle{Bold: true})))
 }
 
 func reviewLoadUsage(err *reviewload.UnknownRepositoryError) string {
