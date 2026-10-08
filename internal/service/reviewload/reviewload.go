@@ -16,6 +16,10 @@ type Service interface {
 	// name or full name ignoring case. It returns an *UnknownRepositoryError when none matches.
 	RepoReviewLoad(ctx context.Context, name string) (*gogithub.Repository, []Reviewer, error)
 
+	// ReviewLoad ranks everyone reviewing an open PR of any installed repository, summing their load
+	// across repositories.
+	ReviewLoad(ctx context.Context) ([]Reviewer, error)
+
 	// Rank scores reviewers of the repository's open PRs by review load, lowest first, ties broken by
 	// login. With nil members, everyone reviewing an open PR is ranked. Otherwise only members are,
 	// including those reviewing nothing.
@@ -26,7 +30,14 @@ type Service interface {
 type Reviewer struct {
 	Login string
 	Score int
-	PRs   []int // Numbers of the open PRs making up Score, sorted
+	PRs   []PullRequest // Open PRs making up Score, sorted by repository then number
+}
+
+// PullRequest identifies an open PR counted in a Reviewer's score.
+type PullRequest struct {
+	Repo   string // Repository name, without its owner
+	Number int
+	URL    string
 }
 
 // UnknownRepositoryError is returned when no installed repository matches the requested name.

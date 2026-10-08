@@ -3,6 +3,7 @@ package marvin_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -136,10 +137,14 @@ var _ = Describe("POST /marvin/_webhook/slack/review-load", func() {
 		HTMLURL:  gogithub.Ptr("https://github.com/hector-finance/backend"),
 	}
 
+	pr := func(repo string, number int) reviewload.PullRequest {
+		return reviewload.PullRequest{Repo: repo, Number: number, URL: fmt.Sprintf("https://github.com/hector-finance/%s/pull/%d", repo, number)}
+	}
+
 	It("lists reviewers in a table with links to their PRs", func() {
 		mockReviewLoad.EXPECT().RepoReviewLoad(gomock.Any(), "backend").Return(backend, []reviewload.Reviewer{
-			{Login: "0rax", Score: 90, PRs: []int{320}},
-			{Login: "lebascou", Score: 154, PRs: []int{371, 373}},
+			{Login: "0rax", Score: 90, PRs: []reviewload.PullRequest{pr("backend", 320)}},
+			{Login: "lebascou", Score: 154, PRs: []reviewload.PullRequest{pr("backend", 371), pr("backend", 373)}},
 		}, nil)
 
 		msg := respond(" backend ", http.StatusOK)
@@ -187,23 +192,43 @@ var _ = Describe("POST /marvin/_webhook/slack/review-load", func() {
 		Expect(respond("backend", http.StatusOK).Text).To(Equal("Nobody is reviewing an open PR of *hector-finance/backend*."))
 	})
 
-	It("shows the usage when no repository is given", func() {
-		mockReviewLoad.EXPECT().RepoReviewLoad(gomock.Any(), "").
-			Return(nil, nil, &reviewload.UnknownRepositoryError{Repositories: []string{"backend", "marvin"}})
+	It("ranks every repository when no repository is given, prefixing PR links with their repository", func() {
+		mockReviewLoad.EXPECT().ReviewLoad(gomock.Any()).Return([]reviewload.Reviewer{
+			{Login: "Jane", Score: 155, PRs: []reviewload.PullRequest{pr("backend", 373), pr("marvin", 18)}},
+		}, nil)
 
-		Expect(respond("", http.StatusOK).Text).To(Equal("Usage: `/review-load <repository>`. Repositories: `backend`, `marvin`"))
+		msg := respond(" ", http.StatusOK)
+		Expect(msg.Text).To(Equal("*Review load of all repositories*"))
+		Expect(msg.Blocks.BlockSet).To(HaveLen(2))
+
+		table, err := json.Marshal(msg.Blocks.BlockSet[1])
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(table)).To(ContainSubstring(`{"type":"link","url":"https://github.com/hector-finance/backend/pull/373","text":"backend#373"}`))
+		Expect(string(table)).To(ContainSubstring(`{"type":"link","url":"https://github.com/hector-finance/marvin/pull/18","text":"marvin#18"}`))
+	})
+
+	It("says when nobody is reviewing in any repository", func() {
+		mockReviewLoad.EXPECT().ReviewLoad(gomock.Any()).Return(nil, nil)
+
+		Expect(respond("", http.StatusOK).Text).To(Equal("Nobody is reviewing an open PR of *all repositories*."))
 	})
 
 	It("rejects an unknown repository", func() {
 		mockReviewLoad.EXPECT().RepoReviewLoad(gomock.Any(), "frontend").
 			Return(nil, nil, &reviewload.UnknownRepositoryError{Name: "frontend", Repositories: []string{"backend", "marvin"}})
 
-		Expect(respond("frontend", http.StatusOK).Text).To(Equal("Unknown repository `frontend`. Repositories: `backend`, `marvin`"))
+		Expect(respond("frontend", http.StatusOK).Text).To(Equal("Unknown repository `frontend`. Usage: `/review-load [repository]`, all repositories when omitted. Repositories: `backend`, `marvin`"))
 	})
 
 	It("fails on GitHub errors", func() {
 		mockReviewLoad.EXPECT().RepoReviewLoad(gomock.Any(), "backend").Return(nil, nil, errors.New("boom"))
 
 		respond("backend", http.StatusInternalServerError)
+	})
+
+	It("fails on GitHub errors across repositories", func() {
+		mockReviewLoad.EXPECT().ReviewLoad(gomock.Any()).Return(nil, errors.New("boom"))
+
+		respond("", http.StatusInternalServerError)
 	})
 })

@@ -8,8 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **`/review-load` Slack slash command**: `/review-load <repository>` shows everyone reviewing an open PR
-  of the repository with the review load score `auto_review_assign` ranks reviewers by, lowest first,
+- **`/review-load` Slack slash command**: `/review-load [repository]` shows everyone reviewing an open PR
+  of the repository, or of every installed repository when omitted, with the review load score `auto_review_assign` ranks reviewers by, lowest first,
   each with links to the PRs that make up their score. See the README's "Slack `/review-load` slash
   command" section for the Slack app configuration.
 

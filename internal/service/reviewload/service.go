@@ -1,15 +1,21 @@
 package reviewload
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
 	gogithub "github.com/google/go-github/v90/github"
+	"golang.org/x/sync/errgroup"
 
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 )
+
+// maxConcurrentRepos caps the GitHub queries ReviewLoad runs at once.
+const maxConcurrentRepos = 8
 
 type service struct {
 	githubClient pkggithub.Client
@@ -45,19 +51,82 @@ func (s *service) RepoReviewLoad(ctx context.Context, name string) (*gogithub.Re
 	return repo, reviewers, nil
 }
 
-func (s *service) Rank(ctx context.Context, webhook pkggithub.RepoSenderGetter, members []string) ([]Reviewer, error) {
-	prs, err := s.githubClient.ListOpenPRsWithReviewers(ctx, webhook)
+func (s *service) ReviewLoad(ctx context.Context) ([]Reviewer, error) {
+	repos, err := s.listInstalledRepos(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("listing open pull requests with reviewers: %w", err)
+		return nil, fmt.Errorf("listing installed repositories: %w", err)
 	}
 
+	// One query per repository: run them concurrently so the slash command answers within Slack's 3s
+	perRepo := make([][]openPR, len(repos))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentRepos)
+	for i, repo := range repos {
+		if repo.GetArchived() {
+			continue
+		}
+		g.Go(func() error {
+			prs, err := s.openPRs(gctx, installedRepo{repo: repo})
+			perRepo[i] = prs
+			return err
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return rank(slices.Concat(perRepo...), nil), nil
+}
+
+func (s *service) Rank(ctx context.Context, webhook pkggithub.RepoSenderGetter, members []string) ([]Reviewer, error) {
+	prs, err := s.openPRs(ctx, webhook)
+	if err != nil {
+		return nil, err
+	}
+
+	return rank(prs, members), nil
+}
+
+// openPR is an open PR with its size and reviewers.
+type openPR struct {
+	PullRequest
+	additions int
+	reviewers map[string]struct{}
+}
+
+func (s *service) openPRs(ctx context.Context, webhook pkggithub.RepoSenderGetter) ([]openPR, error) {
+	loads, err := s.githubClient.ListOpenPRsWithReviewers(ctx, webhook)
+	if err != nil {
+		return nil, fmt.Errorf("listing open pull requests with reviewers of %s: %w", webhook.GetRepo().GetFullName(), err)
+	}
+
+	repo := webhook.GetRepo()
+	prs := make([]openPR, 0, len(loads))
+	for _, load := range loads {
+		prs = append(prs, openPR{
+			PullRequest: PullRequest{
+				Repo:   repo.GetName(),
+				Number: load.Number,
+				URL:    fmt.Sprintf("%s/pull/%d", repo.GetHTMLURL(), load.Number),
+			},
+			additions: load.Additions,
+			reviewers: load.Reviewers,
+		})
+	}
+
+	return prs, nil
+}
+
+// rank scores reviewers by review load, lowest first, ties broken by login. With nil members, everyone
+// reviewing one of prs is ranked. Otherwise only members are, including those reviewing nothing.
+func rank(prs []openPR, members []string) []Reviewer {
 	byLogin := make(map[string]*Reviewer, len(members))
 	for _, login := range members {
 		byLogin[login] = &Reviewer{Login: login}
 	}
 
 	for _, pr := range prs {
-		for login := range pr.Reviewers {
+		for login := range pr.reviewers {
 			r, ok := byLogin[login]
 			if !ok {
 				if members != nil {
@@ -66,25 +135,23 @@ func (s *service) Rank(ctx context.Context, webhook pkggithub.RepoSenderGetter, 
 				r = &Reviewer{Login: login}
 				byLogin[login] = r
 			}
-			r.Score += pr.Additions
-			r.PRs = append(r.PRs, pr.Number)
+			r.Score += pr.additions
+			r.PRs = append(r.PRs, pr.PullRequest)
 		}
 	}
 
 	reviewers := make([]Reviewer, 0, len(byLogin))
 	for _, r := range byLogin {
-		sort.Ints(r.PRs)
+		slices.SortFunc(r.PRs, func(a, b PullRequest) int {
+			return cmp.Or(cmp.Compare(a.Repo, b.Repo), cmp.Compare(a.Number, b.Number))
+		})
 		reviewers = append(reviewers, *r)
 	}
-
-	sort.Slice(reviewers, func(i, j int) bool {
-		if reviewers[i].Score != reviewers[j].Score {
-			return reviewers[i].Score < reviewers[j].Score
-		}
-		return reviewers[i].Login < reviewers[j].Login
+	slices.SortFunc(reviewers, func(a, b Reviewer) int {
+		return cmp.Or(cmp.Compare(a.Score, b.Score), cmp.Compare(a.Login, b.Login))
 	})
 
-	return reviewers, nil
+	return reviewers
 }
 
 func (s *service) listInstalledRepos(ctx context.Context) ([]*gogithub.Repository, error) {

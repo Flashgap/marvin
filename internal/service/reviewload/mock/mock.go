@@ -73,3 +73,18 @@ func (mr *MockServiceMockRecorder) RepoReviewLoad(ctx, name any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RepoReviewLoad", reflect.TypeOf((*MockService)(nil).RepoReviewLoad), ctx, name)
 }
+
+// ReviewLoad mocks base method.
+func (m *MockService) ReviewLoad(ctx context.Context) ([]reviewload.Reviewer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReviewLoad", ctx)
+	ret0, _ := ret[0].([]reviewload.Reviewer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReviewLoad indicates an expected call of ReviewLoad.
+func (mr *MockServiceMockRecorder) ReviewLoad(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReviewLoad", reflect.TypeOf((*MockService)(nil).ReviewLoad), ctx)
+}

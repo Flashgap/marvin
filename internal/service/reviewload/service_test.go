@@ -2,6 +2,7 @@ package reviewload_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	gogithub "github.com/google/go-github/v90/github"
@@ -19,16 +20,25 @@ func Test(t *testing.T) {
 	RunSpecs(t, "Review load service test suite")
 }
 
+func pr(repo string, number int) reviewload.PullRequest {
+	return reviewload.PullRequest{Repo: repo, Number: number, URL: fmt.Sprintf("https://github.com/hector-finance/%s/pull/%d", repo, number)}
+}
+
+func repository(name string) *gogithub.Repository {
+	return &gogithub.Repository{
+		Name:     gogithub.Ptr(name),
+		FullName: gogithub.Ptr("hector-finance/" + name),
+		HTMLURL:  gogithub.Ptr("https://github.com/hector-finance/" + name),
+		Owner:    &gogithub.User{Login: gogithub.Ptr("hector-finance")},
+	}
+}
+
 var _ = Describe("RepoReviewLoad", func() {
 	var (
 		mockClient *mock_github.MockClient
 		svc        reviewload.Service
-		backend    = &gogithub.Repository{
-			Name:     gogithub.Ptr("backend"),
-			FullName: gogithub.Ptr("hector-finance/backend"),
-			Owner:    &gogithub.User{Login: gogithub.Ptr("hector-finance")},
-		}
-		marvinRepo = &gogithub.Repository{Name: gogithub.Ptr("marvin"), FullName: gogithub.Ptr("hector-finance/marvin")}
+		backend    = repository("backend")
+		marvinRepo = repository("marvin")
 	)
 
 	BeforeEach(func() {
@@ -54,8 +64,8 @@ var _ = Describe("RepoReviewLoad", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(repo).To(Equal(backend))
 			Expect(reviewers).To(Equal([]reviewload.Reviewer{
-				{Login: "leoregino", Score: 153, PRs: []int{373}},
-				{Login: "Jane", Score: 154, PRs: []int{371, 373}},
+				{Login: "leoregino", Score: 153, PRs: []reviewload.PullRequest{pr("backend", 373)}},
+				{Login: "Jane", Score: 154, PRs: []reviewload.PullRequest{pr("backend", 371), pr("backend", 373)}},
 			}))
 		},
 		Entry("by name, ignoring case", "Backend"),
@@ -82,11 +92,57 @@ var _ = Describe("RepoReviewLoad", func() {
 	})
 })
 
+var _ = Describe("ReviewLoad", func() {
+	var (
+		mockClient *mock_github.MockClient
+		svc        reviewload.Service
+		backend    = repository("backend")
+		marvinRepo = repository("marvin")
+		archived   = repository("legacy")
+	)
+
+	BeforeEach(func() {
+		archived.Archived = gogithub.Ptr(true)
+		mockClient = mock_github.NewMockClient(gomock.NewController(GinkgoT()))
+		svc = reviewload.NewService(mockClient)
+		mockClient.EXPECT().ListInstalledRepos(gomock.Any(), gomock.Any()).
+			Return(&gogithub.ListRepositories{Repositories: []*gogithub.Repository{marvinRepo, archived, backend}}, &gogithub.Response{}, nil)
+	})
+
+	It("sums review load across every non-archived installed repository", func(ctx SpecContext) {
+		loads := map[string][]pkggithub.OpenPRReviewLoad{
+			"backend": {
+				{Number: 373, Additions: 100, Reviewers: map[string]struct{}{"Jane": {}, "leoregino": {}}},
+			},
+			"marvin": {
+				{Number: 20, Additions: 50, Reviewers: map[string]struct{}{"Jane": {}}},
+				{Number: 18, Additions: 5, Reviewers: map[string]struct{}{"Jane": {}}},
+			},
+		}
+		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Times(2).
+			DoAndReturn(func(_ any, webhook pkggithub.RepoSenderGetter) ([]pkggithub.OpenPRReviewLoad, error) {
+				return loads[webhook.GetRepo().GetName()], nil
+			})
+
+		Expect(svc.ReviewLoad(ctx)).To(Equal([]reviewload.Reviewer{
+			{Login: "leoregino", Score: 100, PRs: []reviewload.PullRequest{pr("backend", 373)}},
+			{Login: "Jane", Score: 155, PRs: []reviewload.PullRequest{pr("backend", 373), pr("marvin", 18), pr("marvin", 20)}},
+		}))
+	})
+
+	It("surfaces GitHub errors", func(ctx SpecContext) {
+		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Return(nil, errors.New("boom")).MinTimes(1)
+
+		_, err := svc.ReviewLoad(ctx)
+		Expect(err).To(MatchError(ContainSubstring("boom")))
+	})
+})
+
 var _ = Describe("Rank", func() {
 	var (
 		mockClient *mock_github.MockClient
 		svc        reviewload.Service
-		webhook    = &gogithub.PullRequestEvent{Repo: &gogithub.Repository{Name: gogithub.Ptr("backend")}}
+		webhook    = &gogithub.PullRequestEvent{Repo: repository("backend")}
 	)
 
 	BeforeEach(func() {
@@ -100,8 +156,8 @@ var _ = Describe("Rank", func() {
 
 	It("ranks everyone reviewing an open PR without members", func(ctx SpecContext) {
 		Expect(svc.Rank(ctx, webhook, nil)).To(Equal([]reviewload.Reviewer{
-			{Login: "outsider", Score: 10, PRs: []int{2}},
-			{Login: "bob", Score: 15, PRs: []int{1, 2}},
+			{Login: "outsider", Score: 10, PRs: []reviewload.PullRequest{pr("backend", 2)}},
+			{Login: "bob", Score: 15, PRs: []reviewload.PullRequest{pr("backend", 1), pr("backend", 2)}},
 		}))
 	})
 
@@ -109,7 +165,7 @@ var _ = Describe("Rank", func() {
 		Expect(svc.Rank(ctx, webhook, []string{"bob", "carol", "alice"})).To(Equal([]reviewload.Reviewer{
 			{Login: "alice"},
 			{Login: "carol"},
-			{Login: "bob", Score: 15, PRs: []int{1, 2}},
+			{Login: "bob", Score: 15, PRs: []reviewload.PullRequest{pr("backend", 1), pr("backend", 2)}},
 		}))
 	})
 })

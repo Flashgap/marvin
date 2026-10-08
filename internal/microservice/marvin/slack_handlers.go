@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	gogithub "github.com/google/go-github/v90/github"
 	"github.com/slack-go/slack"
 
 	"github.com/Flashgap/marvin/internal/service/reviewload"
@@ -49,7 +48,18 @@ func (ctrl *Controller) reviewLoadHandler(c *gin.Context) {
 		return
 	}
 
-	repo, reviewers, err := ctrl.reviewLoad.RepoReviewLoad(c.Request.Context(), strings.TrimSpace(cmd.Text))
+	name := strings.TrimSpace(cmd.Text)
+	if name == "" {
+		reviewers, err := ctrl.reviewLoad.ReviewLoad(c.Request.Context())
+		if ctrl.Error(c, err) {
+			return
+		}
+
+		c.JSON(http.StatusOK, reviewLoadMessage("all repositories", reviewers, true))
+		return
+	}
+
+	repo, reviewers, err := ctrl.reviewLoad.RepoReviewLoad(c.Request.Context(), name)
 	if unknownRepo, ok := errors.AsType[*reviewload.UnknownRepositoryError](err); ok {
 		c.JSON(http.StatusOK, ephemeral(reviewLoadUsage(unknownRepo)))
 		return
@@ -58,19 +68,20 @@ func (ctrl *Controller) reviewLoadHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, reviewLoadMessage(repo, reviewers))
+	c.JSON(http.StatusOK, reviewLoadMessage(repo.GetFullName(), reviewers, false))
 }
 
 // maxTableRows is Slack's limit on a table block's rows, header included.
 const maxTableRows = 100
 
 // reviewLoadMessage renders reviewers as a table block, one row per reviewer with links to their PRs.
-func reviewLoadMessage(repo *gogithub.Repository, reviewers []reviewload.Reviewer) *slack.Msg {
+// withRepo prefixes each PR link with its repository, for rankings spanning several repositories.
+func reviewLoadMessage(scope string, reviewers []reviewload.Reviewer, withRepo bool) *slack.Msg {
 	if len(reviewers) == 0 {
-		return ephemeral(fmt.Sprintf("Nobody is reviewing an open PR of *%s*.", repo.GetFullName()))
+		return ephemeral(fmt.Sprintf("Nobody is reviewing an open PR of *%s*.", scope))
 	}
 
-	title := fmt.Sprintf("*Review load of %s*", repo.GetFullName())
+	title := fmt.Sprintf("*Review load of %s*", scope)
 	if len(reviewers) > maxTableRows-1 {
 		title += fmt.Sprintf(" (lowest %d of %d)", maxTableRows-1, len(reviewers))
 		reviewers = reviewers[:maxTableRows-1]
@@ -85,12 +96,15 @@ func reviewLoadMessage(repo *gogithub.Repository, reviewers []reviewload.Reviewe
 		AddRow(boldCell("Reviewer"), boldCell("Score"), boldCell("PRs"))
 	for _, r := range reviewers {
 		links := make([]slack.RichTextSectionElement, 0, 2*len(r.PRs))
-		for i, number := range r.PRs {
+		for i, pr := range r.PRs {
 			if i > 0 {
 				links = append(links, slack.NewRichTextSectionTextElement(", ", nil))
 			}
-			links = append(links, slack.NewRichTextSectionLinkElement(
-				fmt.Sprintf("%s/pull/%d", repo.GetHTMLURL(), number), fmt.Sprintf("#%d", number), nil))
+			text := fmt.Sprintf("#%d", pr.Number)
+			if withRepo {
+				text = pr.Repo + text
+			}
+			links = append(links, slack.NewRichTextSectionLinkElement(pr.URL, text, nil))
 		}
 
 		table.AddRow(
@@ -120,12 +134,8 @@ func reviewLoadUsage(err *reviewload.UnknownRepositoryError) string {
 		names = append(names, "`"+name+"`")
 	}
 
-	prefix := "Usage: `/review-load <repository>`."
-	if err.Name != "" {
-		prefix = fmt.Sprintf("Unknown repository `%s`.", err.Name)
-	}
-
-	return fmt.Sprintf("%s Repositories: %s", prefix, strings.Join(names, ", "))
+	return fmt.Sprintf("Unknown repository `%s`. Usage: `/review-load [repository]`, all repositories when omitted. Repositories: %s",
+		err.Name, strings.Join(names, ", "))
 }
 
 func ephemeral(text string) *slack.Msg {
