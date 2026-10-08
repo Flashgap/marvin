@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.1] — 2026-10-08
+
+### Fixed
+
+- Review load used by `auto_review_assign` no longer counts comments. Any line comment creates a
+  `COMMENTED` review, so a PR author replying in their own review threads, or someone commenting on a
+  PR they weren't assigned to, was charged that PR's additions. Only pending review requests and
+  `APPROVED`, `CHANGES_REQUESTED` and `DISMISSED` reviews count now. An assigned reviewer who only
+  left comments stops counting once their review request is fulfilled.
+
 ## [2.3.0] — 2026-10-07
 
 ### Added
