@@ -10,6 +10,7 @@ import (
 	mock_jira "github.com/Flashgap/marvin/internal/service/jira/mock"
 	mock_lock "github.com/Flashgap/marvin/internal/service/lock/mock"
 	mock_marvin "github.com/Flashgap/marvin/internal/service/marvin/mock"
+	mock_standup "github.com/Flashgap/marvin/internal/service/standup/mock"
 	mock_database "github.com/Flashgap/marvin/pkg/database/mock"
 	mock_github "github.com/Flashgap/marvin/pkg/github/mock"
 )
@@ -42,5 +43,52 @@ var _ = Describe("Services database wiring", func() {
 		_, err := marvin.NewServer(ctx, &cfg, services)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(services.DB).To(BeIdenticalTo(dbMock))
+	})
+
+	It("leaves the standup service nil when no standup channel is set", func(ctx SpecContext) {
+		cfg := marvin.Config{}
+		mockCtrl := gomock.NewController(GinkgoT())
+		services := &marvin.Services{
+			DB:            mock_database.NewMockClient(mockCtrl), // no Migrate call expected
+			LockService:   mock_lock.NewMockService(mockCtrl),
+			MarvinService: mock_marvin.NewMockService(mockCtrl),
+			GithubService: github.NewService(mock_github.NewMockClient(mockCtrl)),
+			JiraService:   mock_jira.NewMockService(mockCtrl),
+		}
+		_, err := marvin.NewServer(ctx, &cfg, services)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(services.StandupService).To(BeNil())
+	})
+
+	It("leaves the standup service nil without a database, even with a channel set", func(ctx SpecContext) {
+		cfg := marvin.Config{}
+		cfg.StandupChannelID = "C1"
+		mockCtrl := gomock.NewController(GinkgoT())
+		services := &marvin.Services{
+			MarvinService: mock_marvin.NewMockService(mockCtrl),
+			GithubService: github.NewService(mock_github.NewMockClient(mockCtrl)),
+			JiraService:   mock_jira.NewMockService(mockCtrl),
+		}
+		_, err := marvin.NewServer(ctx, &cfg, services)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(services.StandupService).To(BeNil())
+	})
+
+	It("preserves a pre-injected standup service during initialize", func(ctx SpecContext) {
+		cfg := marvin.Config{}
+		cfg.StandupChannelID = "C1"
+		mockCtrl := gomock.NewController(GinkgoT())
+		standupMock := mock_standup.NewMockService(mockCtrl)
+		services := &marvin.Services{
+			DB:             mock_database.NewMockClient(mockCtrl),
+			LockService:    mock_lock.NewMockService(mockCtrl),
+			StandupService: standupMock, // skip standup service construction (Migrate call)
+			MarvinService:  mock_marvin.NewMockService(mockCtrl),
+			GithubService:  github.NewService(mock_github.NewMockClient(mockCtrl)),
+			JiraService:    mock_jira.NewMockService(mockCtrl),
+		}
+		_, err := marvin.NewServer(ctx, &cfg, services)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(services.StandupService).To(BeIdenticalTo(standupMock))
 	})
 })

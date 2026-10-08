@@ -9,21 +9,24 @@ import (
 	marvinroute "github.com/Flashgap/marvin/internal/route/marvin"
 	"github.com/Flashgap/marvin/internal/service/lock"
 	"github.com/Flashgap/marvin/internal/service/marvin"
+	"github.com/Flashgap/marvin/internal/service/standup"
 	"github.com/Flashgap/marvin/internal/web"
 )
 
 type Controller struct {
 	web.BaseController
-	configuration *Config
-	marvinService marvin.Service
-	lockService   lock.Service
+	configuration  *Config
+	marvinService  marvin.Service
+	lockService    lock.Service
+	standupService standup.Service
 }
 
-func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service) *Controller {
+func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, standupService standup.Service) *Controller {
 	return &Controller{
-		configuration: configuration,
-		marvinService: marvinService,
-		lockService:   lockService,
+		configuration:  configuration,
+		marvinService:  marvinService,
+		lockService:    lockService,
+		standupService: standupService,
 	}
 }
 
@@ -36,7 +39,14 @@ func (ctrl *Controller) RouteEndpoints(router gin.IRouter) {
 	}
 }
 
-func (*Controller) RouteTasks(_ gin.IRouter) {
+func (ctrl *Controller) RouteTasks(router gin.IRouter) {
+	// Daily standup reminder, triggered by a cron (e.g. Cloud Scheduler). The
+	// handler returns 501 when no DB-backed standup service is wired in.
+	router.POST(
+		path.Join(marvinroute.Standup, marvinroute.StandupRemind),
+		middlewares.ValidateTaskSecret(ctrl.configuration.Tasks, ctrl.configuration.IsDevEnv),
+		ctrl.standupRemindHandler,
+	)
 }
 
 func (ctrl *Controller) RouteWebhooks(router gin.IRouter) {

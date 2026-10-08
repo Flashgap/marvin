@@ -2,6 +2,9 @@ package slack
 
 import (
 	"context"
+	"strconv"
+	"strings"
+	"time"
 
 	pkgslack "github.com/Flashgap/marvin/pkg/slack"
 )
@@ -31,5 +34,39 @@ func (s *service) GetUser(ctx context.Context, userID string) (*User, error) {
 	if name == "" {
 		name = u.Name
 	}
-	return &User{ID: u.ID, Name: name, IsBot: u.IsBot}, nil
+	return &User{ID: u.ID, Name: name, IsBot: u.IsBot, Deleted: u.Deleted}, nil
+}
+
+func (s *service) ChannelMembers(ctx context.Context, channelID string) ([]string, error) {
+	return s.client.GetChannelMembers(ctx, channelID)
+}
+
+func (s *service) ChannelHistory(ctx context.Context, channelID string, oldest time.Time) ([]Message, error) {
+	msgs, err := s.client.GetChannelHistory(ctx, channelID, oldest)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Message, 0, len(msgs))
+	for _, m := range msgs {
+		out = append(out, Message{
+			UserID:   m.User,
+			TS:       m.Timestamp,
+			PostedAt: ParseTS(m.Timestamp),
+			Text:     m.Text,
+			SubType:  m.SubType,
+			BotID:    m.BotID,
+		})
+	}
+	return out, nil
+}
+
+// ParseTS returns the UTC time of a Slack ts such as "1759820000.123456",
+// truncated to the second. A malformed ts gives the zero time.
+func ParseTS(ts string) time.Time {
+	sec, _, _ := strings.Cut(ts, ".")
+	unix, err := strconv.ParseInt(sec, 10, 64)
+	if err != nil {
+		return time.Time{}
+	}
+	return time.Unix(unix, 0).UTC()
 }

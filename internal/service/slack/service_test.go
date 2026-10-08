@@ -1,7 +1,9 @@
 package slack_test
 
 import (
+	"errors"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -70,5 +72,58 @@ var _ = Describe("Service", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(got.IsBot).To(BeTrue())
 		})
+
+		It("forwards Deleted", func(ctx SpecContext) {
+			client.EXPECT().GetUser(gomock.Any(), "Ugone").Return(&slack.User{ID: "Ugone", Deleted: true}, nil)
+			got, err := svc.GetUser(ctx, "Ugone")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(got.Deleted).To(BeTrue())
+		})
 	})
+
+	Context("ChannelMembers", func() {
+		It("delegates to the underlying client", func(ctx SpecContext) {
+			client.EXPECT().GetChannelMembers(gomock.Any(), "C1").Return([]string{"U1", "U2"}, nil)
+			Expect(svc.ChannelMembers(ctx, "C1")).To(Equal([]string{"U1", "U2"}))
+		})
+	})
+
+	Context("ChannelHistory", func() {
+		oldest := time.Date(2026, 9, 23, 9, 0, 0, 0, time.UTC)
+
+		It("maps messages and parses PostedAt from the ts", func(ctx SpecContext) {
+			msg := slack.Message{}
+			msg.User = "U1"
+			msg.Timestamp = "1791274320.123456"
+			msg.Text = "Today: ship it"
+			msg.SubType = "file_share"
+			bot := slack.Message{}
+			bot.BotID = "B1"
+			bot.Timestamp = "1791274000.000100"
+			client.EXPECT().GetChannelHistory(gomock.Any(), "C1", oldest).Return([]slack.Message{msg, bot}, nil)
+
+			got, err := svc.ChannelHistory(ctx, "C1", oldest)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(got).To(Equal([]slacksvc.Message{
+				{UserID: "U1", TS: "1791274320.123456", PostedAt: time.Unix(1791274320, 0).UTC(), Text: "Today: ship it", SubType: "file_share"},
+				{TS: "1791274000.000100", PostedAt: time.Unix(1791274000, 0).UTC(), BotID: "B1"},
+			}))
+		})
+
+		It("returns the client error", func(ctx SpecContext) {
+			client.EXPECT().GetChannelHistory(gomock.Any(), "C1", oldest).Return(nil, errors.New("boom"))
+			_, err := svc.ChannelHistory(ctx, "C1", oldest)
+			Expect(err).To(MatchError("boom"))
+		})
+	})
+
+	DescribeTable("ParseTS",
+		func(ts string, want time.Time) {
+			Expect(slacksvc.ParseTS(ts)).To(Equal(want))
+		},
+		Entry("seconds and micros", "1791274320.123456", time.Unix(1791274320, 0).UTC()),
+		Entry("seconds only", "1791274320", time.Unix(1791274320, 0).UTC()),
+		Entry("malformed", "nope", time.Time{}),
+		Entry("empty", "", time.Time{}),
+	)
 })

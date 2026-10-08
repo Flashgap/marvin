@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.4.0] — 2026-10-07
+
+### Added
+
+- **Daily standup reminder**: `POST /marvin/_task/standup/remind`, called by a cron on standup days,
+  DMs every member of the `MARVIN_STANDUP_CHANNEL_ID` channel who hasn't posted their standup there
+  yet today (UTC), quoting the *Today:* section of their last update along with a
+  *Yesterday / Today / Blockers* template. Requires the database. Task routes are authenticated by
+  the new `MARVIN_TASKS_SECRET` bearer secret. See the README's "Daily standup reminder" section for
+  the Slack scopes and the Cloud Scheduler setup.
+
 ## [2.3.0] — 2026-10-07
 
 ### Added

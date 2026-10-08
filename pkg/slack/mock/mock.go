@@ -12,6 +12,7 @@ package mock_slack
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	slack "github.com/slack-go/slack"
 	gomock "go.uber.org/mock/gomock"
@@ -39,6 +40,36 @@ func NewMockClient(ctrl *gomock.Controller) *MockClient {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
+}
+
+// GetChannelHistory mocks base method.
+func (m *MockClient) GetChannelHistory(ctx context.Context, channelID string, oldest time.Time) ([]slack.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChannelHistory", ctx, channelID, oldest)
+	ret0, _ := ret[0].([]slack.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetChannelHistory indicates an expected call of GetChannelHistory.
+func (mr *MockClientMockRecorder) GetChannelHistory(ctx, channelID, oldest any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChannelHistory", reflect.TypeOf((*MockClient)(nil).GetChannelHistory), ctx, channelID, oldest)
+}
+
+// GetChannelMembers mocks base method.
+func (m *MockClient) GetChannelMembers(ctx context.Context, channelID string) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChannelMembers", ctx, channelID)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetChannelMembers indicates an expected call of GetChannelMembers.
+func (mr *MockClientMockRecorder) GetChannelMembers(ctx, channelID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChannelMembers", reflect.TypeOf((*MockClient)(nil).GetChannelMembers), ctx, channelID)
 }
 
 // GetUser mocks base method.

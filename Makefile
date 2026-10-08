@@ -23,8 +23,8 @@ migrate-diff:
 	atlas migrate diff $(name) \
 	    --dir "file://$(MIGRATIONS_DIR)/$(driver)" \
 	    --dev-url "$(ATLAS_DEV_URL)"
-	go run ./internal/migrations/gen_sum
+	go run ./internal/migrations/gen_sum/main.go
 
 # Recompute atlas.sum files for every driver subdirectory.
 migrate-hash:
-	go run ./internal/migrations/gen_sum
+	go run ./internal/migrations/gen_sum/main.go

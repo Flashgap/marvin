@@ -107,6 +107,7 @@ func (ms *Server) initializeRouter() {
 
 	for _, controller := range ms.ctrls {
 		controller.RouteEndpoints(authRouter.Group(route.RoutingPathEndpointsPrefix))
+		controller.RouteTasks(authRouter.Group(route.RoutingPathTasksPrefix))
 		controller.RouteWebhooks(authRouter.Group(route.RoutingPathWebHooksPrefix))
 	}
 }
@@ -114,7 +115,7 @@ func (ms *Server) initializeRouter() {
 // initializeControllers initializes all HTTP controllers.
 func (ms *Server) initializeControllers() {
 	ms.ctrls = []web.Controller{
-		NewController(ms.cfg, ms.services.MarvinService, ms.services.LockService),
+		NewController(ms.cfg, ms.services.MarvinService, ms.services.LockService, ms.services.StandupService),
 	}
 }
 
