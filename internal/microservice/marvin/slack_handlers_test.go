@@ -17,6 +17,7 @@ import (
 	"github.com/Flashgap/marvin/internal/service/lock"
 	mock_lock "github.com/Flashgap/marvin/internal/service/lock/mock"
 	mock_marvin "github.com/Flashgap/marvin/internal/service/marvin/mock"
+	mock_reviewload "github.com/Flashgap/marvin/internal/service/reviewload/mock"
 	mock_github "github.com/Flashgap/marvin/pkg/github/mock"
 	"github.com/Flashgap/marvin/pkg/testenv"
 )
@@ -88,5 +89,35 @@ var _ = Describe("POST /marvin/_webhook/slack/lock", func() {
 		var body slack.Msg
 		Expect(json.Unmarshal(rec.Body.Bytes(), &body)).To(Succeed())
 		Expect(body.Text).To(Equal("top..."))
+	})
+})
+
+var _ = Describe("POST /marvin/_webhook/slack/review-load", func() {
+	path := marvinroute.Paths.WebHooks + "/slack/review-load"
+
+	It("dispatches to ReviewLoad", func(ctx SpecContext) {
+		mockCtrl := gomock.NewController(GinkgoT())
+		mockReviewLoad := mock_reviewload.NewMockService(mockCtrl)
+		mockReviewLoad.EXPECT().
+			ReviewLoad(gomock.Any(), slack.SlashCommand{UserID: "U1", Text: "backend"}).
+			Return(&slack.Msg{ResponseType: slack.ResponseTypeEphemeral, Text: "load..."}, nil)
+
+		cfg := marvin.Config{}
+		cfg.IsDevEnv = true // bypass Slack signing in tests
+		server, err := marvin.NewServer(ctx, &cfg, &marvin.Services{
+			MarvinService: mock_marvin.NewMockService(mockCtrl),
+			GithubService: github.NewService(mock_github.NewMockClient(mockCtrl)),
+			JiraService:   mock_jira.NewMockService(mockCtrl),
+			ReviewLoad:    mockReviewLoad,
+		})
+		Expect(err).ToNot(HaveOccurred())
+
+		rec := testenv.NewHTTPEnv(server.Handler).ServeHTTPRequest(http.MethodPost, path, slackFormHeaders,
+			form(map[string]string{"user_id": "U1", "text": "backend"}),
+			http.StatusOK)
+
+		var body slack.Msg
+		Expect(json.Unmarshal(rec.Body.Bytes(), &body)).To(Succeed())
+		Expect(body.Text).To(Equal("load..."))
 	})
 })

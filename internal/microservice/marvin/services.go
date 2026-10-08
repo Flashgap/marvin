@@ -14,6 +14,7 @@ import (
 	"github.com/Flashgap/marvin/internal/service/jira"
 	"github.com/Flashgap/marvin/internal/service/lock"
 	"github.com/Flashgap/marvin/internal/service/marvin"
+	"github.com/Flashgap/marvin/internal/service/reviewload"
 	slacksvc "github.com/Flashgap/marvin/internal/service/slack"
 	"github.com/Flashgap/marvin/pkg/database"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
@@ -31,6 +32,7 @@ type Services struct {
 	JiraService   jira.Service
 	MarvinService marvin.Service
 	LockService   lock.Service
+	ReviewLoad    reviewload.Service
 }
 
 func (s *Services) initialize(ctx context.Context, cfg *Config) error {
@@ -75,6 +77,10 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 			return fmt.Errorf("failed creating Github client: %w", err)
 		}
 		s.GithubService = github.NewService(pkggithub.NewClient(gogithubClient))
+	}
+
+	if s.ReviewLoad == nil {
+		s.ReviewLoad = reviewload.NewService(s.GithubService)
 	}
 
 	if s.JiraService == nil {

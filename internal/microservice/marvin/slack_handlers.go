@@ -37,3 +37,18 @@ func (ctrl *Controller) lockHandler(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp)
 }
+
+func (ctrl *Controller) reviewLoadHandler(c *gin.Context) {
+	cmd, err := slack.SlashCommandParse(c.Request)
+	if err != nil {
+		ctrl.Error(c, fmt.Errorf("%w: parsing slash command: %w", stderror.ErrParsing, err))
+		return
+	}
+
+	resp, err := ctrl.reviewLoad.ReviewLoad(c.Request.Context(), cmd)
+	if ctrl.Error(c, err) {
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
