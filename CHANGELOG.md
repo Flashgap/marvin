@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [2.4.0] — 2026-10-07
+## [2.5.0] — 2026-10-13
 
 ### Added
 
@@ -14,6 +14,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   *Yesterday / Today / Blockers* template. Requires the database. Task routes are authenticated by
   the new `MARVIN_TASKS_SECRET` bearer secret. See the README's "Daily standup reminder" section for
   the Slack scopes and the Cloud Scheduler setup.
+
+## [2.4.0] — 2026-10-08
+
+### Added
+
+- **`/review-load` Slack slash command**: `/review-load [repository]` shows everyone reviewing an open PR
+  of the repository, or of each installed repository when omitted, with the review load score
+  `auto_review_assign` ranks reviewers by, lowest first, each with links to the PRs that make up their
+  score. See the README's "Slack `/review-load` slash
+  command" section for the Slack app configuration.
+
+## [2.3.1] — 2026-10-08
+
+### Fixed
+
+- Review load used by `auto_review_assign` no longer counts comments. Any line comment creates a
+  `COMMENTED` review, so a PR author replying in their own review threads, or someone commenting on a
+  PR they weren't assigned to, was charged that PR's additions. Only pending review requests and
+  `APPROVED`, `CHANGES_REQUESTED` and `DISMISSED` reviews count now. An assigned reviewer who only
+  left comments stops counting once their review request is fulfilled.
 
 ## [2.3.0] — 2026-10-07
 

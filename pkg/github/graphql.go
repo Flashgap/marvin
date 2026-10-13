@@ -9,7 +9,7 @@ import (
 )
 
 // OpenPRReviewLoad holds, for one open pull request, its size and the logins of everyone who has
-// either reviewed it or is currently requested to review it.
+// either given it a verdict or is currently requested to review it.
 type OpenPRReviewLoad struct {
 	Number    int
 	Additions int
@@ -36,7 +36,7 @@ type openPRsWithReviewersQuery struct {
 							Login graphql.String
 						}
 					}
-				} `graphql:"reviews(first: 100)"`
+				} `graphql:"reviews(first: 100, states: [APPROVED, CHANGES_REQUESTED, DISMISSED])"`
 				ReviewRequests struct {
 					Nodes []struct {
 						RequestedReviewer struct {
@@ -50,7 +50,9 @@ type openPRsWithReviewersQuery struct {
 }
 
 // ListOpenPRsWithReviewers returns, for every open PR of the repository, its
-// size (additions) and the set of logins who have reviewed it or are requested to review it.
+// size (additions) and the set of logins who have given it a verdict or are requested to review it.
+// COMMENTED reviews are left out: any line comment creates one, including from the PR author replying in
+// a review thread or from someone who isn't assigned.
 func (h *client) ListOpenPRsWithReviewers(ctx context.Context, webhook RepoSenderGetter) ([]OpenPRReviewLoad, error) {
 	var query openPRsWithReviewersQuery
 	variables := map[string]any{

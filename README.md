@@ -115,6 +115,13 @@ and a repository with no `.marvin.yaml` has Marvin fully disabled on it.
                 "description": "Report an unlocked laptop, or show the leaderboard",
                 "usage_hint": "@someone",
                 "should_escape": true
+            },
+            {
+                "command": "/review-load",
+                "url": "https://your-marvin-url.com/marvin/_webhook/slack/review-load",
+                "description": "Show reviewers' review load on open PRs",
+                "usage_hint": "[repository]",
+                "should_escape": false
             }
         ]
     },
@@ -141,12 +148,12 @@ and a repository with no `.marvin.yaml` has Marvin fully disabled on it.
 }
 ```
 
-   Replace `your-marvin-url.com` with your Marvin host in the [`/lock` slash command](#slack-lock-slash-command-optional) URL.
+   Replace `your-marvin-url.com` with your Marvin host in the [`/lock`](#slack-lock-slash-command-optional) and [`/review-load`](#slack-review-load-slash-command-optional) slash command URLs.
 
    What the bot scopes are for:
    - `chat:write`, `im:write`: send DMs (`slack_notify`, `auto_changes_required`, `/lock`, the standup reminder).
    - `users:read`: look up users (`/lock`, the standup reminder).
-   - `commands`: the [`/lock` slash command](#slack-lock-slash-command-optional).
+   - `commands`: the [`/lock`](#slack-lock-slash-command-optional) and [`/review-load`](#slack-review-load-slash-command-optional) slash commands.
    - `channels:read`, `channels:history` (public channel) or `groups:read`, `groups:history` (private channel):
      read the [standup channel](#daily-standup-reminder-optional). Keep the pair matching your channel, or both.
 
@@ -285,8 +292,8 @@ The endpoint is **gated on the database**: without `DB_HOST`, requests return
 `501 Not Implemented`.
 
 **Slack app configuration**
-- Add a slash command with the request URL `https://<your-marvin>/marvin/_webhook/slack/lock`.
-- Turn on **"Escape channels, users, and links"** — Marvin parses the
+- Registered by the [manifest](#slack-app-setup). Otherwise, add a slash command with the request URL
+  `https://<your-marvin>/marvin/_webhook/slack/lock` and turn on **"Escape channels, users, and links"** — Marvin parses the
   `<@U12345|handle>` form Slack sends with that setting enabled.
 - Bot token scopes: `chat:write`, `im:write`, `users:read`.
 
@@ -295,6 +302,20 @@ The endpoint is **gated on the database**: without `DB_HOST`, requests return
 | Variable | Description |
 |----------|-------------|
 | `MARVIN_SLACK_SIGNING_SECRET` | Slack app signing secret used to verify the `X-Slack-Signature` header. Required outside dev. |
+
+### Slack `/review-load` slash command (optional)
+
+`/review-load [repository]` shows, as an ephemeral table, everyone reviewing an open PR of the
+repository with the score `auto_review_assign` ranks reviewers by, lowest first, each with links to those PRs.
+The repository is matched by name or full name, ignoring case. Without one, every non-archived repository the
+GitHub App is installed on is ranked, each in its own section of the table.
+
+Team members reviewing nothing aren't listed: they score 0.
+
+**Slack app configuration**
+- Registered by the [manifest](#slack-app-setup). Otherwise, add a slash command `/review-load` with the request URL
+  `https://<your-marvin>/marvin/_webhook/slack/review-load`.
+- Requests are verified with `MARVIN_SLACK_SIGNING_SECRET`, as for `/lock`.
 
 ### Daily standup reminder (optional)
 

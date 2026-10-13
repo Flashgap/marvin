@@ -9,6 +9,7 @@ import (
 	marvinroute "github.com/Flashgap/marvin/internal/route/marvin"
 	"github.com/Flashgap/marvin/internal/service/lock"
 	"github.com/Flashgap/marvin/internal/service/marvin"
+	"github.com/Flashgap/marvin/internal/service/reviewload"
 	"github.com/Flashgap/marvin/internal/service/standup"
 	"github.com/Flashgap/marvin/internal/web"
 )
@@ -18,14 +19,16 @@ type Controller struct {
 	configuration  *Config
 	marvinService  marvin.Service
 	lockService    lock.Service
+	reviewLoad     reviewload.Service
 	standupService standup.Service
 }
 
-func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, standupService standup.Service) *Controller {
+func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, reviewLoad reviewload.Service, standupService standup.Service) *Controller {
 	return &Controller{
 		configuration:  configuration,
 		marvinService:  marvinService,
 		lockService:    lockService,
+		reviewLoad:     reviewLoad,
 		standupService: standupService,
 	}
 }
@@ -59,6 +62,13 @@ func (ctrl *Controller) RouteWebhooks(router gin.IRouter) {
 		path.Join(marvinroute.Slack, marvinroute.SlackLock),
 		middlewares.ValidateSlackWebhook(ctrl.configuration.Slack, ctrl.configuration.IsDevEnv),
 		ctrl.lockHandler,
+	)
+
+	// Slack /review-load slash command
+	router.POST(
+		path.Join(marvinroute.Slack, marvinroute.SlackReviewLoad),
+		middlewares.ValidateSlackWebhook(ctrl.configuration.Slack, ctrl.configuration.IsDevEnv),
+		ctrl.reviewLoadHandler,
 	)
 
 	if ctrl.configuration.IsDevEnv {
