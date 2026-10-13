@@ -8,4 +8,7 @@ const (
 
 	// ReadHeaderTimeout is used to mitigate possible Slowloris attacks.
 	ReadHeaderTimeout = time.Second * 20
+
+	// GoogleKeysTimeout bounds the fetch of Google's public keys, used to verify task tokens.
+	GoogleKeysTimeout = 10 * time.Second
 )

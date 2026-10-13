@@ -354,36 +354,56 @@ return `501 Not Implemented`.
 | Variable | Description |
 |----------|-------------|
 | `MARVIN_STANDUP_CHANNEL_ID` | ID (not name) of the standup channel, e.g. `C0123456789`. Empty disables the feature. |
-| `MARVIN_TASKS_SECRET` | Bearer secret required on every `/marvin/_task/*` route, sent as `Authorization: Bearer <secret>`. Always required, in dev too: empty rejects every task request. |
+| `MARVIN_TASKS_AUDIENCE` | Audience of the OIDC tokens accepted on every `/marvin/_task/*` route: the job's `--oidc-token-audience`, e.g. `https://<your-marvin>`. |
+| `MARVIN_TASKS_SERVICE_ACCOUNT` | Email of the only service account whose OIDC tokens are accepted: the job's `--oidc-service-account-email`. |
+
+Outside dev, both `MARVIN_TASKS_*` variables are required: if either is empty, every task request is
+rejected.
 
 In local dev, point `MARVIN_STANDUP_CHANNEL_ID` at a test channel: the local bot token is the real
-one, so a run DMs real people. Unlike the GitHub and Slack webhooks, task routes have no dev bypass:
-`config/local/marvin.env` sets `MARVIN_TASKS_SECRET=dev`, so trigger a run with
+one, so a run DMs real people. As for the GitHub and Slack webhooks, task routes skip authentication
+when `IS_DEV_ENV=true` and both `MARVIN_TASKS_*` variables are empty, so trigger a run with
 
 ```bash
-curl -X POST -H "Authorization: Bearer dev" http://localhost:8080/marvin/_task/standup/remind
+curl -X POST http://localhost:8080/marvin/_task/standup/remind
 ```
 
 **Scheduling**
 
-Call `POST /marvin/_task/standup/remind` on standup days, e.g. with Cloud Scheduler:
+Call `POST /marvin/_task/standup/remind` on standup days with Cloud Scheduler, authenticated by an
+OIDC token. Create a service account for the job; it needs no role:
+
+```bash
+gcloud iam service-accounts create marvin-trigger --display-name="Marvin Cloud Scheduler jobs"
+```
+
+Whoever creates the job needs `roles/iam.serviceAccountUser` on that service account. Then:
 
 ```bash
 gcloud scheduler jobs create http marvin-standup \
   --schedule="0 9 * * 1-5" --time-zone="Europe/Paris" \
   --uri="https://<your-marvin>/marvin/_task/standup/remind" --http-method=POST \
-  --headers="Authorization=Bearer <MARVIN_TASKS_SECRET>" \
+  --oidc-service-account-email="marvin-trigger@<project>.iam.gserviceaccount.com" \
+  --oidc-token-audience="https://<your-marvin>" \
   --attempt-deadline=300s --max-retry-attempts=3 --min-backoff=60s
 ```
 
+- On each run, Cloud Scheduler sends `Authorization: Bearer <token>`, a token Google signed for
+  `marvin-trigger`, valid for an hour. Marvin is a public Cloud Run service, so Cloud Run passes it
+  through unchecked: Marvin verifies its signature against Google's public keys, then its audience,
+  expiry, issuer and email.
+- Set `MARVIN_TASKS_AUDIENCE` and `MARVIN_TASKS_SERVICE_ACCOUNT` to the job's `--oidc-*` values.
+  Always pass `--oidc-token-audience`: by default, Cloud Scheduler uses the full URI.
+- Don't grant anyone `roles/iam.serviceAccountTokenCreator` or
+  `roles/iam.serviceAccountOpenIdTokenCreator` on `marvin-trigger`: whoever can mint its tokens can
+  call every task route. Cloud Scheduler doesn't need either.
 - `--max-retry-attempts` is required: Cloud Scheduler doesn't retry by default, and Marvin answers
   `500` when a run partly fails (a DM or database write failed) so that the retry finishes the job.
 - `--attempt-deadline=300s` matches Cloud Run's default request timeout (Scheduler's default is `180s`).
-- Don't configure an OIDC or OAuth token on the job: Cloud Scheduler then overrides the
-  `Authorization` header.
 
 A successful run answers `200` with its counters, e.g.
-`{"members":12,"reminded":7,"already_posted":3,"already_reminded":0,"ignored":2}`.
+`{"members":12,"reminded":7,"already_posted":3,"already_reminded":0,"ignored":2}`. Check the setup
+with `gcloud scheduler jobs run marvin-standup`: on a `401`, Marvin's log says which check failed.
 
 ---
 

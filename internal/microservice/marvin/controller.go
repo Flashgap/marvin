@@ -4,6 +4,7 @@ import (
 	"path"
 
 	"github.com/gin-gonic/gin"
+	"google.golang.org/api/idtoken"
 
 	"github.com/Flashgap/marvin/internal/middlewares"
 	marvinroute "github.com/Flashgap/marvin/internal/route/marvin"
@@ -21,15 +22,17 @@ type Controller struct {
 	lockService    lock.Service
 	reviewLoad     reviewload.Service
 	standupService standup.Service
+	taskTokens     *idtoken.Validator
 }
 
-func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, reviewLoad reviewload.Service, standupService standup.Service) *Controller {
+func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, reviewLoad reviewload.Service, standupService standup.Service, taskTokens *idtoken.Validator) *Controller {
 	return &Controller{
 		configuration:  configuration,
 		marvinService:  marvinService,
 		lockService:    lockService,
 		reviewLoad:     reviewLoad,
 		standupService: standupService,
+		taskTokens:     taskTokens,
 	}
 }
 
@@ -47,7 +50,7 @@ func (ctrl *Controller) RouteTasks(router gin.IRouter) {
 	// handler returns 501 when no DB-backed standup service is wired in.
 	router.POST(
 		path.Join(marvinroute.Standup, marvinroute.StandupRemind),
-		middlewares.ValidateTaskSecret(ctrl.configuration.Tasks),
+		middlewares.ValidateTaskToken(ctrl.configuration.Tasks, ctrl.configuration.IsDevEnv, ctrl.taskTokens),
 		ctrl.standupRemindHandler,
 	)
 }
