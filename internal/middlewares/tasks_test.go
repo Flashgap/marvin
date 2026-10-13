@@ -216,15 +216,11 @@ var _ = Describe("ValidateTaskToken", func() {
 		token := "Bearer " + schedulerToken()
 		Expect(serve(config.Tasks{}, false, token)).To(Equal(http.StatusUnauthorized))
 		Expect(serve(config.Tasks{TasksAudience: taskAudience}, false, token)).To(Equal(http.StatusUnauthorized))
-		Expect(serve(config.Tasks{TasksServiceAccount: taskServiceAccount}, true, token)).To(Equal(http.StatusUnauthorized))
+		Expect(serve(config.Tasks{TasksServiceAccount: taskServiceAccount}, false, token)).To(Equal(http.StatusUnauthorized))
 	})
 
-	It("skips verification in dev when unconfigured", func() {
+	It("skips verification in dev", func() {
 		Expect(serve(config.Tasks{}, true, "")).To(Equal(http.StatusOK))
-	})
-
-	It("still verifies in dev when configured", func() {
-		Expect(serve(cfg, true, "")).To(Equal(http.StatusUnauthorized))
-		Expect(serve(cfg, true, "Bearer "+schedulerToken())).To(Equal(http.StatusOK))
+		Expect(serve(cfg, true, "")).To(Equal(http.StatusOK))
 	})
 })

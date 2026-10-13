@@ -3,8 +3,8 @@ package config
 // Tasks configuration, shared by every /marvin/_task route.
 //
 // Task requests (e.g. from Cloud Scheduler) authenticate with a Google-signed
-// OIDC token, sent as "Authorization: Bearer <token>". When either field is
-// empty, task requests are rejected, except in dev when both are empty.
+// OIDC token, sent as "Authorization: Bearer <token>". Outside dev, when either
+// field is empty, task requests are rejected.
 type Tasks struct {
 	// TasksAudience is the audience the tokens are minted for: the job's
 	// --oidc-token-audience, e.g. "https://marvin.example.com".

@@ -32,7 +32,7 @@ var _ = Describe("POST /marvin/_task/standup/remind", func() {
 	path := marvinroute.Paths.Tasks + "/standup/remind"
 
 	It("answers 200 without doing anything yet", func(ctx SpecContext) {
-		// Dev with Tasks unset leaves task authentication off: the middleware's own tests cover it.
+		// Dev leaves task authentication off: the middleware's own tests cover it.
 		cfg := marvin.Config{}
 		cfg.IsDevEnv = true
 

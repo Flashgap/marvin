@@ -302,8 +302,7 @@ service account.
 | `MARVIN_TASKS_SERVICE_ACCOUNT` | Email of the only service account whose OIDC tokens are accepted: the job's `--oidc-service-account-email`. |
 
 Outside dev, both are required: if either is empty, every task request is rejected. As for the GitHub
-and Slack webhooks, task routes skip authentication when `IS_DEV_ENV=true` and both are empty, so
-locally:
+webhook, task routes skip authentication when `IS_DEV_ENV=true`, so locally:
 
 ```bash
 curl -X POST http://localhost:8080/marvin/_task/<task>

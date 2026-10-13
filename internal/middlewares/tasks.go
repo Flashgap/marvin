@@ -38,11 +38,11 @@ const signingAlgorithm = "RS256"
 // here. The email check is what pins the caller: any service account can get a
 // Google-signed token for our audience.
 //
-// In dev (IsDevEnv) when Tasks is empty, verification is skipped, same escape
-// hatch as ValidateSlackWebhook. Otherwise, a missing field rejects every
-// request.
+// In dev (IsDevEnv), verification is skipped, same escape hatch as
+// ValidateGithubWebhook. Everywhere else it always runs, and a missing field
+// rejects every request.
 func ValidateTaskToken(cfg config.Tasks, isDevEnv bool, validator *idtoken.Validator) gin.HandlerFunc {
-	if isDevEnv && cfg == (config.Tasks{}) {
+	if isDevEnv {
 		return func(c *gin.Context) { c.Next() }
 	}
 
