@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.0] — 2026-10-13
+
+### Added
+
+- **Task routes**: the `/marvin/_task/*` routes, called by a scheduler such as Cloud Scheduler, are now
+  mounted. They only accept the OIDC tokens Google signs for `MARVIN_TASKS_SERVICE_ACCOUNT` with the
+  `MARVIN_TASKS_AUDIENCE` audience. The first one, `POST /marvin/_task/standup/remind`, answers `200`
+  without doing anything until the daily standup reminder lands, so that its Cloud Scheduler job can be
+  set up and checked first. See the README's "Task routes" section.
+
 ## [2.4.0] — 2026-10-08
 
 ### Added
