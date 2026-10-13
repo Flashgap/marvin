@@ -1,6 +1,8 @@
 package middlewares
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -17,16 +19,24 @@ import (
 // googleIssuers are the two values Google uses for the iss claim of its ID tokens.
 var googleIssuers = []string{"https://accounts.google.com", "accounts.google.com"}
 
+// signingAlgorithm is the only algorithm Google signs ID tokens with: its
+// discovery document lists id_token_signing_alg_values_supported: ["RS256"].
+// It's checked before idtoken sees the token, since idtoken checks ES256
+// tokens against IAP's keys and panics on a short ES256 signature. Widening it
+// is a security decision, not a compatibility fix.
+const signingAlgorithm = "RS256"
+
 // ValidateTaskToken verifies that inbound task requests (e.g. from Cloud
 // Scheduler) carry "Authorization: Bearer <token>", where token is a Google
 // OIDC token minted for cfg.TasksServiceAccount with cfg.TasksAudience as
 // audience.
 //
-// Marvin is a public Cloud Run service, since GitHub and Slack call it, so
-// Cloud Run doesn't check the token: this middleware does. validator checks the
-// signature against Google's public keys, the audience and the expiry; iss,
-// email and email_verified are checked here. The email check is what pins the
-// caller: any service account can get a Google-signed token for our audience.
+// Marvin checks the token itself; it doesn't rely on anything in front of it,
+// which must pass the Authorization header through unchanged. The algorithm is
+// pinned to RS256 here; validator checks the signature against Google's public
+// keys, the audience and the expiry; iss, email and email_verified are checked
+// here. The email check is what pins the caller: any service account can get a
+// Google-signed token for our audience.
 //
 // In dev (IsDevEnv) when Tasks is empty, verification is skipped, same escape
 // hatch as ValidateSlackWebhook. Otherwise, a missing field rejects every
@@ -56,6 +66,14 @@ func checkTaskToken(c *gin.Context, cfg config.Tasks, validator *idtoken.Validat
 		return errors.New("missing bearer token")
 	}
 
+	alg, err := tokenAlgorithm(token)
+	if err != nil {
+		return err
+	}
+	if alg != signingAlgorithm {
+		return fmt.Errorf("unexpected alg %q", alg)
+	}
+
 	payload, err := validator.Validate(c.Request.Context(), token, cfg.TasksAudience)
 	if err != nil {
 		return err
@@ -72,4 +90,24 @@ func checkTaskToken(c *gin.Context, cfg config.Tasks, validator *idtoken.Validat
 	}
 
 	return nil
+}
+
+// tokenAlgorithm reads the alg of a JWT's header without verifying anything.
+// It decodes the header with encoding/json like idtoken does, so both read the
+// same alg, duplicate or differently cased keys included.
+func tokenAlgorithm(token string) (string, error) {
+	encoded, _, _ := strings.Cut(token, ".")
+	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", fmt.Errorf("decode token header: %w", err)
+	}
+
+	var header struct {
+		Alg string `json:"alg"`
+	}
+	if err := json.Unmarshal(decoded, &header); err != nil {
+		return "", fmt.Errorf("decode token header: %w", err)
+	}
+
+	return header.Alg, nil
 }

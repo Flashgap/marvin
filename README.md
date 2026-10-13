@@ -388,10 +388,12 @@ gcloud scheduler jobs create http marvin-standup \
   --attempt-deadline=300s --max-retry-attempts=3 --min-backoff=60s
 ```
 
-- On each run, Cloud Scheduler sends `Authorization: Bearer <token>`, a token Google signed for
-  `marvin-trigger`, valid for an hour. Marvin is a public Cloud Run service, so Cloud Run passes it
-  through unchecked: Marvin verifies its signature against Google's public keys, then its audience,
-  expiry, issuer and email.
+- On each run, Cloud Scheduler sends `Authorization: Bearer <token>`, an ID token Google signs for
+  `marvin-trigger`, valid for an hour. Marvin checks it itself: the RS256 signature against Google's
+  public keys, the audience, expiry, issuer, email and `email_verified`.
+- Whatever sits in front of Marvin (a load balancer, a proxy, the hosting platform) must pass the
+  `Authorization` header through unchanged. If it checks, strips or rewrites the header, for example
+  to verify the token itself, every task request is rejected with a `401`.
 - Set `MARVIN_TASKS_AUDIENCE` and `MARVIN_TASKS_SERVICE_ACCOUNT` to the job's `--oidc-*` values.
   Always pass `--oidc-token-audience`: by default, Cloud Scheduler uses the full URI.
 - Don't grant anyone `roles/iam.serviceAccountTokenCreator` or
