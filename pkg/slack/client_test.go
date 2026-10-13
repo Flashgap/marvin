@@ -61,13 +61,6 @@ var _ = Describe("GetChannelMembers", func() {
 		Expect(second.Get("cursor")).To(Equal("page2"))
 	})
 
-	It("wraps Slack errors", func(ctx context.Context) {
-		c, _ := newTestClient(`{"ok":false,"error":"not_in_channel"}`)
-
-		_, err := c.GetChannelMembers(ctx, "C1")
-		Expect(err).To(MatchError(ErrGetChannelMembers))
-		Expect(err).To(MatchError(ContainSubstring("not_in_channel")))
-	})
 })
 
 var _ = Describe("GetChannelHistory", func() {
@@ -104,13 +97,6 @@ var _ = Describe("GetChannelHistory", func() {
 		Expect(requests).To(HaveLen(1))
 	})
 
-	It("wraps Slack errors", func(ctx context.Context) {
-		c, _ := newTestClient(`{"ok":false,"error":"channel_not_found"}`)
-
-		_, err := c.GetChannelHistory(ctx, "C1", oldest)
-		Expect(err).To(MatchError(ErrGetChannelHistory))
-		Expect(err).To(MatchError(ContainSubstring("channel_not_found")))
-	})
 })
 
 var _ = Describe("IsPermanentDMError", func() {

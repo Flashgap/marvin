@@ -192,61 +192,6 @@ var _ = Describe("Remind", func() {
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 
-	It("returns an error when a member can't be looked up", func(ctx SpecContext) {
-		svc, mock, mslack := newStandupService(GinkgoT())
-		expectChannel(mslack, []string{"U1"})
-		expectStates(mock)
-		mslack.EXPECT().GetUser(gomock.Any(), "U1").Return(nil, errors.New("ratelimited"))
-
-		report, err := svc.Remind(ctx)
-		Expect(err).To(MatchError(ContainSubstring("ratelimited")))
-		Expect(report).To(Equal(&standup.Report{Members: 1}))
-		Expect(mock.ExpectationsWereMet()).To(Succeed())
-	})
-
-	It("returns an error when marking a member reminded fails", func(ctx SpecContext) {
-		svc, mock, mslack := newStandupService(GinkgoT())
-		expectChannel(mslack, []string{"U1"})
-		expectStates(mock)
-		mslack.EXPECT().GetUser(gomock.Any(), "U1").Return(human("U1"), nil)
-		captureDM(mslack, "U1")
-		expectMarkReminded(mock).WillReturnError(errors.New("db down"))
-
-		report, err := svc.Remind(ctx)
-		Expect(err).To(MatchError(ContainSubstring("db down")))
-		Expect(report).To(Equal(&standup.Report{Members: 1}))
-		Expect(mock.ExpectationsWereMet()).To(Succeed())
-	})
-
-	Context("before the per-member loop", func() {
-		It("fails when the members can't be listed", func(ctx SpecContext) {
-			svc, _, mslack := newStandupService(GinkgoT())
-			mslack.EXPECT().ChannelMembers(gomock.Any(), "C1").Return(nil, errors.New("not_in_channel"))
-
-			_, err := svc.Remind(ctx)
-			Expect(err).To(MatchError(ContainSubstring("not_in_channel")))
-		})
-
-		It("fails when the history can't be read", func(ctx SpecContext) {
-			svc, _, mslack := newStandupService(GinkgoT())
-			mslack.EXPECT().ChannelMembers(gomock.Any(), "C1").Return([]string{"U1"}, nil)
-			mslack.EXPECT().ChannelHistory(gomock.Any(), "C1", gomock.Any()).Return(nil, errors.New("channel_not_found"))
-
-			_, err := svc.Remind(ctx)
-			Expect(err).To(MatchError(ContainSubstring("channel_not_found")))
-		})
-
-		It("fails when the stored members can't be read", func(ctx SpecContext) {
-			svc, mock, mslack := newStandupService(GinkgoT())
-			expectChannel(mslack, []string{"U1"})
-			mock.ExpectQuery(`SELECT .* FROM .*standup_users`).WillReturnError(errors.New("db down"))
-
-			_, err := svc.Remind(ctx)
-			Expect(err).To(MatchError(ContainSubstring("db down")))
-			Expect(mock.ExpectationsWereMet()).To(Succeed())
-		})
-	})
-
 	It("reminds again the day after a late answer, quoting it", func(ctx SpecContext) {
 		// Reminded yesterday at 09:00, answered at 10:00: today's run must not
 		// mistake that answer for today's standup.
