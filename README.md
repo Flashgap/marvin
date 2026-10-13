@@ -354,10 +354,15 @@ return `501 Not Implemented`.
 | Variable | Description |
 |----------|-------------|
 | `MARVIN_STANDUP_CHANNEL_ID` | ID (not name) of the standup channel, e.g. `C0123456789`. Empty disables the feature. |
-| `MARVIN_TASKS_SECRET` | Bearer secret required on every `/marvin/_task/*` route, sent as `Authorization: Bearer <secret>`. Required outside dev. |
+| `MARVIN_TASKS_SECRET` | Bearer secret required on every `/marvin/_task/*` route, sent as `Authorization: Bearer <secret>`. Always required, in dev too: empty rejects every task request. |
 
 In local dev, point `MARVIN_STANDUP_CHANNEL_ID` at a test channel: the local bot token is the real
-one, so a run DMs real people.
+one, so a run DMs real people. Unlike the GitHub and Slack webhooks, task routes have no dev bypass:
+`config/local/marvin.env` sets `MARVIN_TASKS_SECRET=dev`, so trigger a run with
+
+```bash
+curl -X POST -H "Authorization: Bearer dev" http://localhost:8080/marvin/_task/standup/remind
+```
 
 **Scheduling**
 

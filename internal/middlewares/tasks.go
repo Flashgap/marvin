@@ -14,18 +14,13 @@ import (
 // ValidateTaskSecret verifies that inbound task requests (e.g. from Cloud
 // Scheduler) carry "Authorization: Bearer <TasksSecret>".
 //
-// In dev (IsDevEnv) when TasksSecret is empty, the check is skipped — same
-// escape hatch as ValidateSlackWebhook.
-func ValidateTaskSecret(cfg config.Tasks, isDevEnv bool) gin.HandlerFunc {
-	bypass := isDevEnv && cfg.TasksSecret == ""
+// Unlike the GitHub and Slack webhooks, there is no dev bypass: a bearer
+// secret is trivial to send by hand, so an empty TasksSecret rejects every
+// request, in dev too.
+func ValidateTaskSecret(cfg config.Tasks) gin.HandlerFunc {
 	want := []byte("Bearer " + cfg.TasksSecret)
 
 	return func(c *gin.Context) {
-		if bypass {
-			c.Next()
-			return
-		}
-
 		got := []byte(c.GetHeader("Authorization"))
 		if cfg.TasksSecret == "" || subtle.ConstantTimeCompare(got, want) != 1 {
 			web.DefaultController.Error(c, fmt.Errorf("%w: ValidateTaskSecret", stderror.ErrUnauthorized))

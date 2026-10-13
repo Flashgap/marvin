@@ -33,27 +33,29 @@ func buildStandupTest(ctx SpecContext, cfg marvin.Config, standupSvc standup.Ser
 	return testenv.NewHTTPEnv(server.Handler)
 }
 
-// devConfig bypasses the task secret check in tests.
-func devConfig() marvin.Config {
+const taskSecret = "test-secret"
+
+func taskConfig() marvin.Config {
 	cfg := marvin.Config{}
-	cfg.IsDevEnv = true
+	cfg.TasksSecret = taskSecret
 	return cfg
 }
 
 var _ = Describe("POST /marvin/_task/standup/remind", func() {
 	path := marvinroute.Paths.Tasks + "/standup/remind"
+	auth := map[string]any{"Authorization": "Bearer " + taskSecret}
 
 	It("returns 501 when the standup service isn't wired in", func(ctx SpecContext) {
-		env := buildStandupTest(ctx, devConfig(), nil)
-		env.ServeHTTPRequest(http.MethodPost, path, nil, nil, http.StatusNotImplemented)
+		env := buildStandupTest(ctx, taskConfig(), nil)
+		env.ServeHTTPRequest(http.MethodPost, path, auth, nil, http.StatusNotImplemented)
 	})
 
 	It("returns the report of the run", func(ctx SpecContext) {
 		mockStandup := mock_standup.NewMockService(gomock.NewController(GinkgoT()))
 		mockStandup.EXPECT().Remind(gomock.Any()).Return(&standup.Report{Members: 12, Reminded: 7, AlreadyPosted: 3, Ignored: 2}, nil)
 
-		env := buildStandupTest(ctx, devConfig(), mockStandup)
-		rec := env.ServeHTTPRequest(http.MethodPost, path, nil, nil, http.StatusOK)
+		env := buildStandupTest(ctx, taskConfig(), mockStandup)
+		rec := env.ServeHTTPRequest(http.MethodPost, path, auth, nil, http.StatusOK)
 
 		var body map[string]int
 		Expect(json.Unmarshal(rec.Body.Bytes(), &body)).To(Succeed())
@@ -64,16 +66,14 @@ var _ = Describe("POST /marvin/_task/standup/remind", func() {
 		mockStandup := mock_standup.NewMockService(gomock.NewController(GinkgoT()))
 		mockStandup.EXPECT().Remind(gomock.Any()).Return(&standup.Report{Members: 1}, errors.New("DM U1: timeout"))
 
-		env := buildStandupTest(ctx, devConfig(), mockStandup)
-		env.ServeHTTPRequest(http.MethodPost, path, nil, nil, http.StatusInternalServerError)
+		env := buildStandupTest(ctx, taskConfig(), mockStandup)
+		env.ServeHTTPRequest(http.MethodPost, path, auth, nil, http.StatusInternalServerError)
 	})
 
-	It("returns 401 without the task secret outside dev", func(ctx SpecContext) {
-		cfg := marvin.Config{}
-		cfg.TasksSecret = "test-secret"
+	It("returns 401 without the task secret", func(ctx SpecContext) {
 		mockStandup := mock_standup.NewMockService(gomock.NewController(GinkgoT()))
 
-		env := buildStandupTest(ctx, cfg, mockStandup)
+		env := buildStandupTest(ctx, taskConfig(), mockStandup)
 		env.ServeHTTPRequest(http.MethodPost, path, nil, nil, http.StatusUnauthorized)
 	})
 })

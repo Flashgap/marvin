@@ -47,7 +47,7 @@ func (ctrl *Controller) RouteTasks(router gin.IRouter) {
 	// handler returns 501 when no DB-backed standup service is wired in.
 	router.POST(
 		path.Join(marvinroute.Standup, marvinroute.StandupRemind),
-		middlewares.ValidateTaskSecret(ctrl.configuration.Tasks, ctrl.configuration.IsDevEnv),
+		middlewares.ValidateTaskSecret(ctrl.configuration.Tasks),
 		ctrl.standupRemindHandler,
 	)
 }
