@@ -328,8 +328,8 @@ gcloud scheduler jobs create http <job> \
 ```
 
 - On each run, Cloud Scheduler sends `Authorization: Bearer <token>`, an ID token Google signs for
-  `marvin-trigger`, valid for an hour. Marvin checks it itself: the RS256 signature against Google's
-  public keys, the audience, expiry, issuer, email and `email_verified`.
+  `marvin-trigger`, valid for an hour. Marvin checks it itself: the signature against Google's public
+  keys, the audience, expiry, issuer, email and `email_verified`.
 - Whatever sits in front of Marvin (a load balancer, a proxy, the hosting platform) must pass the
   `Authorization` header through unchanged. If it checks, strips or rewrites the header, for example
   to verify the token itself, every task request is rejected with a `401`.

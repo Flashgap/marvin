@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -34,28 +32,20 @@ const (
 	taskServiceAccount = "marvin-trigger@project.iam.gserviceaccount.com"
 	googleKeyID        = "google-key"
 	googleKeysURL      = "https://www.googleapis.com/oauth2/v3/certs"
-	iapKeyID           = "iap-key"
-	iapKeysURL         = "https://www.gstatic.com/iap/verify/public_key-jwk"
 )
 
-// googleKey and iapKey stand in for Google's and IAP's signing keys:
-// fakeKeysClient serves their public halves as the key sets idtoken fetches.
-var (
-	googleKey = newRSAKey()
-	iapKey    = newECKey()
-)
+// googleKey stands in for Google's signing key: fakeKeysClient serves its
+// public half as the key set idtoken fetches.
+var googleKey = newRSAKey()
 
-// jwk is a public key as Google and IAP publish them, in a jwkSet.
+// jwk is an RSA public key as Google publishes them, in a jwkSet.
 type jwk struct {
 	KeyID     string `json:"kid"`
 	Algorithm string `json:"alg"`
 	KeyType   string `json:"kty"`
 	Use       string `json:"use"`
-	N         string `json:"n,omitempty"`
-	E         string `json:"e,omitempty"`
-	Curve     string `json:"crv,omitempty"`
-	X         string `json:"x,omitempty"`
-	Y         string `json:"y,omitempty"`
+	N         string `json:"n"`
+	E         string `json:"e"`
 }
 
 type jwkSet struct {
@@ -94,14 +84,6 @@ func newRSAKey() *rsa.PrivateKey {
 	return key
 }
 
-func newECKey() *ecdsa.PrivateKey {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		panic(err)
-	}
-	return key
-}
-
 func b64(b []byte) string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
@@ -112,50 +94,30 @@ func toJSON(v any) []byte {
 	return b
 }
 
-// fakeKeysClient answers the validator's fetches of Google's and IAP's public
-// keys with googleKey and iapKey, and any other request with a 404.
+// fakeKeysClient answers the validator's fetch of Google's public keys with
+// googleKey, and any other request with a 404.
 func fakeKeysClient() *http.Client {
-	point, err := iapKey.PublicKey.Bytes() // 0x04 || X || Y
-	Expect(err).ToNot(HaveOccurred())
-
-	keySets := map[string][]byte{
-		googleKeysURL: toJSON(jwkSet{Keys: []jwk{{
-			KeyID:     googleKeyID,
-			Algorithm: "RS256",
-			KeyType:   "RSA",
-			Use:       "sig",
-			N:         b64(googleKey.N.Bytes()),
-			E:         b64(big.NewInt(int64(googleKey.E)).Bytes()),
-		}}}),
-		iapKeysURL: toJSON(jwkSet{Keys: []jwk{{
-			KeyID:     iapKeyID,
-			Algorithm: "ES256",
-			KeyType:   "EC",
-			Use:       "sig",
-			Curve:     "P-256",
-			X:         b64(point[1:33]),
-			Y:         b64(point[33:]),
-		}}}),
-	}
+	keySet := toJSON(jwkSet{Keys: []jwk{{
+		KeyID:     googleKeyID,
+		Algorithm: "RS256",
+		KeyType:   "RSA",
+		Use:       "sig",
+		N:         b64(googleKey.N.Bytes()),
+		E:         b64(big.NewInt(int64(googleKey.E)).Bytes()),
+	}}})
 
 	return &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		keySet, ok := keySets[r.URL.String()]
-		if !ok {
+		if r.URL.String() != googleKeysURL {
 			return &http.Response{StatusCode: http.StatusNotFound, Body: http.NoBody, Request: r}, nil
 		}
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(keySet)), Request: r}, nil
 	})}
 }
 
-// signingInput is the part of a JWT its signature covers: its encoded header
-// and claims.
-func signingInput(header tokenHeader, claims tokenClaims) string {
-	return b64(toJSON(header)) + "." + b64(toJSON(claims))
-}
-
 // signToken builds a JWT carrying claims, signed with key under kid.
 func signToken(key *rsa.PrivateKey, kid string, claims tokenClaims) string {
-	input := signingInput(tokenHeader{Algorithm: "RS256", KeyID: kid, Type: "JWT"}, claims)
+	header := tokenHeader{Algorithm: "RS256", KeyID: kid, Type: "JWT"}
+	input := b64(toJSON(header)) + "." + b64(toJSON(claims))
 	digest := sha256.Sum256([]byte(input))
 	signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
 	Expect(err).ToNot(HaveOccurred())
@@ -228,13 +190,6 @@ var _ = Describe("ValidateTaskToken", func() {
 	It("rejects a token signed with another key", func() {
 		forged := signToken(newRSAKey(), googleKeyID, schedulerClaims())
 		Expect(serveTask(configured, false, "Bearer "+forged)).To(Equal(http.StatusUnauthorized))
-	})
-
-	It("rejects a token not signed with RS256", func() {
-		// Without the RS256 pin, idtoken checks it against IAP's keys and panics on the signature's length.
-		header := tokenHeader{Algorithm: "ES256", KeyID: iapKeyID, Type: "JWT"}
-		token := signingInput(header, schedulerClaims()) + "." + b64([]byte{1})
-		Expect(serveTask(configured, false, "Bearer "+token)).To(Equal(http.StatusUnauthorized))
 	})
 
 	DescribeTable("rejects a Google-signed token with",
