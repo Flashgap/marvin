@@ -16,20 +16,20 @@ import (
 
 type Controller struct {
 	web.BaseController
-	configuration *Config
-	marvinService marvin.Service
-	lockService   lock.Service
-	reviewLoad    reviewload.Service
-	taskTokens    *idtoken.Validator
+	configuration      *Config
+	marvinService      marvin.Service
+	lockService        lock.Service
+	reviewLoad         reviewload.Service
+	taskTokenValidator *idtoken.Validator
 }
 
-func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, reviewLoad reviewload.Service, taskTokens *idtoken.Validator) *Controller {
+func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, reviewLoad reviewload.Service, taskTokenValidator *idtoken.Validator) *Controller {
 	return &Controller{
-		configuration: configuration,
-		marvinService: marvinService,
-		lockService:   lockService,
-		reviewLoad:    reviewLoad,
-		taskTokens:    taskTokens,
+		configuration:      configuration,
+		marvinService:      marvinService,
+		lockService:        lockService,
+		reviewLoad:         reviewLoad,
+		taskTokenValidator: taskTokenValidator,
 	}
 }
 
@@ -47,7 +47,7 @@ func (ctrl *Controller) RouteTasks(router gin.IRouter) {
 	// implemented yet: the handler answers 200 without doing anything.
 	router.POST(
 		path.Join(marvinroute.Standup, marvinroute.StandupRemind),
-		middlewares.ValidateTaskToken(ctrl.configuration.Tasks, ctrl.configuration.IsDevEnv, ctrl.taskTokens),
+		middlewares.ValidateTaskToken(ctrl.configuration.Tasks, ctrl.configuration.IsDevEnv, ctrl.taskTokenValidator),
 		ctrl.standupRemindHandler,
 	)
 }
