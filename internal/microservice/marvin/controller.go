@@ -4,6 +4,7 @@ import (
 	"path"
 
 	"github.com/gin-gonic/gin"
+	"google.golang.org/api/idtoken"
 
 	"github.com/Flashgap/marvin/internal/middlewares"
 	marvinroute "github.com/Flashgap/marvin/internal/route/marvin"
@@ -19,14 +20,16 @@ type Controller struct {
 	marvinService marvin.Service
 	lockService   lock.Service
 	reviewLoad    reviewload.Service
+	taskTokens    *idtoken.Validator
 }
 
-func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, reviewLoad reviewload.Service) *Controller {
+func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, reviewLoad reviewload.Service, taskTokens *idtoken.Validator) *Controller {
 	return &Controller{
 		configuration: configuration,
 		marvinService: marvinService,
 		lockService:   lockService,
 		reviewLoad:    reviewLoad,
+		taskTokens:    taskTokens,
 	}
 }
 
@@ -39,7 +42,14 @@ func (ctrl *Controller) RouteEndpoints(router gin.IRouter) {
 	}
 }
 
-func (*Controller) RouteTasks(_ gin.IRouter) {
+func (ctrl *Controller) RouteTasks(router gin.IRouter) {
+	// Daily standup reminder, triggered by a cron (e.g. Cloud Scheduler). Not
+	// implemented yet: the handler answers 200 without doing anything.
+	router.POST(
+		path.Join(marvinroute.Standup, marvinroute.StandupRemind),
+		middlewares.ValidateTaskToken(ctrl.configuration.Tasks, ctrl.configuration.IsDevEnv, ctrl.taskTokens),
+		ctrl.standupRemindHandler,
+	)
 }
 
 func (ctrl *Controller) RouteWebhooks(router gin.IRouter) {

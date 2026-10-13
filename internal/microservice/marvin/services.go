@@ -8,7 +8,10 @@ import (
 	"cloud.google.com/go/errorreporting"
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	gogithub "github.com/google/go-github/v90/github"
+	"google.golang.org/api/idtoken"
+	"google.golang.org/api/option"
 
+	"github.com/Flashgap/marvin/internal/constants"
 	"github.com/Flashgap/marvin/internal/migrations"
 	"github.com/Flashgap/marvin/internal/service/github"
 	"github.com/Flashgap/marvin/internal/service/jira"
@@ -33,6 +36,8 @@ type Services struct {
 	MarvinService marvin.Service
 	LockService   lock.Service
 	ReviewLoad    reviewload.Service
+	// TaskTokens verifies the OIDC tokens of task requests.
+	TaskTokens *idtoken.Validator
 }
 
 func (s *Services) initialize(ctx context.Context, cfg *Config) error {
@@ -65,6 +70,15 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 			return fmt.Errorf("cannot init lock service: %w", err)
 		}
 		s.LockService = lockSvc
+	}
+
+	if s.TaskTokens == nil {
+		// Without a timeout, a stuck fetch of Google's public keys would hang the task request.
+		taskTokens, err := idtoken.NewValidator(ctx, option.WithHTTPClient(&http.Client{Timeout: constants.GoogleKeysTimeout}))
+		if err != nil {
+			return fmt.Errorf("cannot init task token validator: %w", err)
+		}
+		s.TaskTokens = taskTokens
 	}
 
 	if s.GithubService == nil {
