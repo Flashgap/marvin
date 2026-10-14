@@ -37,8 +37,11 @@ func NewVerifier(ctx context.Context, client *http.Client, audience, serviceAcco
 // Verify returns nil if token is a Google ID token minted for the Verifier's
 // service account, with its audience. idtoken checks the signature against
 // Google's public keys, the audience and the expiry; the issuer, email and
-// email_verified are checked here. The email check is what pins the caller:
-// any service account can get a Google-signed token for any audience.
+// email_verified are checked here, as in Google's documented validation of
+// the OIDC tokens it mints for a service account:
+// https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions
+// The email check is what pins the caller: any service account can get a
+// Google-signed token for any audience.
 //
 // Verify rejects every token when the audience or the service account is
 // empty.
