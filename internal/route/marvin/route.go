@@ -28,4 +28,7 @@ const (
 	Slack           = "slack"       // Slack controller route
 	SlackLock       = "lock"        // Sub path of Slack — handles the /lock slash command
 	SlackReviewLoad = "review-load" // Sub path of Slack — handles the /review-load slash command
+
+	Standup       = "standup" // Standup controller route
+	StandupRemind = "remind"  // Sub path of Standup — sends the daily standup reminders
 )

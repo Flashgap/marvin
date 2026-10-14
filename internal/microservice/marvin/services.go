@@ -18,6 +18,7 @@ import (
 	slacksvc "github.com/Flashgap/marvin/internal/service/slack"
 	"github.com/Flashgap/marvin/pkg/database"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
+	"github.com/Flashgap/marvin/pkg/googleid"
 	pkgjira "github.com/Flashgap/marvin/pkg/jira"
 	"github.com/Flashgap/marvin/pkg/linear"
 	"github.com/Flashgap/marvin/pkg/logger"
@@ -33,6 +34,8 @@ type Services struct {
 	MarvinService marvin.Service
 	LockService   lock.Service
 	ReviewLoad    reviewload.Service
+	// TaskTokenVerifier verifies the Google ID tokens of task requests.
+	TaskTokenVerifier *googleid.Verifier
 }
 
 func (s *Services) initialize(ctx context.Context, cfg *Config) error {
@@ -65,6 +68,14 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 			return fmt.Errorf("cannot init lock service: %w", err)
 		}
 		s.LockService = lockSvc
+	}
+
+	if s.TaskTokenVerifier == nil {
+		verifier, err := googleid.NewVerifier(ctx, http.DefaultTransport, cfg.TasksAudience, cfg.TasksServiceAccount)
+		if err != nil {
+			return fmt.Errorf("cannot init task token verifier: %w", err)
+		}
+		s.TaskTokenVerifier = verifier
 	}
 
 	if s.GithubService == nil {

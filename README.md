@@ -284,6 +284,64 @@ Team members reviewing nothing aren't listed: they score 0.
   `https://<your-marvin>/marvin/_webhook/slack/review-load`.
 - Requests are verified with `MARVIN_SLACK_SIGNING_SECRET`, as for `/lock`.
 
+### Task routes (`/marvin/_task/*`)
+
+Task routes are called by a scheduler such as Cloud Scheduler, never by people. The only one so far,
+`POST /marvin/_task/standup/remind`, answers `200` without doing anything: the daily standup reminder
+will use it.
+
+Every task route requires an OIDC token Google signs for a dedicated service account, sent as
+`Authorization: Bearer <token>`. Cloud Scheduler sends one on each run when the job has an OIDC
+service account.
+
+**Env vars**
+
+| Variable | Description |
+|----------|-------------|
+| `MARVIN_TASKS_AUDIENCE` | Audience of the OIDC tokens accepted on every `/marvin/_task/*` route: the job's `--oidc-token-audience`, e.g. `https://<your-marvin>`. |
+| `MARVIN_TASKS_SERVICE_ACCOUNT` | Email of the only service account whose OIDC tokens are accepted: the job's `--oidc-service-account-email`. |
+
+Outside dev, both are required: if either is empty, every task request is rejected. As for the GitHub
+webhook, task routes skip authentication when `IS_DEV_ENV=true`, so locally:
+
+```bash
+curl -X POST http://localhost:8080/marvin/_task/<task>
+```
+
+**Cloud Scheduler setup**
+
+Create a service account for the jobs; it needs no role:
+
+```bash
+gcloud iam service-accounts create marvin-trigger --display-name="Marvin Cloud Scheduler jobs"
+```
+
+Whoever creates a job needs `roles/iam.serviceAccountUser` on that service account. Then give each job
+an OIDC token:
+
+```bash
+gcloud scheduler jobs create http <job> \
+  --schedule="<cron>" --time-zone="<time zone>" \
+  --uri="https://<your-marvin>/marvin/_task/<task>" --http-method=POST \
+  --oidc-service-account-email="marvin-trigger@<project>.iam.gserviceaccount.com" \
+  --oidc-token-audience="https://<your-marvin>"
+```
+
+- On each run, Cloud Scheduler sends `Authorization: Bearer <token>`, an ID token Google signs for
+  `marvin-trigger`, valid for an hour. Marvin checks it itself: the signature against Google's public
+  keys, the audience, expiry, issuer, email and `email_verified`.
+- Whatever sits in front of Marvin (a load balancer, a proxy, the hosting platform) must pass the
+  `Authorization` header through unchanged. If it checks, strips or rewrites the header, for example
+  to verify the token itself, every task request is rejected with a `401`.
+- Set `MARVIN_TASKS_AUDIENCE` and `MARVIN_TASKS_SERVICE_ACCOUNT` to the job's `--oidc-*` values.
+  Always pass `--oidc-token-audience`: by default, Cloud Scheduler uses the full URI.
+- Don't grant anyone `roles/iam.serviceAccountTokenCreator` or
+  `roles/iam.serviceAccountOpenIdTokenCreator` on `marvin-trigger`: whoever can mint its tokens can
+  call every task route. Cloud Scheduler doesn't need either.
+
+Check the setup by running the job once with `gcloud scheduler jobs run <job>`: it should answer `200`.
+On a `401`, Marvin's log says which check failed.
+
 ---
 
 ## Repository configuration (`.marvin.yaml`)
