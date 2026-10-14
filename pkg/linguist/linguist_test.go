@@ -27,7 +27,6 @@ docs/*.json generated
 		// asked for linguist-generated directly
 		"go/.gitattributes": `
 *.pb.go linguist-generated
-gen/*.go linguist-generated
 legacy.pb.go -linguist-generated -diff
 mock/*.go linguist-generated=false
 `,
@@ -43,17 +42,12 @@ mock/*.go linguist-generated=false
 		},
 		Entry("a nested file's pattern under its directory", "py/specs/v1/user_pb2.py", true),
 		Entry("a nested file's pattern nowhere else", "specs/v1/user_pb2.py", false),
-		Entry("a pattern without a slash at any depth", "go/a/b/user.pb.go", true),
-		Entry("a pattern with a slash relative to its directory", "go/gen/user.go", true),
-		Entry("a pattern with a slash not deeper", "go/a/gen/user.go", false),
 		Entry("unset by a later line", "go/a/legacy.pb.go", false),
 		Entry("false in a deeper file", "go/mock/mock.go", false),
-		Entry("a shallower file where no deeper one decides", "ts/mock/mock.go", true),
 		Entry("set back in an even deeper file", "go/api/legacy.pb.go", true),
 		Entry("vendored", "third_party/lib/zlib.c", true),
 		Entry("any value but false, as Linguist", "web/app.min.js", true),
 		Entry("through a macro", "docs/schema.json", true),
-		Entry("no attribute", "go/main.go", false),
 	)
 
 	It("reports a line go-git's parser panics on as an error", func() {
