@@ -102,14 +102,4 @@ var _ = Describe("Service", func() {
 			}))
 		})
 	})
-
-	DescribeTable("ParseTS",
-		func(ts string, want time.Time) {
-			Expect(slacksvc.ParseTS(ts)).To(Equal(want))
-		},
-		Entry("seconds and micros", "1791274320.123456", time.Unix(1791274320, 0).UTC()),
-		Entry("seconds only", "1791274320", time.Unix(1791274320, 0).UTC()),
-		Entry("malformed", "nope", time.Time{}),
-		Entry("empty", "", time.Time{}),
-	)
 })

@@ -19,7 +19,8 @@ var (
 	ErrGetChannelHistory = errors.New("error fetching channel history")
 )
 
-// pageSize is the number of items requested per page from Slack's paginated methods.
+// pageSize is the number of items requested per page from Slack's paginated methods,
+// the top of Slack's recommended 100-200: https://docs.slack.dev/apis/web-api/pagination
 const pageSize = 200
 
 type Client interface {
@@ -28,7 +29,8 @@ type Client interface {
 	// GetChannelMembers returns every member ID of channelID, following pagination.
 	GetChannelMembers(ctx context.Context, channelID string) ([]string, error)
 	// GetChannelHistory returns channelID's messages with ts > oldest, newest first, following pagination.
-	// conversations.history only returns top-level messages (plus thread_broadcast copies), never thread replies.
+	// conversations.history only returns top-level messages (plus thread_broadcast copies), never thread replies:
+	// https://docs.slack.dev/reference/methods/conversations.history
 	GetChannelHistory(ctx context.Context, channelID string, oldest time.Time) ([]slack.Message, error)
 }
 
@@ -101,6 +103,8 @@ func (s *slackClient) GetChannelHistory(ctx context.Context, channelID string, o
 // IsPermanentDMError reports whether err, as returned by SendMessage, is a Slack error that no retry
 // can fix: the user is a bot, deactivated, or not visible to Marvin. slack-go returns
 // SlackErrorResponse as a value, not a pointer, which is what errors.As matches here.
+// user_not_found, user_not_visible and user_disabled are documented conversations.open errors:
+// https://docs.slack.dev/reference/methods/conversations.open
 func IsPermanentDMError(err error) bool {
 	var slackErr slack.SlackErrorResponse
 	if !errors.As(err, &slackErr) {

@@ -6,15 +6,18 @@ import (
 	"strings"
 
 	slacksvc "github.com/Flashgap/marvin/internal/service/slack"
+	pkgslack "github.com/Flashgap/marvin/pkg/slack"
 )
 
 // maxQuoteRunes caps the quoted update so a long message can't push the
-// template past Slack's recommended 4,000-character message length.
+// template past Slack's recommended 4,000-character message length:
+// https://docs.slack.dev/reference/methods/chat.postMessage
 const maxQuoteRunes = 3000
 
 var (
 	// todayHeaderRE matches the "Today:" header line, tolerating markup such
-	// as "*Today:*", "_Today_:" or "> Today:", whose ">" Slack sends as "&gt;".
+	// as "*Today:*", "_Today_:" or "> Today:", whose ">" Slack sends as "&gt;":
+	// https://docs.slack.dev/messaging/formatting-message-text#escaping
 	todayHeaderRE = regexp.MustCompile(`(?i)^(?:[\s>*_~]|&gt;)*today[\s*_~]*:`)
 	// headerRE matches any header of the standup template, which ends the
 	// "Today:" section.
@@ -72,8 +75,9 @@ func formatReminder(channelID, lastTS, lastText string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, ":wave: Time for your standup in <#%s>!\n", channelID)
 	if lastTS != "" {
-		// Slack renders the date token in the reader's timezone; the fallback is UTC.
-		postedAt := slacksvc.ParseTS(lastTS)
+		// Slack renders the date token in the reader's timezone; the fallback is UTC:
+		// https://docs.slack.dev/messaging/formatting-message-text#date-formatting
+		postedAt := pkgslack.ParseTS(lastTS)
 		fmt.Fprintf(&b, "On <!date^%d^{date_long}|%s> you said:\n", postedAt.Unix(), postedAt.Format("Mon, 02 Jan 2006"))
 		for line := range strings.SplitSeq(capQuote(quotableText(lastText)), "\n") {
 			b.WriteString("> " + line + "\n")
