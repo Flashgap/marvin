@@ -16,7 +16,7 @@ import (
 // FileName is the name of the files declaring git attributes, at most one per directory.
 const FileName = ".gitattributes"
 
-// excludingAttributes exclude a path when set or true.
+// excludingAttributes exclude a path when set or given any value but false.
 var excludingAttributes = []string{"linguist-generated", "linguist-vendored"}
 
 // Matcher tells whether a path is marked linguist-generated or linguist-vendored.
@@ -123,7 +123,8 @@ func stateOf(attributes []gitattributes.Attribute, name string, macros map[strin
 	return state
 }
 
-// excludes reports whether attr excludes a path: set or true. Unset, unspecified or false doesn't.
+// excludes reports whether attr excludes a path: set or given any value but false, as Linguist's
+// boolean_attribute reads it. Unset, unspecified or false doesn't.
 func excludes(attr gitattributes.Attribute) bool {
-	return attr.IsSet() || (attr.IsValueSet() && attr.Value() == "true")
+	return attr.IsSet() || (attr.IsValueSet() && attr.Value() != "false")
 }

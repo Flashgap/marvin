@@ -20,7 +20,7 @@ var _ = Describe("Matcher", func() {
 [attr]generated linguist-generated
 **/mock/*.go linguist-generated
 third_party/** linguist-vendored
-*.min.js linguist-vendored=true
+*.min.js linguist-vendored=yes
 docs/*.json generated
 `,
 		// The extra -diff makes go-git's Matcher let the broader line above overwrite the unset when it is
@@ -51,7 +51,7 @@ mock/*.go linguist-generated=false
 		Entry("a shallower file where no deeper one decides", "ts/mock/mock.go", true),
 		Entry("set back in an even deeper file", "go/api/legacy.pb.go", true),
 		Entry("vendored", "third_party/lib/zlib.c", true),
-		Entry("vendored true", "web/app.min.js", true),
+		Entry("any value but false, as Linguist", "web/app.min.js", true),
 		Entry("through a macro", "docs/schema.json", true),
 		Entry("no attribute", "go/main.go", false),
 	)
