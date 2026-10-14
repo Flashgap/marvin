@@ -1,0 +1,63 @@
+package linguist_test
+
+import (
+	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/Flashgap/marvin/pkg/linguist"
+)
+
+func Test(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Linguist pkg test suite")
+}
+
+var _ = Describe("Matcher", func() {
+	files := map[string]string{
+		".gitattributes": `
+[attr]generated linguist-generated
+**/mock/*.go linguist-generated
+third_party/** linguist-vendored
+*.min.js linguist-vendored=true
+docs/*.json generated
+`,
+		// The extra -diff makes go-git's Matcher let the broader line above overwrite the unset when it is
+		// asked for linguist-generated directly
+		"go/.gitattributes": `
+*.pb.go linguist-generated
+gen/*.go linguist-generated
+legacy.pb.go -linguist-generated -diff
+mock/*.go linguist-generated=false
+`,
+		"go/api/.gitattributes": "legacy.pb.go linguist-generated\n",
+		"py/.gitattributes":     "specs/**/*_pb2.py linguist-generated\n",
+	}
+
+	DescribeTable("Excludes",
+		func(file string, excluded bool) {
+			m, err := linguist.NewMatcher(files)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(m.Excludes(file)).To(Equal(excluded))
+		},
+		Entry("a nested file's pattern under its directory", "py/specs/v1/user_pb2.py", true),
+		Entry("a nested file's pattern nowhere else", "specs/v1/user_pb2.py", false),
+		Entry("a pattern without a slash at any depth", "go/a/b/user.pb.go", true),
+		Entry("a pattern with a slash relative to its directory", "go/gen/user.go", true),
+		Entry("a pattern with a slash not deeper", "go/a/gen/user.go", false),
+		Entry("unset by a later line", "go/a/legacy.pb.go", false),
+		Entry("false in a deeper file", "go/mock/mock.go", false),
+		Entry("a shallower file where no deeper one decides", "ts/mock/mock.go", true),
+		Entry("set back in an even deeper file", "go/api/legacy.pb.go", true),
+		Entry("vendored", "third_party/lib/zlib.c", true),
+		Entry("vendored true", "web/app.min.js", true),
+		Entry("through a macro", "docs/schema.json", true),
+		Entry("no attribute", "go/main.go", false),
+	)
+
+	It("reports a line go-git's parser panics on as an error", func() {
+		_, err := linguist.NewMatcher(map[string]string{".gitattributes": "*.pb.go linguist-generated\n\"\"\n"})
+		Expect(err).To(MatchError(ContainSubstring("parsing .gitattributes")))
+	})
+})
