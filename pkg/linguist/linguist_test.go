@@ -36,9 +36,7 @@ mock/*.go linguist-generated=false
 
 	DescribeTable("Excludes",
 		func(file string, excluded bool) {
-			m, err := linguist.NewMatcher(files)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(m.Excludes(file)).To(Equal(excluded))
+			Expect(linguist.NewMatcher(files).Excludes(file)).To(Equal(excluded))
 		},
 		Entry("a nested file's pattern under its directory", "py/specs/v1/user_pb2.py", true),
 		Entry("a nested file's pattern nowhere else", "specs/v1/user_pb2.py", false),
@@ -50,8 +48,14 @@ mock/*.go linguist-generated=false
 		Entry("through a macro", "docs/schema.json", true),
 	)
 
-	It("reports a line go-git's parser panics on as an error", func() {
-		_, err := linguist.NewMatcher(map[string]string{".gitattributes": "*.pb.go linguist-generated\n\"\"\n"})
-		Expect(err).To(MatchError(ContainSubstring("parsing .gitattributes")))
+	It("skips a line it can't parse and keeps the others", func() {
+		m := linguist.NewMatcher(map[string]string{
+			// go-git's parser panics on ""
+			".gitattributes": "\"\"\n*.pb.go linguist-generated\n",
+			// git only allows macros in the root file
+			"go/.gitattributes": "[attr]gen linguist-generated\n*_gen.go linguist-generated\n",
+		})
+		Expect(m.Excludes("api.pb.go")).To(BeTrue())
+		Expect(m.Excludes("go/user_gen.go")).To(BeTrue())
 	})
 })

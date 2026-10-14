@@ -4,7 +4,6 @@ package linguist
 
 import (
 	"cmp"
-	"fmt"
 	"maps"
 	"path"
 	"slices"
@@ -26,9 +25,9 @@ type Matcher struct {
 
 // NewMatcher builds a Matcher from the content of .gitattributes files, keyed by their path in the
 // repository (e.g. ".gitattributes", "go/.gitattributes"). As in git, deeper files take precedence over
-// shallower ones, later lines over earlier ones, and macros are only allowed in the root file. It returns
-// nil when no line excludes any path.
-func NewMatcher(files map[string]string) (*Matcher, error) {
+// shallower ones, later lines over earlier ones, macros are only allowed in the root file, and a line that
+// can't be parsed is skipped. It returns nil when no line excludes any path.
+func NewMatcher(files map[string]string) *Matcher {
 	// go-git's matcher gives precedence to the end of its stack: shallower files first, each in line order
 	paths := slices.SortedFunc(maps.Keys(files), func(a, b string) int {
 		return cmp.Or(cmp.Compare(strings.Count(a, "/"), strings.Count(b, "/")), strings.Compare(a, b))
@@ -41,11 +40,7 @@ func NewMatcher(files map[string]string) (*Matcher, error) {
 			domain = strings.Split(dir, "/")
 		}
 
-		lines, err := readAttributes(files[p], domain)
-		if err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", p, err)
-		}
-		stack = append(stack, lines...)
+		stack = append(stack, readAttributes(files[p], domain)...)
 	}
 
 	m := &Matcher{matchers: make(map[string]gitattributes.Matcher)}
@@ -56,10 +51,10 @@ func NewMatcher(files map[string]string) (*Matcher, error) {
 		}
 	}
 	if len(m.matchers) == 0 {
-		return nil, nil
+		return nil
 	}
 
-	return m, nil
+	return m
 }
 
 // Excludes reports whether file, a path relative to the repository root, is marked linguist-generated or
@@ -75,16 +70,27 @@ func (m *Matcher) Excludes(file string) bool {
 	return false
 }
 
-// readAttributes parses a .gitattributes file of the directory domain. go-git's parser panics on a line made
-// of an empty quoted pattern (""): the file comes from the repository, so that is turned into an error.
-func readAttributes(content string, domain []string) (lines []gitattributes.MatchAttribute, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("parser panicked: %v", r)
+// readAttributes parses a .gitattributes file of the directory domain. As git does, it skips each line it
+// can't parse (e.g. a macro outside the root file) rather than the whole file.
+func readAttributes(content string, domain []string) []gitattributes.MatchAttribute {
+	var lines []gitattributes.MatchAttribute
+	for text := range strings.Lines(content) {
+		if line, ok := parseLine(text, domain); ok {
+			lines = append(lines, line)
 		}
-	}()
+	}
 
-	return gitattributes.ReadAttributes(strings.NewReader(content), domain, len(domain) == 0)
+	return lines
+}
+
+// parseLine parses a .gitattributes line, reporting false for a blank line, a comment or a line that can't be
+// parsed. go-git's parser panics on a line made of an empty quoted pattern (""): the file comes from the
+// repository, so the panic is recovered, returning false.
+func parseLine(text string, domain []string) (gitattributes.MatchAttribute, bool) {
+	defer func() { _ = recover() }()
+
+	line, err := gitattributes.ParseAttributesLine(text, domain, len(domain) == 0)
+	return line, err == nil && line.Name != ""
 }
 
 // linesDeciding keeps the lines of stack giving attribute name a state, reduced to that state: the last one

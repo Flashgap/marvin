@@ -402,8 +402,9 @@ is what lets a single monorepo route reviews to different teams per subtree (e.g
 Within the resolved team pool, the algorithm assigns people with the smallest current review load:
 the lines added by the open PRs they review, leaving out generated and vendored code: the files the
 `.gitattributes` files of the default branch mark `linguist-generated` or `linguist-vendored`. They
-are never read off a PR's head ref, so a PR can't shrink its own load. If they can't be read, every
-file counts.
+are never read off a PR's head ref, so a PR can't shrink its own load. As in git, a line that can't be
+parsed (e.g. a macro outside the root `.gitattributes`) is skipped and the others still apply. If they
+can't be read, every file counts.
 The number of reviewers to assign is derived from the branch's required approving review count —
 Marvin supports both classic branch protection rules and repository rulesets.
 

@@ -25,13 +25,7 @@ func (s *service) exclusions(ctx context.Context, webhook pkggithub.RepoSenderGe
 		return nil
 	}
 
-	matcher, err := linguist.NewMatcher(files)
-	if err != nil {
-		log.Warnf("invalid %s file in %s, counting generated and vendored files: %v", linguist.FileName, webhook.GetRepo().GetFullName(), err)
-		return nil
-	}
-
-	return matcher
+	return linguist.NewMatcher(files)
 }
 
 // gitattributes returns the content of every .gitattributes file of the repository's default branch, by
