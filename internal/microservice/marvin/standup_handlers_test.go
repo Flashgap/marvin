@@ -33,8 +33,8 @@ func buildStandupTest(ctx SpecContext, cfg marvin.Config, standupSvc standup.Ser
 	return testenv.NewHTTPEnv(server.Handler)
 }
 
-// devConfig leaves task authentication off (dev, Tasks unset): the
-// middleware's own tests cover it.
+// devConfig leaves task authentication off (dev): the middleware's own tests
+// cover it.
 func devConfig() marvin.Config {
 	cfg := marvin.Config{}
 	cfg.IsDevEnv = true

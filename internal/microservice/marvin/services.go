@@ -8,10 +8,7 @@ import (
 	"cloud.google.com/go/errorreporting"
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	gogithub "github.com/google/go-github/v90/github"
-	"google.golang.org/api/idtoken"
-	"google.golang.org/api/option"
 
-	"github.com/Flashgap/marvin/internal/constants"
 	"github.com/Flashgap/marvin/internal/migrations"
 	"github.com/Flashgap/marvin/internal/service/github"
 	"github.com/Flashgap/marvin/internal/service/jira"
@@ -22,6 +19,7 @@ import (
 	"github.com/Flashgap/marvin/internal/service/standup"
 	"github.com/Flashgap/marvin/pkg/database"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
+	"github.com/Flashgap/marvin/pkg/googleid"
 	pkgjira "github.com/Flashgap/marvin/pkg/jira"
 	"github.com/Flashgap/marvin/pkg/linear"
 	"github.com/Flashgap/marvin/pkg/logger"
@@ -38,8 +36,8 @@ type Services struct {
 	LockService    lock.Service
 	ReviewLoad     reviewload.Service
 	StandupService standup.Service
-	// TaskTokens verifies the OIDC tokens of task requests.
-	TaskTokens *idtoken.Validator
+	// TaskTokenVerifier verifies the Google ID tokens of task requests.
+	TaskTokenVerifier *googleid.Verifier
 }
 
 func (s *Services) initialize(ctx context.Context, cfg *Config) error {
@@ -85,13 +83,12 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		logger.WithContext(ctx).Warn("MARVIN_STANDUP_CHANNEL_ID is set but the database is disabled (no DB_HOST): the standup reminder is off")
 	}
 
-	if s.TaskTokens == nil {
-		// Without a timeout, a stuck fetch of Google's public keys would hang the task request.
-		taskTokens, err := idtoken.NewValidator(ctx, option.WithHTTPClient(&http.Client{Timeout: constants.GoogleKeysTimeout}))
+	if s.TaskTokenVerifier == nil {
+		verifier, err := googleid.NewVerifier(ctx, http.DefaultTransport, cfg.TasksAudience, cfg.TasksServiceAccount)
 		if err != nil {
-			return fmt.Errorf("cannot init task token validator: %w", err)
+			return fmt.Errorf("cannot init task token verifier: %w", err)
 		}
-		s.TaskTokens = taskTokens
+		s.TaskTokenVerifier = verifier
 	}
 
 	if s.GithubService == nil {
