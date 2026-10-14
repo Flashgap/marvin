@@ -43,13 +43,13 @@ func (ctrl *Controller) RouteEndpoints(router gin.IRouter) {
 }
 
 func (ctrl *Controller) RouteTasks(router gin.IRouter) {
+	// Every task route requires a task token: checked on the group, so a route
+	// added below can't miss it.
+	router.Use(middlewares.ValidateTaskToken(ctrl.configuration.IsDevEnv, ctrl.taskTokenVerifier.Verify))
+
 	// Daily standup reminder, triggered by a cron (e.g. Cloud Scheduler). Not
 	// implemented yet: the handler answers 200 without doing anything.
-	router.POST(
-		path.Join(marvinroute.Standup, marvinroute.StandupRemind),
-		middlewares.ValidateTaskToken(ctrl.configuration.IsDevEnv, ctrl.taskTokenVerifier.Verify),
-		ctrl.standupRemindHandler,
-	)
+	router.POST(path.Join(marvinroute.Standup, marvinroute.StandupRemind), ctrl.standupRemindHandler)
 }
 
 func (ctrl *Controller) RouteWebhooks(router gin.IRouter) {
