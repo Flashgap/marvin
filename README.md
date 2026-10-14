@@ -377,8 +377,9 @@ On a `401`, Marvin's log says which check failed.
 ### Daily standup reminder (optional)
 
 A standup bot (Geekbot replacement): on standup days, a cron calls Marvin, which DMs every member of
-the standup channel who hasn't posted their standup there yet today. The DM quotes the *Today:*
-section of their last update and gives them a template to copy, fill in and post in the channel:
+the standup channel who hasn't posted their standup there yet today. The DM quotes the *Today*
+section of their last update (the header can be bold, with or without a colon) and gives them a
+template to copy, fill in and post in the channel:
 
 ```
 Yesterday: …

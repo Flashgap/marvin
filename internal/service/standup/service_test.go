@@ -308,6 +308,8 @@ var _ = Describe("Remind", func() {
 		Entry("plain headers", "Yesterday: a\nToday: b\nBlockers: c", "> b\n"),
 		Entry("bold headers", "*Yesterday:* a\n*Today:* b\n*Blockers:* c", "> b\n"),
 		Entry("quoted headers, as Slack escapes them", "&gt; Yesterday: a\n&gt; Today: b\n&gt; Blockers: c", "> b\n"),
+		Entry("bold headers without colons, over bulleted lists", "*Yesterday*\n• a\n*Today*\n• b1\n• b2", "> • b1\n> • b2\n"),
+		Entry("prose starting with Today, not a header", "Today I shipped the thing", "> Today I shipped the thing\n"),
 		Entry("multi-line section", "Today:\n- b1\n\n- b2\nBlockers: none", "> - b1\n> \n> - b2\n"),
 		Entry("no header", "  shipped the thing  \n", "> shipped the thing\n"),
 	)

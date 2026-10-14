@@ -15,13 +15,15 @@ import (
 const maxQuoteRunes = 3000
 
 var (
-	// todayHeaderRE matches the "Today:" header line, tolerating markup such
+	// todayHeaderRE matches the "Today" header line, tolerating markup such
 	// as "*Today:*", "_Today_:" or "> Today:", whose ">" Slack sends as "&gt;":
 	// https://docs.slack.dev/messaging/formatting-message-text#escaping
-	todayHeaderRE = regexp.MustCompile(`(?i)^(?:[\s>*_~]|&gt;)*today[\s*_~]*:`)
-	// headerRE matches any header of the standup template, which ends the
-	// "Today:" section.
-	headerRE = regexp.MustCompile(`(?i)^(?:[\s>*_~]|&gt;)*(yesterday|today|blockers?)[\s*_~]*:`)
+	// The colon is optional, as in "*Today*", but a header without one must be
+	// alone on its line, so prose such as "Today I…" isn't taken for one.
+	todayHeaderRE = regexp.MustCompile(`(?i)^(?:[\s>*_~]|&gt;)*today[\s*_~]*(?::|$)`)
+	// headerRE matches any header of the standup template, with the same
+	// rules, which ends the "Today" section.
+	headerRE = regexp.MustCompile(`(?i)^(?:[\s>*_~]|&gt;)*(yesterday|today|blockers?)[\s*_~]*(?::|$)`)
 )
 
 // isStandupMessage reports whether m is a person's top-level post, as opposed
@@ -45,7 +47,7 @@ func latestUpdates(history []slacksvc.Message) map[string]slacksvc.Message {
 	return latest
 }
 
-// quotableText returns the "Today:" section of a standup update, or the whole
+// quotableText returns the "Today" section of a standup update, or the whole
 // text when there is no such header or its section is empty.
 func quotableText(text string) string {
 	lines := strings.Split(text, "\n")
