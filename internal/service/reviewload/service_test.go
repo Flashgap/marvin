@@ -205,9 +205,9 @@ var _ = Describe("Rank without generated and vendored files", func() {
 		}
 	)
 
-	// gitattributes puts files, .gitattributes contents by path, on the default branch, next to a directory
+	// gitattributes puts files, .gitattributes contents by path, on the default branch
 	gitattributes := func(files map[string]string) {
-		tree := &gogithub.Tree{Entries: []*gogithub.TreeEntry{{Path: gogithub.Ptr("go"), Type: gogithub.Ptr("tree"), SHA: gogithub.Ptr("go")}}}
+		tree := &gogithub.Tree{}
 		for path, content := range files {
 			tree.Entries = append(tree.Entries, &gogithub.TreeEntry{Path: gogithub.Ptr(path), Type: gogithub.Ptr("blob"), SHA: gogithub.Ptr(path)})
 			mockClient.EXPECT().GetBlobRaw(gomock.Any(), webhook, path).Return([]byte(content), &gogithub.Response{}, nil).MaxTimes(1)
@@ -231,24 +231,28 @@ var _ = Describe("Rank without generated and vendored files", func() {
 		}
 	})
 
-	It("lists every file of a PR changing more than the query lists", func(ctx SpecContext) {
-		gitattributes(map[string]string{"go/.gitattributes": "*.pb.go linguist-generated\n"})
-		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), webhook).Return([]pkggithub.OpenPRReviewLoad{bigPR}, nil)
-		mockClient.EXPECT().ListPRFiles(gomock.Any(), webhook, 2, gomock.Any()).
-			DoAndReturn(func(_ any, _ any, _ int, opts *gogithub.ListOptions) ([]*gogithub.CommitFile, *gogithub.Response, error) {
-				if opts.Page == 1 {
-					return []*gogithub.CommitFile{
-						{Filename: gogithub.Ptr("go/a.go"), Additions: gogithub.Ptr(1)},
-						{Filename: gogithub.Ptr("go/a.pb.go"), Additions: gogithub.Ptr(1500)},
-					}, &gogithub.Response{NextPage: 2}, nil
-				}
-				return []*gogithub.CommitFile{{Filename: gogithub.Ptr("go/b.go"), Additions: gogithub.Ptr(499)}}, &gogithub.Response{}, nil
-			}).Times(2)
+	DescribeTable("lists every file of a PR changing more than the query lists",
+		func(ctx SpecContext, lastPageErr error, score int) {
+			gitattributes(map[string]string{"go/.gitattributes": "*.pb.go linguist-generated\n"})
+			mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), webhook).Return([]pkggithub.OpenPRReviewLoad{bigPR}, nil)
+			mockClient.EXPECT().ListPRFiles(gomock.Any(), webhook, 2, gomock.Any()).
+				DoAndReturn(func(_ any, _ any, _ int, opts *gogithub.ListOptions) ([]*gogithub.CommitFile, *gogithub.Response, error) {
+					if opts.Page == 1 {
+						return []*gogithub.CommitFile{
+							{Filename: gogithub.Ptr("go/a.go"), Additions: gogithub.Ptr(1)},
+							{Filename: gogithub.Ptr("go/a.pb.go"), Additions: gogithub.Ptr(1500)},
+						}, &gogithub.Response{NextPage: 2}, nil
+					}
+					return []*gogithub.CommitFile{{Filename: gogithub.Ptr("go/b.go"), Additions: gogithub.Ptr(499)}}, &gogithub.Response{}, lastPageErr
+				}).Times(2)
 
-		Expect(svc.Rank(ctx, webhook, nil)).To(Equal([]reviewload.Reviewer{
-			{Login: "alice", Score: 500, PRs: []reviewload.PullRequest{pr("backend", 2)}},
-		}))
-	})
+			Expect(svc.Rank(ctx, webhook, nil)).To(Equal([]reviewload.Reviewer{
+				{Login: "alice", Score: score, PRs: []reviewload.PullRequest{pr("backend", 2)}},
+			}))
+		},
+		Entry("leaving out its excluded files", nil, 500),
+		Entry("counting all of them when they can't all be listed", errors.New("boom"), 2000),
+	)
 
 	DescribeTable("counts every file when the .gitattributes files can't be read",
 		func(ctx SpecContext, treeErr, blobErr error) {
