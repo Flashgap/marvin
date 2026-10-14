@@ -4,8 +4,7 @@ package standup
 import "context"
 
 // Service is the controller's single dependency for the daily standup
-// reminder. It owns the DB pool and the SlackService and runs migrations at
-// construction.
+// reminder. It owns the DB pool and the SlackService.
 type Service interface {
 	// Remind runs one reminder pass over the standup channel: every member who
 	// hasn't posted their standup today (UTC) gets a DM quoting their last

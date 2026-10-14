@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"cloud.google.com/go/errorreporting"
 	"github.com/bradleyfalzon/ghinstallation/v2"
@@ -57,6 +58,14 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		s.DB = dbClient
 	}
 
+	// Migrations cover every table, whichever service uses it: apply them once,
+	// before any service uses the database.
+	if s.DB != nil {
+		if err := s.DB.Migrate(ctx, migrations.FS); err != nil {
+			return fmt.Errorf("cannot apply database migrations: %w", err)
+		}
+	}
+
 	// SlackService is the single integration point for Slack. It wraps the
 	// thin pkg/slack client and is shared across every service that needs to
 	// talk to Slack (currently MarvinService, LockService and StandupService).
@@ -65,7 +74,7 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 	}
 
 	if s.LockService == nil && s.DB != nil {
-		lockSvc, err := lock.NewService(ctx, s.DB, s.SlackService, migrations.FS)
+		lockSvc, err := lock.NewService(s.DB, s.SlackService)
 		if err != nil {
 			return fmt.Errorf("cannot init lock service: %w", err)
 		}
@@ -73,7 +82,7 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 	}
 
 	if s.StandupService == nil && s.DB != nil && cfg.StandupEnabled() {
-		standupSvc, err := standup.NewService(ctx, s.DB, s.SlackService, cfg.StandupChannelID, migrations.FS)
+		standupSvc, err := standup.NewService(s.DB, s.SlackService, cfg.StandupChannelID, time.Now)
 		if err != nil {
 			return fmt.Errorf("cannot init standup service: %w", err)
 		}

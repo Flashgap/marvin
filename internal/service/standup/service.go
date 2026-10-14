@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io/fs"
 	"maps"
 	"time"
 
@@ -37,10 +36,10 @@ type userState struct {
 	remindedToday bool
 }
 
-// NewService applies pending migrations and wires the standup service. A
-// non-nil db is required; pass migrations via mfs (typically
-// internal/migrations.FS).
-func NewService(ctx context.Context, db database.Client, slackSvc slacksvc.Service, channelID string, mfs fs.FS) (Service, error) {
+// NewService wires the standup service. A non-nil db is required, with its
+// migrations already applied (see Services.initialize). now is its clock:
+// time.Now outside tests.
+func NewService(db database.Client, slackSvc slacksvc.Service, channelID string, now func() time.Time) (Service, error) {
 	if db == nil {
 		return nil, fmt.Errorf("standup: database client is required")
 	}
@@ -50,20 +49,10 @@ func NewService(ctx context.Context, db database.Client, slackSvc slacksvc.Servi
 	if channelID == "" {
 		return nil, fmt.Errorf("standup: channel ID is required")
 	}
-	if err := db.Migrate(ctx, mfs); err != nil {
-		return nil, fmt.Errorf("standup: applying migrations: %w", err)
+	if now == nil {
+		return nil, fmt.Errorf("standup: clock is required")
 	}
-	return newServiceUnchecked(db, slackSvc, channelID, time.Now), nil
-}
-
-// NewTestService builds a Service without running migrations, with now as its
-// clock. Use only from tests that drive the database via sqlmock.
-func NewTestService(db database.Client, slackSvc slacksvc.Service, channelID string, now func() time.Time) Service {
-	return newServiceUnchecked(db, slackSvc, channelID, now)
-}
-
-func newServiceUnchecked(db database.Client, slackSvc slacksvc.Service, channelID string, now func() time.Time) Service {
-	return &service{db: db, slack: slackSvc, channelID: channelID, now: now}
+	return &service{db: db, slack: slackSvc, channelID: channelID, now: now}, nil
 }
 
 func (s *service) Remind(ctx context.Context) (*Report, error) {

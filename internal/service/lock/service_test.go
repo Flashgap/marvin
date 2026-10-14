@@ -1,10 +1,8 @@
 package lock_test
 
 import (
-	"context"
 	"database/sql"
 	"testing"
-	"testing/fstest"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/onsi/ginkgo/v2"
@@ -23,8 +21,7 @@ func TestLockService(t *testing.T) {
 	RunSpecs(t, "Lock service suite")
 }
 
-// newLockService constructs a lock service backed by sqlmock, skipping the
-// migration step (we don't want to test the database package here).
+// newLockService constructs a lock service backed by sqlmock.
 func newLockService(t GinkgoTInterface) (lock.Service, sqlmock.Sqlmock, *mock_lock_slack.MockService, func()) {
 	t.Helper()
 	db, mock, err := sqlmock.New()
@@ -34,9 +31,8 @@ func newLockService(t GinkgoTInterface) (lock.Service, sqlmock.Sqlmock, *mock_lo
 	ctrl := gomock.NewController(t)
 	mslack := mock_lock_slack.NewMockService(ctrl)
 
-	// The real constructor calls db.Migrate first. For unit tests we bypass
-	// that by using the test-only constructor exposed below.
-	svc := lock.NewTestService(dbc, mslack)
+	svc, err := lock.NewService(dbc, mslack)
+	Expect(err).ToNot(HaveOccurred())
 
 	cleanup := func() { db.Close() }
 	return svc, mock, mslack, cleanup
@@ -157,23 +153,5 @@ var _ = Describe("Leaderboard", func() {
 		resp, err := svc.Leaderboard(ctx)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.Text).To(ContainSubstring("No locks yet"))
-	})
-})
-
-var _ = Describe("NewService", func() {
-	It("propagates migration errors", func(ctx SpecContext) {
-		db, mock, err := sqlmock.New()
-		Expect(err).ToNot(HaveOccurred())
-		defer db.Close()
-		dbc := database.NewTestClient(db, database.DriverPostgres)
-
-		mfs := fstest.MapFS{
-			"postgres/0001_init.sql": {Data: []byte("CREATE TABLE x (id INT);")},
-		}
-		mock.ExpectExec("CREATE TABLE IF NOT EXISTS marvin_schema_migrations").
-			WillReturnError(context.Canceled)
-
-		_, err = lock.NewService(ctx, dbc, nil, mfs)
-		Expect(err).To(HaveOccurred())
 	})
 })

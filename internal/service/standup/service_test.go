@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -43,8 +42,8 @@ func post(userID string, at time.Time, text string) slacksvc.Message {
 	return slacksvc.Message{UserID: userID, TS: ts(at), PostedAt: at, Text: text}
 }
 
-// newStandupService constructs a standup service backed by sqlmock, skipping
-// the migration step, with its clock frozen at now.
+// newStandupService constructs a standup service backed by sqlmock, with its
+// clock frozen at now.
 func newStandupService(t GinkgoTInterface) (standup.Service, sqlmock.Sqlmock, *mock_slack.MockService) {
 	t.Helper()
 	db, mock, err := sqlmock.New()
@@ -53,7 +52,8 @@ func newStandupService(t GinkgoTInterface) (standup.Service, sqlmock.Sqlmock, *m
 
 	ctrl := gomock.NewController(t)
 	mslack := mock_slack.NewMockService(ctrl)
-	svc := standup.NewTestService(database.NewTestClient(db, database.DriverPostgres), mslack, "C1", func() time.Time { return now })
+	svc, err := standup.NewService(database.NewTestClient(db, database.DriverPostgres), mslack, "C1", func() time.Time { return now })
+	Expect(err).ToNot(HaveOccurred())
 	return svc, mock, mslack
 }
 
@@ -315,23 +315,5 @@ var _ = Describe("Remind", func() {
 	It("cuts a long update at the last newline before the cap", func(ctx SpecContext) {
 		text := strings.Repeat("a", 2000) + "\n" + strings.Repeat("b", 2000)
 		Expect(remindDM(ctx, post("U1", yesterday, text))).To(ContainSubstring("> " + strings.Repeat("a", 2000) + "…\n\nCopy"))
-	})
-})
-
-var _ = Describe("NewService", func() {
-	It("propagates migration errors", func(ctx SpecContext) {
-		db, mock, err := sqlmock.New()
-		Expect(err).ToNot(HaveOccurred())
-		defer db.Close()
-		dbc := database.NewTestClient(db, database.DriverPostgres)
-
-		mfs := fstest.MapFS{
-			"postgres/0001_init.sql": {Data: []byte("CREATE TABLE x (id INT);")},
-		}
-		mock.ExpectExec("CREATE TABLE IF NOT EXISTS marvin_schema_migrations").
-			WillReturnError(context.Canceled)
-
-		_, err = standup.NewService(ctx, dbc, mock_slack.NewMockService(gomock.NewController(GinkgoT())), "C1", mfs)
-		Expect(err).To(HaveOccurred())
 	})
 })
