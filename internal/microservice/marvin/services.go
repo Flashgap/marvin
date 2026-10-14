@@ -9,7 +9,6 @@ import (
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	gogithub "github.com/google/go-github/v90/github"
 
-	"github.com/Flashgap/marvin/internal/constants"
 	"github.com/Flashgap/marvin/internal/migrations"
 	"github.com/Flashgap/marvin/internal/service/github"
 	"github.com/Flashgap/marvin/internal/service/jira"
@@ -72,9 +71,7 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 	}
 
 	if s.TaskTokenVerifier == nil {
-		// Without a timeout, a stuck fetch of Google's public keys would hang the task request.
-		client := &http.Client{Timeout: constants.GoogleKeysTimeout}
-		verifier, err := googleid.NewVerifier(ctx, client, cfg.TasksAudience, cfg.TasksServiceAccount)
+		verifier, err := googleid.NewVerifier(ctx, http.DefaultTransport, cfg.TasksAudience, cfg.TasksServiceAccount)
 		if err != nil {
 			return fmt.Errorf("cannot init task token verifier: %w", err)
 		}

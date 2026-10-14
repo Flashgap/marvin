@@ -2,6 +2,7 @@ package googleid_test
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -32,7 +33,7 @@ const (
 	googleKeysURL  = "https://www.googleapis.com/oauth2/v3/certs"
 )
 
-// googleKey stands in for Google's signing key: fakeKeysClient serves its
+// googleKey stands in for Google's signing key: fakeKeysTransport serves its
 // public half as the key set idtoken fetches.
 var googleKey = newRSAKey()
 
@@ -92,9 +93,9 @@ func toJSON(v any) []byte {
 	return b
 }
 
-// fakeKeysClient answers the validator's fetch of Google's public keys with
+// fakeKeysTransport answers the validator's fetch of Google's public keys with
 // googleKey, and any other request with a 404.
-func fakeKeysClient() *http.Client {
+func fakeKeysTransport() http.RoundTripper {
 	keySet := toJSON(jwkSet{Keys: []jwk{{
 		KeyID:     googleKeyID,
 		Algorithm: "RS256",
@@ -104,12 +105,12 @@ func fakeKeysClient() *http.Client {
 		E:         b64(big.NewInt(int64(googleKey.E)).Bytes()),
 	}}})
 
-	return &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	return roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if r.URL.String() != googleKeysURL {
 			return &http.Response{StatusCode: http.StatusNotFound, Body: http.NoBody, Request: r}, nil
 		}
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(keySet)), Request: r}, nil
-	})}
+	})
 }
 
 // signToken builds a JWT carrying claims, signed with key under kid.
@@ -142,7 +143,7 @@ func schedulerClaims() tokenClaims {
 var _ = Describe("Verifier", func() {
 	// verify checks token with a Verifier for aud and account.
 	verify := func(ctx SpecContext, aud, account, token string) error {
-		verifier, err := googleid.NewVerifier(ctx, fakeKeysClient(), aud, account)
+		verifier, err := googleid.NewVerifier(ctx, fakeKeysTransport(), aud, account)
 		Expect(err).ToNot(HaveOccurred())
 		return verifier.Verify(ctx, token)
 	}
@@ -150,6 +151,23 @@ var _ = Describe("Verifier", func() {
 	It("accepts a token Google minted for the service account", func(ctx SpecContext) {
 		token := signToken(googleKey, googleKeyID, schedulerClaims())
 		Expect(verify(ctx, audience, serviceAccount, token)).To(Succeed())
+	})
+
+	It("fetches Google's public keys with a deadline", func(ctx SpecContext) {
+		var hasDeadline bool
+		keys := fakeKeysTransport()
+		transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			_, hasDeadline = r.Context().Deadline()
+			return keys.RoundTrip(r)
+		})
+		verifier, err := googleid.NewVerifier(ctx, transport, audience, serviceAccount)
+		Expect(err).ToNot(HaveOccurred())
+
+		// Verify gets a context without a deadline: only the Verifier's own
+		// client can set one on the key fetch.
+		token := signToken(googleKey, googleKeyID, schedulerClaims())
+		Expect(verifier.Verify(context.Background(), token)).To(Succeed())
+		Expect(hasDeadline).To(BeTrue())
 	})
 
 	It("rejects a token signed with another key", func(ctx SpecContext) {

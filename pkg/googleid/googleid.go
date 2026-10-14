@@ -8,10 +8,18 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"time"
 
 	"google.golang.org/api/idtoken"
 	"google.golang.org/api/option"
 )
+
+// keysTimeout bounds the fetch of Google's public keys. idtoken's default
+// client has no timeout, so a stuck fetch would hang the request. A fetch
+// normally takes well under a second; 10s still fails long before a
+// scheduler gives up on the request (3 minutes by default for Cloud
+// Scheduler's HTTP jobs).
+const keysTimeout = 10 * time.Second
 
 // issuers are the two values Google uses for the iss claim of its ID tokens.
 var issuers = []string{"https://accounts.google.com", "accounts.google.com"}
@@ -25,8 +33,10 @@ type Verifier struct {
 }
 
 // NewVerifier returns a Verifier accepting the tokens Google mints for
-// serviceAccount with audience. It fetches Google's public keys with client.
-func NewVerifier(ctx context.Context, client *http.Client, audience, serviceAccount string) (*Verifier, error) {
+// serviceAccount with audience. It fetches Google's public keys through
+// transport, within keysTimeout.
+func NewVerifier(ctx context.Context, transport http.RoundTripper, audience, serviceAccount string) (*Verifier, error) {
+	client := &http.Client{Transport: transport, Timeout: keysTimeout}
 	validator, err := idtoken.NewValidator(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		return nil, err
