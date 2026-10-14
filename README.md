@@ -439,7 +439,8 @@ gcloud scheduler jobs create http marvin-standup \
 
 - `--max-retry-attempts` is required: Cloud Scheduler doesn't retry by default, and Marvin answers
   `500` when a run partly fails (a DM or database write failed) so that the retry finishes the job.
-- `--attempt-deadline=300s` matches Cloud Run's default request timeout (Scheduler's default is `180s`).
+- Set `--attempt-deadline` to the request timeout of whatever serves Marvin (`300s` above, Scheduler's
+  default is `180s`): a longer deadline doesn't give a run more time.
 
 A successful run answers `200` with its counters, e.g.
 `{"members":12,"reminded":7,"already_posted":3,"already_reminded":0,"ignored":2}`.
