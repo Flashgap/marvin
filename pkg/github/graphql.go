@@ -14,7 +14,7 @@ type OpenPRReviewLoad struct {
 	Number    int
 	Additions int             // Lines added, across every file, generated and vendored ones included
 	Files     []FileAdditions // Lines added per file, for the first 100 files only
-	MoreFiles bool            // The PR changes more files than Files holds: ListPRFiles lists them all
+	MoreFiles bool            // Files doesn't hold every file of the PR: ListPRFiles lists them all
 	Reviewers map[string]struct{}
 }
 
@@ -38,7 +38,7 @@ type openPRsWithReviewersQuery struct {
 			Nodes []struct {
 				Number    graphql.Int
 				Additions graphql.Int
-				Files     struct {
+				Files     *struct {
 					Nodes []struct {
 						Path      graphql.String
 						Additions graphql.Int
@@ -97,16 +97,21 @@ func (h *client) ListOpenPRsWithReviewers(ctx context.Context, webhook RepoSende
 			}
 		}
 
-		files := make([]FileAdditions, 0, len(node.Files.Nodes))
-		for _, file := range node.Files.Nodes {
-			files = append(files, FileAdditions{Path: string(file.Path), Additions: int(file.Additions)})
+		// files is nullable: without it, the PR's files are left to ListPRFiles rather than counted as none
+		var files []FileAdditions
+		moreFiles := true
+		if node.Files != nil {
+			for _, file := range node.Files.Nodes {
+				files = append(files, FileAdditions{Path: string(file.Path), Additions: int(file.Additions)})
+			}
+			moreFiles = bool(node.Files.PageInfo.HasNextPage)
 		}
 
 		prs = append(prs, OpenPRReviewLoad{
 			Number:    int(node.Number),
 			Additions: int(node.Additions),
 			Files:     files,
-			MoreFiles: bool(node.Files.PageInfo.HasNextPage),
+			MoreFiles: moreFiles,
 			Reviewers: reviewers,
 		})
 	}

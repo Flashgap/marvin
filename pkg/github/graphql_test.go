@@ -61,7 +61,8 @@ var _ = Describe("ListOpenPRsWithReviewers", func() {
 					"reviewRequests":{"nodes":[{"requestedReviewer":{"login":"clem"}},{"requestedReviewer":{}}]}},
 				{"number":290,"additions":5000,
 					"files":{"nodes":[{"path":"go/user.pb.go","additions":40}],"pageInfo":{"hasNextPage":true}},
-					"reviews":{"nodes":[]},"reviewRequests":{"nodes":[]}}
+					"reviews":{"nodes":[]},"reviewRequests":{"nodes":[]}},
+				{"number":291,"additions":30,"files":null,"reviews":{"nodes":[]},"reviewRequests":{"nodes":[]}}
 			]}}}}`))
 		}))
 		DeferCleanup(server.Close)
@@ -88,6 +89,7 @@ var _ = Describe("ListOpenPRsWithReviewers", func() {
 				MoreFiles: true,
 				Reviewers: map[string]struct{}{},
 			},
+			{Number: 291, Additions: 30, MoreFiles: true, Reviewers: map[string]struct{}{}},
 		}))
 	})
 })
