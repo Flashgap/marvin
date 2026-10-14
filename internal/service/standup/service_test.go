@@ -287,6 +287,19 @@ var _ = Describe("Remind", func() {
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 
+	It("ignores a member who can never be looked up", func(ctx SpecContext) {
+		svc, mock, mslack := newStandupService(GinkgoT())
+		expectChannel(mslack, []string{"U1"})
+		expectStates(mock)
+		mslack.EXPECT().GetUser(gomock.Any(), "U1").
+			Return(nil, fmt.Errorf("%w: %w", pkgslack.ErrGetUser, slack.SlackErrorResponse{Err: "user_not_found"}))
+
+		report, err := svc.Remind(ctx)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(report).To(Equal(&standup.Report{Members: 1, Ignored: 1}))
+		Expect(mock.ExpectationsWereMet()).To(Succeed())
+	})
+
 	It("quotes the member's newest post, file shares included, skipping other messages", func(ctx SpecContext) {
 		later := yesterday.Add(time.Hour)
 		dm := remindDM(ctx,

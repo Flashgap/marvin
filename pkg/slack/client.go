@@ -100,11 +100,13 @@ func (s *slackClient) GetChannelHistory(ctx context.Context, channelID string, o
 	}
 }
 
-// IsPermanentDMError reports whether err, as returned by SendMessage, is a Slack error that no retry
-// can fix: the user is unknown, deactivated, or not visible to Marvin. These are documented
-// conversations.open errors: https://docs.slack.dev/reference/methods/conversations.open
+// IsPermanentUserError reports whether err, as returned by GetUser or SendMessage, is a Slack error
+// that no retry can fix: the user is unknown, deactivated, or not visible to Marvin. These are
+// documented users.info and conversations.open errors:
+// https://docs.slack.dev/reference/methods/users.info
+// https://docs.slack.dev/reference/methods/conversations.open
 // slack-go returns SlackErrorResponse as a value, not a pointer, which is what errors.As matches here.
-func IsPermanentDMError(err error) bool {
+func IsPermanentUserError(err error) bool {
 	var slackErr slack.SlackErrorResponse
 	if !errors.As(err, &slackErr) {
 		return false

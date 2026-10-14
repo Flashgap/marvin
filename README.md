@@ -392,7 +392,7 @@ Blockers: …
 - Each member's latest post from the last 14 days is stored as their last update and quoted in their
   next reminder. Members who haven't posted in that window keep the update stored before.
 - A member is reminded at most once per UTC day, so a retry only DMs the people a previous run missed.
-- Bots and deactivated users are skipped, as is anyone Marvin can never DM (e.g. `user_not_visible`).
+- Bots and deactivated users are skipped, as is anyone Marvin can never look up or DM (e.g. `user_not_visible`).
 
 The endpoint is **gated on the database**: without `DB_HOST` or `MARVIN_STANDUP_CHANNEL_ID`, requests
 return `501 Not Implemented`.

@@ -19,5 +19,5 @@ type Report struct {
 	Reminded        int `json:"reminded"`
 	AlreadyPosted   int `json:"already_posted"`
 	AlreadyReminded int `json:"already_reminded"`
-	Ignored         int `json:"ignored"` // bots, deactivated users, permanent DM errors
+	Ignored         int `json:"ignored"` // bots, deactivated users, members Marvin can never look up or DM
 }

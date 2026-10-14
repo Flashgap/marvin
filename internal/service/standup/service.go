@@ -102,6 +102,11 @@ func (s *service) Remind(ctx context.Context) (*Report, error) {
 		}
 
 		user, err := s.slack.GetUser(ctx, userID)
+		if pkgslack.IsPermanentUserError(err) {
+			log.Warnf("cannot look up %s, ignoring: %v", userID, err)
+			report.Ignored++
+			continue
+		}
 		if err != nil {
 			log.Warnf("failed to look up %s: %v", userID, err)
 			errs = append(errs, fmt.Errorf("lookup %s: %w", userID, err))
@@ -113,7 +118,7 @@ func (s *service) Remind(ctx context.Context) (*Report, error) {
 		}
 
 		err = s.slack.SendDM(ctx, userID, formatReminder(s.channelID, state.lastTS, state.lastText))
-		if pkgslack.IsPermanentDMError(err) {
+		if pkgslack.IsPermanentUserError(err) {
 			// Not marked reminded: tomorrow's run tries again, harmlessly.
 			log.Warnf("cannot DM %s, ignoring: %v", userID, err)
 			report.Ignored++
