@@ -279,7 +279,7 @@ var _ = Describe("Remind", func() {
 		expectStates(mock)
 		mslack.EXPECT().GetUser(gomock.Any(), "U1").Return(human("U1"), nil)
 		mslack.EXPECT().SendDM(gomock.Any(), "U1", gomock.Any()).
-			Return(fmt.Errorf("%w: %w", pkgslack.ErrOpenConversation, slack.SlackErrorResponse{Err: "cannot_dm_bot"}))
+			Return(fmt.Errorf("%w: %w", pkgslack.ErrOpenConversation, slack.SlackErrorResponse{Err: "user_not_visible"}))
 
 		report, err := svc.Remind(ctx)
 		Expect(err).ToNot(HaveOccurred())
