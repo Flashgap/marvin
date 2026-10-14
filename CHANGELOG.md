@@ -4,14 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [2.4.1] — 2026-10-14
 
-### Changed
+### Fixed
 
 - Review load, which `auto_review_assign` and `/review-load` rank reviewers by, no longer counts the
   files the `.gitattributes` files of the default branch mark `linguist-generated` or
   `linguist-vendored`: a reviewer of a protobuf PR was charged every line of its generated code. If
-  those files can't be read, every file still counts.
+  those `.gitattributes` files can't be read, every file still counts.
 
 ## [2.4.0] — 2026-10-08
 
