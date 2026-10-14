@@ -1337,6 +1337,7 @@ blabla
 				mockGithub.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Return([]pkggithub.OpenPRReviewLoad{
 					{Number: prNumber + 1, Additions: 500, Reviewers: map[string]struct{}{"bob": {}}},
 				}, nil).Times(1)
+				mockGithub.EXPECT().GetTree(gomock.Any(), gomock.Any(), gomock.Any(), true).Return(&gogithub.Tree{}, nil, nil).Times(1)
 				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), prNumber, []string{"bob"}).Return(nil, nil, nil).Times(1)
 
 				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)

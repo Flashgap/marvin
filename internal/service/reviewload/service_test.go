@@ -26,11 +26,17 @@ func pr(repo string, number int) reviewload.PullRequest {
 
 func repository(name string) *gogithub.Repository {
 	return &gogithub.Repository{
-		Name:     gogithub.Ptr(name),
-		FullName: gogithub.Ptr("hector-finance/" + name),
-		HTMLURL:  gogithub.Ptr("https://github.com/hector-finance/" + name),
-		Owner:    &gogithub.User{Login: gogithub.Ptr("hector-finance")},
+		Name:          gogithub.Ptr(name),
+		FullName:      gogithub.Ptr("hector-finance/" + name),
+		HTMLURL:       gogithub.Ptr("https://github.com/hector-finance/" + name),
+		Owner:         &gogithub.User{Login: gogithub.Ptr("hector-finance")},
+		DefaultBranch: gogithub.Ptr("main"),
 	}
+}
+
+// noGitattributes makes every repository's default branch hold no .gitattributes file.
+func noGitattributes(mockClient *mock_github.MockClient) {
+	mockClient.EXPECT().GetTree(gomock.Any(), gomock.Any(), "main", true).Return(&gogithub.Tree{}, &gogithub.Response{}, nil).AnyTimes()
 }
 
 var _ = Describe("RepoReviewLoad", func() {
@@ -44,6 +50,7 @@ var _ = Describe("RepoReviewLoad", func() {
 	BeforeEach(func() {
 		mockClient = mock_github.NewMockClient(gomock.NewController(GinkgoT()))
 		svc = reviewload.NewService(mockClient)
+		noGitattributes(mockClient)
 		mockClient.EXPECT().ListInstalledRepos(gomock.Any(), gomock.Any()).
 			Return(&gogithub.ListRepositories{Repositories: []*gogithub.Repository{marvinRepo, backend}}, &gogithub.Response{}, nil)
 	})
@@ -106,6 +113,7 @@ var _ = Describe("ReviewLoad", func() {
 		archived.Archived = gogithub.Ptr(true)
 		mockClient = mock_github.NewMockClient(gomock.NewController(GinkgoT()))
 		svc = reviewload.NewService(mockClient)
+		noGitattributes(mockClient)
 		mockClient.EXPECT().ListInstalledRepos(gomock.Any(), gomock.Any()).
 			Return(&gogithub.ListRepositories{Repositories: []*gogithub.Repository{marvinRepo, quiet, archived, backend}}, &gogithub.Response{}, nil)
 	})
@@ -154,6 +162,7 @@ var _ = Describe("Rank", func() {
 	BeforeEach(func() {
 		mockClient = mock_github.NewMockClient(gomock.NewController(GinkgoT()))
 		svc = reviewload.NewService(mockClient)
+		noGitattributes(mockClient)
 		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), webhook).Return([]pkggithub.OpenPRReviewLoad{
 			{Number: 2, Additions: 10, Reviewers: map[string]struct{}{"bob": {}, "outsider": {}}},
 			{Number: 1, Additions: 5, Reviewers: map[string]struct{}{"bob": {}}},
@@ -172,6 +181,103 @@ var _ = Describe("Rank", func() {
 			{Login: "alice"},
 			{Login: "carol"},
 			{Login: "bob", Score: 15, PRs: []reviewload.PullRequest{pr("backend", 1), pr("backend", 2)}},
+		}))
+	})
+})
+
+var _ = Describe("Rank without generated and vendored files", func() {
+	var (
+		mockClient *mock_github.MockClient
+		svc        reviewload.Service
+		webhook    = &gogithub.PullRequestEvent{Repo: repository("backend")}
+		// bob's PR adds 30 lines of Go and 900 of protobuf codegen
+		protoPR = pkggithub.OpenPRReviewLoad{
+			Number: 1, Additions: 930,
+			Files:     []pkggithub.FileAdditions{{Path: "go/api.go", Additions: 30}, {Path: "go/api.pb.go", Additions: 900}},
+			Reviewers: map[string]struct{}{"bob": {}},
+		}
+		// alice's PR changes more files than the GraphQL query lists
+		bigPR = pkggithub.OpenPRReviewLoad{
+			Number: 2, Additions: 2000,
+			Files:     []pkggithub.FileAdditions{{Path: "go/a.go", Additions: 1}},
+			MoreFiles: true,
+			Reviewers: map[string]struct{}{"alice": {}},
+		}
+	)
+
+	// gitattributes puts files, .gitattributes contents by path, on the default branch, next to a directory
+	gitattributes := func(files map[string]string) {
+		tree := &gogithub.Tree{Entries: []*gogithub.TreeEntry{{Path: gogithub.Ptr("go"), Type: gogithub.Ptr("tree"), SHA: gogithub.Ptr("go")}}}
+		for path, content := range files {
+			tree.Entries = append(tree.Entries, &gogithub.TreeEntry{Path: gogithub.Ptr(path), Type: gogithub.Ptr("blob"), SHA: gogithub.Ptr(path)})
+			mockClient.EXPECT().GetBlobRaw(gomock.Any(), webhook, path).Return([]byte(content), &gogithub.Response{}, nil).MaxTimes(1)
+		}
+		mockClient.EXPECT().GetTree(gomock.Any(), webhook, "main", true).Return(tree, &gogithub.Response{}, nil).AnyTimes()
+	}
+
+	BeforeEach(func() {
+		mockClient = mock_github.NewMockClient(gomock.NewController(GinkgoT()))
+		svc = reviewload.NewService(mockClient)
+	})
+
+	It("leaves out the files the default branch's .gitattributes exclude, reading each once", func(ctx SpecContext) {
+		gitattributes(map[string]string{".gitattributes": "*.go text eol=lf\n", "go/.gitattributes": "*.pb.go linguist-generated\n"})
+		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), webhook).Return([]pkggithub.OpenPRReviewLoad{protoPR}, nil).Times(2)
+
+		for range 2 {
+			Expect(svc.Rank(ctx, webhook, nil)).To(Equal([]reviewload.Reviewer{
+				{Login: "bob", Score: 30, PRs: []reviewload.PullRequest{pr("backend", 1)}},
+			}))
+		}
+	})
+
+	It("lists every file of a PR changing more than the query lists", func(ctx SpecContext) {
+		gitattributes(map[string]string{"go/.gitattributes": "*.pb.go linguist-generated\n"})
+		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), webhook).Return([]pkggithub.OpenPRReviewLoad{bigPR}, nil)
+		mockClient.EXPECT().ListPRFiles(gomock.Any(), webhook, 2, gomock.Any()).
+			DoAndReturn(func(_ any, _ any, _ int, opts *gogithub.ListOptions) ([]*gogithub.CommitFile, *gogithub.Response, error) {
+				if opts.Page == 1 {
+					return []*gogithub.CommitFile{
+						{Filename: gogithub.Ptr("go/a.go"), Additions: gogithub.Ptr(1)},
+						{Filename: gogithub.Ptr("go/a.pb.go"), Additions: gogithub.Ptr(1500)},
+					}, &gogithub.Response{NextPage: 2}, nil
+				}
+				return []*gogithub.CommitFile{{Filename: gogithub.Ptr("go/b.go"), Additions: gogithub.Ptr(499)}}, &gogithub.Response{}, nil
+			}).Times(2)
+
+		Expect(svc.Rank(ctx, webhook, nil)).To(Equal([]reviewload.Reviewer{
+			{Login: "alice", Score: 500, PRs: []reviewload.PullRequest{pr("backend", 2)}},
+		}))
+	})
+
+	DescribeTable("counts every file when the .gitattributes files can't be read",
+		func(ctx SpecContext, treeErr, blobErr error) {
+			// Not even the files read before the failing one are used
+			tree := &gogithub.Tree{Entries: []*gogithub.TreeEntry{
+				{Path: gogithub.Ptr("go/.gitattributes"), Type: gogithub.Ptr("blob"), SHA: gogithub.Ptr("go")},
+				{Path: gogithub.Ptr("ts/.gitattributes"), Type: gogithub.Ptr("blob"), SHA: gogithub.Ptr("ts")},
+			}}
+			mockClient.EXPECT().GetTree(gomock.Any(), webhook, "main", true).Return(tree, &gogithub.Response{}, treeErr)
+			mockClient.EXPECT().GetBlobRaw(gomock.Any(), webhook, "go").Return([]byte("*.pb.go linguist-generated\n"), &gogithub.Response{}, nil).MaxTimes(1)
+			mockClient.EXPECT().GetBlobRaw(gomock.Any(), webhook, "ts").Return([]byte("*_pb.ts linguist-generated\n"), &gogithub.Response{}, blobErr).MaxTimes(1)
+			mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), webhook).Return([]pkggithub.OpenPRReviewLoad{protoPR}, nil)
+
+			Expect(svc.Rank(ctx, webhook, nil)).To(Equal([]reviewload.Reviewer{
+				{Login: "bob", Score: 930, PRs: []reviewload.PullRequest{pr("backend", 1)}},
+			}))
+		},
+		Entry("the tree", errors.New("boom"), nil),
+		Entry("a .gitattributes file", nil, errors.New("boom")),
+	)
+
+	It("counts every file, as before, when no .gitattributes line excludes any", func(ctx SpecContext) {
+		gitattributes(map[string]string{".gitattributes": "*.go text eol=lf\nvendor/** -linguist-vendored\n"})
+		mockClient.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), webhook).Return([]pkggithub.OpenPRReviewLoad{protoPR, bigPR}, nil)
+
+		// The PRs' additions, even for the PR whose files aren't all listed
+		Expect(svc.Rank(ctx, webhook, nil)).To(Equal([]reviewload.Reviewer{
+			{Login: "bob", Score: 930, PRs: []reviewload.PullRequest{pr("backend", 1)}},
+			{Login: "alice", Score: 2000, PRs: []reviewload.PullRequest{pr("backend", 2)}},
 		}))
 	})
 })

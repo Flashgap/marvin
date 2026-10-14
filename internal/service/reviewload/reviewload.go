@@ -26,7 +26,9 @@ type Service interface {
 	Rank(ctx context.Context, webhook pkggithub.RepoSenderGetter, members []string) ([]Reviewer, error)
 }
 
-// Reviewer is a login with its review load score: the sum of the additions of the open PRs it reviews.
+// Reviewer is a login with its review load score: the sum of the lines added by the open PRs it reviews,
+// leaving out the files the .gitattributes files of the repository's default branch mark linguist-generated
+// or linguist-vendored.
 type Reviewer struct {
 	Login string
 	Score int

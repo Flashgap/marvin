@@ -73,6 +73,8 @@ var _ = Describe("FindAndAssignReviewers", func() {
 			DoAndReturn(func(context.Context, pkggithub.RepoSenderGetter) ([]pkggithub.OpenPRReviewLoad, error) {
 				return openPRs, nil
 			})
+		// No .gitattributes file: review load counts every file of openPRs
+		mockClient.EXPECT().GetTree(gomock.Any(), event, defaultBranch, true).Return(&gogithub.Tree{}, &gogithub.Response{}, nil).AnyTimes()
 	})
 
 	AfterEach(func() { mockCtrl.Finish() })
