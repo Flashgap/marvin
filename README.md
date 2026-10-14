@@ -330,7 +330,7 @@ service account.
 
 | Variable | Description |
 |----------|-------------|
-| `MARVIN_TASKS_AUDIENCE` | Audience of the OIDC tokens accepted on every `/marvin/_task/*` route: the job's `--oidc-token-audience`, e.g. `https://<your-marvin>`. |
+| `MARVIN_TASKS_AUDIENCE` | Audience of the OIDC tokens accepted on every `/marvin/_task/*` route: the job's `--oidc-token-audience`, usually the URL of your Marvin deployment, e.g. `https://<your-marvin>`. |
 | `MARVIN_TASKS_SERVICE_ACCOUNT` | Email of the only service account whose OIDC tokens are accepted: the job's `--oidc-service-account-email`. |
 
 Outside dev, both are required: if either is empty, every task request is rejected. As for the GitHub
