@@ -4,7 +4,6 @@ import (
 	"path"
 
 	"github.com/gin-gonic/gin"
-	"google.golang.org/api/idtoken"
 
 	"github.com/Flashgap/marvin/internal/middlewares"
 	marvinroute "github.com/Flashgap/marvin/internal/route/marvin"
@@ -12,24 +11,25 @@ import (
 	"github.com/Flashgap/marvin/internal/service/marvin"
 	"github.com/Flashgap/marvin/internal/service/reviewload"
 	"github.com/Flashgap/marvin/internal/web"
+	"github.com/Flashgap/marvin/pkg/googleid"
 )
 
 type Controller struct {
 	web.BaseController
-	configuration      *Config
-	marvinService      marvin.Service
-	lockService        lock.Service
-	reviewLoad         reviewload.Service
-	taskTokenValidator *idtoken.Validator
+	configuration     *Config
+	marvinService     marvin.Service
+	lockService       lock.Service
+	reviewLoad        reviewload.Service
+	taskTokenVerifier *googleid.Verifier
 }
 
-func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, reviewLoad reviewload.Service, taskTokenValidator *idtoken.Validator) *Controller {
+func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, reviewLoad reviewload.Service, taskTokenVerifier *googleid.Verifier) *Controller {
 	return &Controller{
-		configuration:      configuration,
-		marvinService:      marvinService,
-		lockService:        lockService,
-		reviewLoad:         reviewLoad,
-		taskTokenValidator: taskTokenValidator,
+		configuration:     configuration,
+		marvinService:     marvinService,
+		lockService:       lockService,
+		reviewLoad:        reviewLoad,
+		taskTokenVerifier: taskTokenVerifier,
 	}
 }
 
@@ -47,7 +47,7 @@ func (ctrl *Controller) RouteTasks(router gin.IRouter) {
 	// implemented yet: the handler answers 200 without doing anything.
 	router.POST(
 		path.Join(marvinroute.Standup, marvinroute.StandupRemind),
-		middlewares.ValidateTaskToken(ctrl.configuration.Tasks, ctrl.configuration.IsDevEnv, ctrl.taskTokenValidator),
+		middlewares.ValidateTaskToken(ctrl.configuration.IsDevEnv, ctrl.taskTokenVerifier.Verify),
 		ctrl.standupRemindHandler,
 	)
 }

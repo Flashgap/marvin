@@ -115,7 +115,7 @@ func (ms *Server) initializeRouter() {
 // initializeControllers initializes all HTTP controllers.
 func (ms *Server) initializeControllers() {
 	ms.ctrls = []web.Controller{
-		NewController(ms.cfg, ms.services.MarvinService, ms.services.LockService, ms.services.ReviewLoad, ms.services.TaskTokenValidator),
+		NewController(ms.cfg, ms.services.MarvinService, ms.services.LockService, ms.services.ReviewLoad, ms.services.TaskTokenVerifier),
 	}
 }
 

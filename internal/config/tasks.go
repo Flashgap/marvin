@@ -13,8 +13,3 @@ type Tasks struct {
 	// minted for: the job's --oidc-service-account-email.
 	TasksServiceAccount string `envconfig:"MARVIN_TASKS_SERVICE_ACCOUNT"`
 }
-
-// TasksConfigured reports whether task authentication is set up.
-func (cfg Tasks) TasksConfigured() bool {
-	return cfg.TasksAudience != "" && cfg.TasksServiceAccount != ""
-}

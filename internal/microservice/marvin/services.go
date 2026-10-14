@@ -8,8 +8,6 @@ import (
 	"cloud.google.com/go/errorreporting"
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	gogithub "github.com/google/go-github/v90/github"
-	"google.golang.org/api/idtoken"
-	"google.golang.org/api/option"
 
 	"github.com/Flashgap/marvin/internal/constants"
 	"github.com/Flashgap/marvin/internal/migrations"
@@ -21,6 +19,7 @@ import (
 	slacksvc "github.com/Flashgap/marvin/internal/service/slack"
 	"github.com/Flashgap/marvin/pkg/database"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
+	"github.com/Flashgap/marvin/pkg/googleid"
 	pkgjira "github.com/Flashgap/marvin/pkg/jira"
 	"github.com/Flashgap/marvin/pkg/linear"
 	"github.com/Flashgap/marvin/pkg/logger"
@@ -36,8 +35,8 @@ type Services struct {
 	MarvinService marvin.Service
 	LockService   lock.Service
 	ReviewLoad    reviewload.Service
-	// TaskTokenValidator verifies the OIDC tokens of task requests.
-	TaskTokenValidator *idtoken.Validator
+	// TaskTokenVerifier verifies the Google ID tokens of task requests.
+	TaskTokenVerifier *googleid.Verifier
 }
 
 func (s *Services) initialize(ctx context.Context, cfg *Config) error {
@@ -72,13 +71,14 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		s.LockService = lockSvc
 	}
 
-	if s.TaskTokenValidator == nil {
+	if s.TaskTokenVerifier == nil {
 		// Without a timeout, a stuck fetch of Google's public keys would hang the task request.
-		validator, err := idtoken.NewValidator(ctx, option.WithHTTPClient(&http.Client{Timeout: constants.GoogleKeysTimeout}))
+		client := &http.Client{Timeout: constants.GoogleKeysTimeout}
+		verifier, err := googleid.NewVerifier(ctx, client, cfg.TasksAudience, cfg.TasksServiceAccount)
 		if err != nil {
-			return fmt.Errorf("cannot init task token validator: %w", err)
+			return fmt.Errorf("cannot init task token verifier: %w", err)
 		}
-		s.TaskTokenValidator = validator
+		s.TaskTokenVerifier = verifier
 	}
 
 	if s.GithubService == nil {
