@@ -404,7 +404,7 @@ the lines added by the open PRs they review, leaving out generated and vendored 
 `.gitattributes` files of the default branch mark `linguist-generated` or `linguist-vendored`. They
 are never read off a PR's head ref, so a PR can't shrink its own load. As in git, a line that can't be
 parsed (e.g. a macro outside the root `.gitattributes`) is skipped and the others still apply. If they
-can't be read, every file counts.
+can't all be read, including when GitHub truncates the listing of a very large tree, every file counts.
 The number of reviewers to assign is derived from the branch's required approving review count —
 Marvin supports both classic branch protection rules and repository rulesets.
 

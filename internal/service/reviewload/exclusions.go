@@ -37,8 +37,8 @@ func (s *service) gitattributes(ctx context.Context, webhook pkggithub.RepoSende
 		return nil, fmt.Errorf("getting the tree of %s: %w", branch, err)
 	}
 	if tree.GetTruncated() {
-		log := middlewares.LoggerFromGHContext(ctx, "reviewload.gitattributes")
-		log.Warnf("the tree of %s is truncated, only reading the %s files of its first %d entries", branch, linguist.FileName, len(tree.GetEntries()))
+		// The .gitattributes files left out could change what those listed decide
+		return nil, fmt.Errorf("the tree of %s is truncated after %d entries", branch, len(tree.GetEntries()))
 	}
 
 	files := make(map[string]string)

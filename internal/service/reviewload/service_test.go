@@ -255,9 +255,9 @@ var _ = Describe("Rank without generated and vendored files", func() {
 	)
 
 	DescribeTable("counts every file when the .gitattributes files can't be read",
-		func(ctx SpecContext, treeErr, blobErr error) {
+		func(ctx SpecContext, truncated bool, treeErr, blobErr error) {
 			// Not even the files read before the failing one are used
-			tree := &gogithub.Tree{Entries: []*gogithub.TreeEntry{
+			tree := &gogithub.Tree{Truncated: gogithub.Ptr(truncated), Entries: []*gogithub.TreeEntry{
 				{Path: gogithub.Ptr("go/.gitattributes"), Type: gogithub.Ptr("blob"), SHA: gogithub.Ptr("go")},
 				{Path: gogithub.Ptr("ts/.gitattributes"), Type: gogithub.Ptr("blob"), SHA: gogithub.Ptr("ts")},
 			}}
@@ -270,8 +270,9 @@ var _ = Describe("Rank without generated and vendored files", func() {
 				{Login: "bob", Score: 930, PRs: []reviewload.PullRequest{pr("backend", 1)}},
 			}))
 		},
-		Entry("the tree", errors.New("boom"), nil),
-		Entry("a .gitattributes file", nil, errors.New("boom")),
+		Entry("the tree", false, errors.New("boom"), nil),
+		Entry("a .gitattributes file", false, nil, errors.New("boom")),
+		Entry("the whole tree, GitHub truncating it", true, nil, nil),
 	)
 
 	It("counts every file, as before, when no .gitattributes line excludes any", func(ctx SpecContext) {
