@@ -1,6 +1,7 @@
 -- Create "standup_users" table
 CREATE TABLE standup_users (
     slack_user_id    VARCHAR(64) NOT NULL,
+    -- Slack message ts, e.g. "1759820000.123456": a message ID, not a time.
     last_update_ts   VARCHAR(32) NULL,
     last_update_text MEDIUMTEXT CHARACTER SET utf8mb4 NULL,
     last_reminded_at DATETIME NULL,
