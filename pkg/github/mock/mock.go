@@ -170,6 +170,22 @@ func (mr *MockClientMockRecorder) EditPR(ctx, webhook, prNumber, body any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EditPR", reflect.TypeOf((*MockClient)(nil).EditPR), ctx, webhook, prNumber, body)
 }
 
+// GetBlobRaw mocks base method.
+func (m *MockClient) GetBlobRaw(ctx context.Context, webhook github.RepoSenderGetter, sha string) ([]byte, *github0.Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBlobRaw", ctx, webhook, sha)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(*github0.Response)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetBlobRaw indicates an expected call of GetBlobRaw.
+func (mr *MockClientMockRecorder) GetBlobRaw(ctx, webhook, sha any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlobRaw", reflect.TypeOf((*MockClient)(nil).GetBlobRaw), ctx, webhook, sha)
+}
+
 // GetBranchProtection mocks base method.
 func (m *MockClient) GetBranchProtection(ctx context.Context, webhook github.RepoSenderGetter, branch string) (*github0.Protection, *github0.Response, error) {
 	m.ctrl.T.Helper()
@@ -264,6 +280,22 @@ func (m *MockClient) GetRulesForBranch(ctx context.Context, webhook github.RepoS
 func (mr *MockClientMockRecorder) GetRulesForBranch(ctx, webhook, branch any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRulesForBranch", reflect.TypeOf((*MockClient)(nil).GetRulesForBranch), ctx, webhook, branch)
+}
+
+// GetTree mocks base method.
+func (m *MockClient) GetTree(ctx context.Context, webhook github.RepoSenderGetter, sha string, recursive bool) (*github0.Tree, *github0.Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTree", ctx, webhook, sha, recursive)
+	ret0, _ := ret[0].(*github0.Tree)
+	ret1, _ := ret[1].(*github0.Response)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetTree indicates an expected call of GetTree.
+func (mr *MockClientMockRecorder) GetTree(ctx, webhook, sha, recursive any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTree", reflect.TypeOf((*MockClient)(nil).GetTree), ctx, webhook, sha, recursive)
 }
 
 // ListCheckRunsForRef mocks base method.

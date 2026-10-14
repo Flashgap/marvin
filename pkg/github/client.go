@@ -136,6 +136,17 @@ func (h *client) GetFileContent(ctx context.Context, webhook RepoSenderGetter, p
 	return content, res, nil
 }
 
+// GetTree fetches a git tree by SHA or ref name (e.g. a branch), with every subtree's entries when recursive.
+// GitHub truncates the entries of trees past its size limit, see github.Tree.Truncated.
+func (h *client) GetTree(ctx context.Context, webhook RepoSenderGetter, sha string, recursive bool) (*github.Tree, *github.Response, error) {
+	return h.Git.GetTree(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), sha, recursive)
+}
+
+// GetBlobRaw fetches the raw content of a git blob by SHA.
+func (h *client) GetBlobRaw(ctx context.Context, webhook RepoSenderGetter, sha string) ([]byte, *github.Response, error) {
+	return h.Git.GetBlobRaw(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), sha)
+}
+
 // GetRef fetches a single git reference, e.g. "refs/heads/main".
 func (h *client) GetRef(ctx context.Context, webhook RepoSenderGetter, ref string) (*github.Reference, *github.Response, error) {
 	return h.Git.GetRef(ctx, webhook.GetRepo().GetOwner().GetLogin(), webhook.GetRepo().GetName(), ref)

@@ -33,6 +33,8 @@ type Client interface {
 	MergePRAsync(ctx context.Context, webhook RepoSenderGetter, prNumber int, body PullRequestMergeAsyncRequest) (*PullRequestMergeAsyncResult, *github.Response, error)
 	EditPR(ctx context.Context, webhook RepoSenderGetter, prNumber int, body *github.PullRequest) (*github.PullRequest, *github.Response, error)
 	GetFileContent(ctx context.Context, webhook RepoSenderGetter, path, ref string) (string, *github.Response, error)
+	GetTree(ctx context.Context, webhook RepoSenderGetter, sha string, recursive bool) (*github.Tree, *github.Response, error)
+	GetBlobRaw(ctx context.Context, webhook RepoSenderGetter, sha string) ([]byte, *github.Response, error)
 	GetRef(ctx context.Context, webhook RepoSenderGetter, ref string) (*github.Reference, *github.Response, error)
 	CreateRef(ctx context.Context, webhook RepoSenderGetter, ref github.CreateRef) (*github.Reference, *github.Response, error)
 	CreateFile(ctx context.Context, webhook RepoSenderGetter, path string, opts *github.RepositoryContentFileOptions) (*github.RepositoryContentResponse, *github.Response, error)

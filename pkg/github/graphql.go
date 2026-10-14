@@ -12,8 +12,16 @@ import (
 // either given it a verdict or is currently requested to review it.
 type OpenPRReviewLoad struct {
 	Number    int
-	Additions int
+	Additions int             // Lines added, across every file, generated and vendored ones included
+	Files     []FileAdditions // Lines added per file, for the first 100 files only
+	MoreFiles bool            // The PR changes more files than Files holds: ListPRFiles lists them all
 	Reviewers map[string]struct{}
+}
+
+// FileAdditions is a file changed by a pull request, with the number of lines the pull request adds to it.
+type FileAdditions struct {
+	Path      string
+	Additions int
 }
 
 // userLogin is embedded (not named) in query structs so the shurcooL/graphql decoder recognizes it
@@ -30,7 +38,16 @@ type openPRsWithReviewersQuery struct {
 			Nodes []struct {
 				Number    graphql.Int
 				Additions graphql.Int
-				Reviews   struct {
+				Files     struct {
+					Nodes []struct {
+						Path      graphql.String
+						Additions graphql.Int
+					}
+					PageInfo struct {
+						HasNextPage graphql.Boolean
+					}
+				} `graphql:"files(first: 100)"`
+				Reviews struct {
 					Nodes []struct {
 						Author struct {
 							Login graphql.String
@@ -49,8 +66,9 @@ type openPRsWithReviewersQuery struct {
 	} `graphql:"repository(owner: $owner, name: $name)"`
 }
 
-// ListOpenPRsWithReviewers returns, for every open PR of the repository, its
-// size (additions) and the set of logins who have given it a verdict or are requested to review it.
+// ListOpenPRsWithReviewers returns, for every open PR of the repository, its size (lines added, in total
+// and in each of its first 100 files) and the set of logins who have given it a verdict or are requested to
+// review it.
 // COMMENTED reviews are left out: any line comment creates one, including from the PR author replying in
 // a review thread or from someone who isn't assigned.
 func (h *client) ListOpenPRsWithReviewers(ctx context.Context, webhook RepoSenderGetter) ([]OpenPRReviewLoad, error) {
@@ -79,9 +97,16 @@ func (h *client) ListOpenPRsWithReviewers(ctx context.Context, webhook RepoSende
 			}
 		}
 
+		files := make([]FileAdditions, 0, len(node.Files.Nodes))
+		for _, file := range node.Files.Nodes {
+			files = append(files, FileAdditions{Path: string(file.Path), Additions: int(file.Additions)})
+		}
+
 		prs = append(prs, OpenPRReviewLoad{
 			Number:    int(node.Number),
 			Additions: int(node.Additions),
+			Files:     files,
+			MoreFiles: bool(node.Files.PageInfo.HasNextPage),
 			Reviewers: reviewers,
 		})
 	}
