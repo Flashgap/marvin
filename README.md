@@ -107,14 +107,35 @@ and a repository with no `.marvin.yaml` has Marvin fully disabled on it.
         "bot_user": {
             "display_name": "Marvin",
             "always_online": false
-        }
+        },
+        "slash_commands": [
+            {
+                "command": "/lock",
+                "url": "https://your-marvin-url.com/marvin/_webhook/slack/lock",
+                "description": "Report an unlocked laptop, or show the leaderboard",
+                "usage_hint": "@someone",
+                "should_escape": true
+            },
+            {
+                "command": "/review-load",
+                "url": "https://your-marvin-url.com/marvin/_webhook/slack/review-load",
+                "description": "Show reviewers' review load on open PRs",
+                "usage_hint": "[repository]",
+                "should_escape": false
+            }
+        ]
     },
     "oauth_config": {
         "scopes": {
             "bot": [
-                "calls:write",
+                "channels:history",
+                "channels:read",
+                "chat:write",
+                "commands",
+                "groups:history",
+                "groups:read",
                 "im:write",
-                "incoming-webhook"
+                "users:read"
             ]
         },
         "pkce_enabled": false
@@ -127,7 +148,19 @@ and a repository with no `.marvin.yaml` has Marvin fully disabled on it.
 }
 ```
 
+   Replace `your-marvin-url.com` with your Marvin host in the [`/lock`](#slack-lock-slash-command-optional) and [`/review-load`](#slack-review-load-slash-command-optional) slash command URLs.
+
+   What the bot scopes are for:
+   - `chat:write`, `im:write`: send DMs (`slack_notify`, `auto_changes_required`, `/lock`, the standup reminder).
+   - `users:read`: look up users (`/lock`, the standup reminder).
+   - `commands`: the [`/lock`](#slack-lock-slash-command-optional) and [`/review-load`](#slack-review-load-slash-command-optional) slash commands.
+   - `channels:read`, `channels:history` (public channel) or `groups:read`, `groups:history` (private channel):
+     read the [standup channel](#daily-standup-reminder-optional). Keep the pair matching your channel, or both.
+
 3. Install the app to your workspace and grab the **Bot User OAuth Token** → `MARVIN_SLACK_BOT_TOKEN`.
+
+4. For the standup reminder, invite Marvin to the standup channel (`/invite @Marvin`): a bot can only read the
+   channels it is a member of.
 
 ---
 
@@ -259,8 +292,8 @@ The endpoint is **gated on the database**: without `DB_HOST`, requests return
 `501 Not Implemented`.
 
 **Slack app configuration**
-- Add a slash command with the request URL `https://<your-marvin>/marvin/_webhook/slack/lock`.
-- Turn on **"Escape channels, users, and links"** — Marvin parses the
+- Registered by the [manifest](#slack-app-setup). Otherwise, add a slash command with the request URL
+  `https://<your-marvin>/marvin/_webhook/slack/lock` and turn on **"Escape channels, users, and links"** — Marvin parses the
   `<@U12345|handle>` form Slack sends with that setting enabled.
 - Bot token scopes: `chat:write`, `im:write`, `users:read`.
 
@@ -280,15 +313,14 @@ GitHub App is installed on is ranked, each in its own section of the table.
 Team members reviewing nothing aren't listed: they score 0.
 
 **Slack app configuration**
-- Add a slash command `/review-load` with the request URL
+- Registered by the [manifest](#slack-app-setup). Otherwise, add a slash command `/review-load` with the request URL
   `https://<your-marvin>/marvin/_webhook/slack/review-load`.
 - Requests are verified with `MARVIN_SLACK_SIGNING_SECRET`, as for `/lock`.
 
 ### Task routes (`/marvin/_task/*`)
 
-Task routes are called by a scheduler such as Cloud Scheduler, never by people. The only one so far,
-`POST /marvin/_task/standup/remind`, answers `200` without doing anything: the daily standup reminder
-will use it.
+Task routes are called by a scheduler such as Cloud Scheduler, never by people. The only one so far
+is `POST /marvin/_task/standup/remind`, the [daily standup reminder](#daily-standup-reminder-optional).
 
 Every task route requires an OIDC token Google signs for a dedicated service account, sent as
 `Authorization: Bearer <token>`. Cloud Scheduler sends one on each run when the job has an OIDC
@@ -298,7 +330,7 @@ service account.
 
 | Variable | Description |
 |----------|-------------|
-| `MARVIN_TASKS_AUDIENCE` | Audience of the OIDC tokens accepted on every `/marvin/_task/*` route: the job's `--oidc-token-audience`, e.g. `https://<your-marvin>`. |
+| `MARVIN_TASKS_AUDIENCE` | Audience of the OIDC tokens accepted on every `/marvin/_task/*` route: the job's `--oidc-token-audience`, usually the URL of your Marvin deployment, e.g. `https://<your-marvin>`. |
 | `MARVIN_TASKS_SERVICE_ACCOUNT` | Email of the only service account whose OIDC tokens are accepted: the job's `--oidc-service-account-email`. |
 
 Outside dev, both are required: if either is empty, every task request is rejected. As for the GitHub
@@ -341,6 +373,77 @@ gcloud scheduler jobs create http <job> \
 
 Check the setup by running the job once with `gcloud scheduler jobs run <job>`: it should answer `200`.
 On a `401`, Marvin's log says which check failed.
+
+### Daily standup reminder (optional)
+
+A standup bot (Geekbot replacement): on standup days, a cron calls Marvin, which DMs every member of
+the standup channel who hasn't posted their standup there yet today. The DM quotes the *Today*
+section of their last update (the header can be bold, with or without a colon) and gives them a
+template to copy, fill in and post in the channel:
+
+```
+Yesterday: …
+Today: …
+Blockers: …
+```
+
+- A day is a UTC day: any top-level message posted in the channel since 00:00 UTC counts as today's
+  standup. Thread replies, bot posts and channel events (joins, topic changes…) don't count.
+- Each member's latest post from the last 14 days is stored as their last update and quoted in their
+  next reminder. Members who haven't posted in that window keep the update stored before.
+- A member is reminded at most once per UTC day, so a retry only DMs the people a previous run missed.
+- Bots and deactivated users are skipped, as is anyone Marvin can never look up or DM (e.g. `user_not_visible`).
+
+The endpoint is **gated on the database**: without `DB_HOST` or `MARVIN_STANDUP_CHANNEL_ID`, requests
+return `501 Not Implemented`.
+
+**Slack app configuration**
+- Bot token scopes: `channels:read` and `channels:history` for a public channel, `groups:read` and
+  `groups:history` for a private one (adding both pairs is harmless), plus `users:read`, `im:write`
+  and `chat:write`.
+- Invite Marvin to the standup channel (`/invite @Marvin`). A bot can only read the channels it is a
+  member of: otherwise every run fails with `not_in_channel` or `channel_not_found`.
+- Install Marvin as its own app in your workspace (see [Slack App setup](#slack-app-setup)): Slack's
+  2025 rate limits on `conversations.history` only apply to commercially distributed apps, so don't
+  share one Marvin app across several workspaces.
+
+**Env vars**
+
+| Variable | Description |
+|----------|-------------|
+| `MARVIN_STANDUP_CHANNEL_ID` | ID (not name) of the standup channel, e.g. `C0123456789`. Empty disables the feature. |
+
+The endpoint is a [task route](#task-routes-marvin_task): it also needs `MARVIN_TASKS_AUDIENCE` and
+`MARVIN_TASKS_SERVICE_ACCOUNT` outside dev.
+
+In local dev, point `MARVIN_STANDUP_CHANNEL_ID` at a test channel: the local bot token is the real
+one, so a run DMs real people. With task authentication off in dev, trigger a run with
+
+```bash
+curl -X POST http://localhost:8080/marvin/_task/standup/remind
+```
+
+**Scheduling**
+
+Call `POST /marvin/_task/standup/remind` on standup days with Cloud Scheduler, with the
+`marvin-trigger` service account and OIDC token described in [Task routes](#task-routes-marvin_task):
+
+```bash
+gcloud scheduler jobs create http marvin-standup \
+  --schedule="0 9 * * 1-5" --time-zone="Europe/Paris" \
+  --uri="https://<your-marvin>/marvin/_task/standup/remind" --http-method=POST \
+  --oidc-service-account-email="marvin-trigger@<project>.iam.gserviceaccount.com" \
+  --oidc-token-audience="https://<your-marvin>" \
+  --attempt-deadline=300s --max-retry-attempts=3 --min-backoff=60s
+```
+
+- `--max-retry-attempts` is required: Cloud Scheduler doesn't retry by default, and Marvin answers
+  `500` when a run partly fails (a DM or database write failed) so that the retry finishes the job.
+- Set `--attempt-deadline` to the request timeout of whatever serves Marvin (`300s` above, Scheduler's
+  default is `180s`): a longer deadline doesn't give a run more time.
+
+A successful run answers `200` with its counters, e.g.
+`{"members":12,"reminded":7,"already_posted":3,"already_reminded":0,"ignored":2}`.
 
 ---
 

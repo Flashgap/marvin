@@ -4,11 +4,20 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	weberrors "github.com/Flashgap/marvin/internal/web/errors"
 )
 
-// standupRemindHandler doesn't do anything yet: it lets the daily standup
-// reminder's Cloud Scheduler job, and its authentication, be set up and checked
-// before the reminder itself lands.
-func (*Controller) standupRemindHandler(c *gin.Context) {
-	c.Status(http.StatusOK)
+func (ctrl *Controller) standupRemindHandler(c *gin.Context) {
+	if ctrl.standupService == nil {
+		c.AbortWithStatusJSON(http.StatusNotImplemented, weberrors.GenericNotImplementedError)
+		return
+	}
+
+	report, err := ctrl.standupService.Remind(c.Request.Context())
+	if ctrl.Error(c, err) {
+		return
+	}
+
+	c.JSON(http.StatusOK, report)
 }

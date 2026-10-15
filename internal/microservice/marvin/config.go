@@ -19,6 +19,7 @@ type Config struct {
 	config.Linear
 	config.Marvin
 	config.Database
+	config.Standup
 	config.Tasks
 }
 

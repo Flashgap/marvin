@@ -5,19 +5,33 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/slack-go/slack"
 )
 
 var (
-	ErrOpenConversation = errors.New("error opening conversation")
-	ErrPostMessage      = errors.New("error posting message")
-	ErrGetUser          = errors.New("error fetching user")
+	ErrOpenConversation  = errors.New("error opening conversation")
+	ErrPostMessage       = errors.New("error posting message")
+	ErrGetUser           = errors.New("error fetching user")
+	ErrGetChannelMembers = errors.New("error fetching channel members")
+	ErrGetChannelHistory = errors.New("error fetching channel history")
 )
+
+// pageSize is the number of items requested per page from Slack's paginated methods,
+// the top of Slack's recommended 100-200: https://docs.slack.dev/apis/web-api/pagination
+const pageSize = 200
 
 type Client interface {
 	SendMessage(ctx context.Context, userID, message string) error
 	GetUser(ctx context.Context, userID string) (*slack.User, error)
+	// GetChannelMembers returns every member ID of channelID, following pagination.
+	GetChannelMembers(ctx context.Context, channelID string) ([]string, error)
+	// GetChannelHistory returns channelID's messages with ts > oldest, newest first, following pagination.
+	// conversations.history only returns top-level messages (plus thread_broadcast copies), never thread replies:
+	// https://docs.slack.dev/reference/methods/conversations.history
+	GetChannelHistory(ctx context.Context, channelID string, oldest time.Time) ([]slack.Message, error)
 }
 
 type slackClient struct {
@@ -48,4 +62,59 @@ func (s *slackClient) GetUser(ctx context.Context, userID string) (*slack.User, 
 		return nil, fmt.Errorf("%w: %w", ErrGetUser, err)
 	}
 	return u, nil
+}
+
+func (s *slackClient) GetChannelMembers(ctx context.Context, channelID string) ([]string, error) {
+	params := &slack.GetUsersInConversationParameters{ChannelID: channelID, Limit: pageSize}
+	var members []string
+	for {
+		page, cursor, err := s.GetUsersInConversationContext(ctx, params)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrGetChannelMembers, err)
+		}
+		members = append(members, page...)
+		if cursor == "" {
+			return members, nil
+		}
+		params.Cursor = cursor
+	}
+}
+
+func (s *slackClient) GetChannelHistory(ctx context.Context, channelID string, oldest time.Time) ([]slack.Message, error) {
+	params := &slack.GetConversationHistoryParameters{
+		ChannelID: channelID,
+		Oldest:    strconv.FormatInt(oldest.Unix(), 10),
+		Limit:     pageSize,
+	}
+	var messages []slack.Message
+	for {
+		resp, err := s.GetConversationHistoryContext(ctx, params)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrGetChannelHistory, err)
+		}
+		messages = append(messages, resp.Messages...)
+		if !resp.HasMore || resp.ResponseMetaData.NextCursor == "" {
+			return messages, nil
+		}
+		params.Cursor = resp.ResponseMetaData.NextCursor
+	}
+}
+
+// IsPermanentUserError reports whether err, as returned by GetUser or SendMessage, is a Slack error
+// that no retry can fix: the user is unknown, deactivated, or not visible to Marvin. These are
+// documented users.info and conversations.open errors:
+// https://docs.slack.dev/reference/methods/users.info
+// https://docs.slack.dev/reference/methods/conversations.open
+// slack-go returns SlackErrorResponse as a value, not a pointer, which is what errors.As matches here.
+func IsPermanentUserError(err error) bool {
+	var slackErr slack.SlackErrorResponse
+	if !errors.As(err, &slackErr) {
+		return false
+	}
+	switch slackErr.Err {
+	case "user_not_found", "user_not_visible", "user_disabled":
+		return true
+	default:
+		return false
+	}
 }

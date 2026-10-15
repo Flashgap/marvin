@@ -8,9 +8,9 @@ import (
 )
 
 // Service is the controller's single dependency. It owns the DB pool and the
-// SlackService, runs migrations at construction, and performs all business
-// logic for the /lock command. Both methods return a slack.Msg ready to be
-// serialized as the slash-command response (controller writes it as JSON).
+// SlackService, and performs all business logic for the /lock command. Both
+// methods return a slack.Msg ready to be serialized as the slash-command
+// response (controller writes it as JSON).
 //
 // Validation outcomes (self-lock, bot target, cooldown, malformed mention) are
 // returned as ephemeral slack.Msg values with a nil error — only genuine

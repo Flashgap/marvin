@@ -10,6 +10,7 @@ import (
 	"github.com/Flashgap/marvin/internal/service/lock"
 	"github.com/Flashgap/marvin/internal/service/marvin"
 	"github.com/Flashgap/marvin/internal/service/reviewload"
+	"github.com/Flashgap/marvin/internal/service/standup"
 	"github.com/Flashgap/marvin/internal/web"
 	"github.com/Flashgap/marvin/pkg/googleid"
 )
@@ -20,15 +21,17 @@ type Controller struct {
 	marvinService     marvin.Service
 	lockService       lock.Service
 	reviewLoad        reviewload.Service
+	standupService    standup.Service
 	taskTokenVerifier *googleid.Verifier
 }
 
-func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, reviewLoad reviewload.Service, taskTokenVerifier *googleid.Verifier) *Controller {
+func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, reviewLoad reviewload.Service, standupService standup.Service, taskTokenVerifier *googleid.Verifier) *Controller {
 	return &Controller{
 		configuration:     configuration,
 		marvinService:     marvinService,
 		lockService:       lockService,
 		reviewLoad:        reviewLoad,
+		standupService:    standupService,
 		taskTokenVerifier: taskTokenVerifier,
 	}
 }
@@ -47,8 +50,8 @@ func (ctrl *Controller) RouteTasks(router gin.IRouter) {
 	// added below can't miss it.
 	router.Use(middlewares.ValidateTaskToken(ctrl.configuration.IsDevEnv, ctrl.taskTokenVerifier.Verify))
 
-	// Daily standup reminder, triggered by a cron (e.g. Cloud Scheduler). Not
-	// implemented yet: the handler answers 200 without doing anything.
+	// Daily standup reminder, triggered by a cron (e.g. Cloud Scheduler). The
+	// handler returns 501 when no DB-backed standup service is wired in.
 	router.POST(path.Join(marvinroute.Standup, marvinroute.StandupRemind), ctrl.standupRemindHandler)
 }
 

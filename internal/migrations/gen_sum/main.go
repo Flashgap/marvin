@@ -1,7 +1,7 @@
 //go:build ignore
 
 // gen_sum regenerates the atlas.sum integrity file for every driver
-// subdirectory under ./migrations. Run via `go run ./internal/migrations/gen_sum`.
+// subdirectory under ./migrations. Run via `make migrate-hash`.
 package main
 
 import (

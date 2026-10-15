@@ -10,9 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **Task routes**: the `/marvin/_task/*` routes, called by a scheduler such as Cloud Scheduler, are now
   mounted. They only accept the OIDC tokens Google signs for `MARVIN_TASKS_SERVICE_ACCOUNT` with the
-  `MARVIN_TASKS_AUDIENCE` audience. The first one, `POST /marvin/_task/standup/remind`, answers `200`
-  without doing anything until the daily standup reminder lands, so that its Cloud Scheduler job can be
-  set up and checked first. See the README's "Task routes" section.
+  `MARVIN_TASKS_AUDIENCE` audience. See the README's "Task routes" section.
+- **Daily standup reminder**: `POST /marvin/_task/standup/remind`, called by a cron on standup days,
+  DMs every member of the `MARVIN_STANDUP_CHANNEL_ID` channel who hasn't posted their standup there
+  yet today (UTC), quoting the *Today:* section of their last update along with a
+  *Yesterday / Today / Blockers* template. Requires the database. See the README's "Daily standup
+  reminder" section for the Slack scopes and the Cloud Scheduler job.
 
 ## [2.4.0] — 2026-10-08
 
