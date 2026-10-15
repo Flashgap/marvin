@@ -16,6 +16,7 @@ import (
 	"github.com/Flashgap/marvin/internal/service/github"
 	mock_jira "github.com/Flashgap/marvin/internal/service/jira/mock"
 	"github.com/Flashgap/marvin/internal/service/marvin"
+	"github.com/Flashgap/marvin/internal/service/reviewload"
 	mock_slack "github.com/Flashgap/marvin/internal/service/slack/mock"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 	"github.com/Flashgap/marvin/pkg/github/githubtest"
@@ -52,7 +53,7 @@ var _ = Describe("Service tests", func() {
 		mockGithub = mock_github.NewMockClient(mockCtrl)
 		mockSlack = mock_slack.NewMockService(mockCtrl)
 		mockLinear = mock_linear.NewMockClient(mockCtrl)
-		githubService = github.NewService(mockGithub)
+		githubService = github.NewService(mockGithub, reviewload.NewService(mockGithub, marvin.StaticRepoConfigProvider{}))
 		mockJira = mock_jira.NewMockService(mockCtrl)
 	})
 
@@ -1337,7 +1338,6 @@ blabla
 				mockGithub.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Return([]pkggithub.OpenPRReviewLoad{
 					{Number: prNumber + 1, Additions: 500, Reviewers: map[string]struct{}{"bob": {}}},
 				}, nil).Times(1)
-				mockGithub.EXPECT().GetTree(gomock.Any(), gomock.Any(), gomock.Any(), true).Return(&gogithub.Tree{}, nil, nil).Times(1)
 				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), prNumber, []string{"bob"}).Return(nil, nil, nil).Times(1)
 
 				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)

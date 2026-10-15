@@ -67,6 +67,8 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		s.LockService = lockSvc
 	}
 
+	// The GitHub App's client, or the injected GithubService's
+	var githubClient pkggithub.Client = s.GithubService
 	if s.GithubService == nil {
 		itr, err := ghinstallation.NewKeyFromFile(http.DefaultTransport, cfg.GithubAppID, cfg.GithubInstallID, cfg.GithubSecretKey)
 		if err != nil {
@@ -76,11 +78,20 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 		if err != nil {
 			return fmt.Errorf("failed creating Github client: %w", err)
 		}
-		s.GithubService = github.NewService(pkggithub.NewClient(gogithubClient))
+		githubClient = pkggithub.NewClient(gogithubClient)
 	}
 
+	// One poller reads every installed repository's .marvin.yaml and .gitattributes files, MarvinService and
+	// review load only read its cache. It starts with MarvinService below: next to an injected MarvinService,
+	// its cache stays empty and review load counts every file.
+	repoConfigProvider := marvin.NewRepoConfigProvider(githubClient, cfg.Marvin)
+
 	if s.ReviewLoad == nil {
-		s.ReviewLoad = reviewload.NewService(s.GithubService)
+		s.ReviewLoad = reviewload.NewService(githubClient, repoConfigProvider)
+	}
+
+	if s.GithubService == nil {
+		s.GithubService = github.NewService(githubClient, s.ReviewLoad)
 	}
 
 	if s.JiraService == nil {
@@ -102,7 +113,6 @@ func (s *Services) initialize(ctx context.Context, cfg *Config) error {
 			return fmt.Errorf("either LINEAR_ISSUE_PREFIXES or LINEAR_PREFIX_REFRESH_INTERVAL must be set")
 		}
 
-		repoConfigProvider := marvin.NewRepoConfigProvider(s.GithubService, cfg.Marvin)
 		repoConfigProvider.Start(ctx, cfg.MarvinRepoConfigPollInterval)
 		prefixCache := github.NewPrefixCache(cfg.LinearWorkspaceSlug, cfg.LinearIssuePrefixes, linearClient.Teams)
 		prefixCache.Start(ctx, cfg.LinearPrefixRefreshInterval)

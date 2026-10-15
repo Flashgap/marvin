@@ -20,7 +20,7 @@ var _ = Describe("Services database wiring", func() {
 		mockCtrl := gomock.NewController(GinkgoT())
 		services := &marvin.Services{
 			MarvinService: mock_marvin.NewMockService(mockCtrl),
-			GithubService: github.NewService(mock_github.NewMockClient(mockCtrl)),
+			GithubService: github.NewService(mock_github.NewMockClient(mockCtrl), nil),
 			JiraService:   mock_jira.NewMockService(mockCtrl),
 		}
 		_, err := marvin.NewServer(ctx, &cfg, services)
@@ -36,7 +36,7 @@ var _ = Describe("Services database wiring", func() {
 			DB:            dbMock,
 			LockService:   mock_lock.NewMockService(mockCtrl), // skip lock service construction (Migrate call)
 			MarvinService: mock_marvin.NewMockService(mockCtrl),
-			GithubService: github.NewService(mock_github.NewMockClient(mockCtrl)),
+			GithubService: github.NewService(mock_github.NewMockClient(mockCtrl), nil),
 			JiraService:   mock_jira.NewMockService(mockCtrl),
 		}
 		_, err := marvin.NewServer(ctx, &cfg, services)

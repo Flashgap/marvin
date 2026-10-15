@@ -2,8 +2,6 @@ package reviewload
 
 import (
 	"context"
-	"fmt"
-	"path"
 
 	gogithub "github.com/google/go-github/v90/github"
 
@@ -11,73 +9,6 @@ import (
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 	"github.com/Flashgap/marvin/pkg/linguist"
 )
-
-// exclusions returns what leaves a file out of review load: being marked linguist-generated or
-// linguist-vendored by the .gitattributes files of the repository's default branch, never of a PR's head,
-// which would let a PR author shrink their own PR's score. Reading them is best effort: it returns nil,
-// counting every file as before, when they exclude nothing or can't be read, which never fails ranking.
-func (s *service) exclusions(ctx context.Context, webhook pkggithub.RepoSenderGetter) *linguist.Matcher {
-	log := middlewares.LoggerFromGHContext(ctx, "reviewload.exclusions")
-
-	files, err := s.gitattributes(ctx, webhook)
-	if err != nil {
-		log.Warnf("cannot read the %s files of %s, counting generated and vendored files: %v", linguist.FileName, webhook.GetRepo().GetFullName(), err)
-		return nil
-	}
-
-	return linguist.NewMatcher(files)
-}
-
-// gitattributes returns the content of every .gitattributes file of the repository's default branch, by
-// path. One tree call lists them, their content is only fetched for blobs not seen before.
-func (s *service) gitattributes(ctx context.Context, webhook pkggithub.RepoSenderGetter) (map[string]string, error) {
-	branch := webhook.GetRepo().GetDefaultBranch()
-	tree, _, err := s.githubClient.GetTree(ctx, webhook, branch, true)
-	if err != nil {
-		return nil, fmt.Errorf("getting the tree of %s: %w", branch, err)
-	}
-	if tree.GetTruncated() {
-		// The .gitattributes files left out could change what those listed decide
-		return nil, fmt.Errorf("the tree of %s is truncated after %d entries", branch, len(tree.GetEntries()))
-	}
-
-	files := make(map[string]string)
-	for _, entry := range tree.GetEntries() {
-		if entry.GetType() != "blob" || path.Base(entry.GetPath()) != linguist.FileName {
-			continue
-		}
-
-		content, err := s.blob(ctx, webhook, entry)
-		if err != nil {
-			return nil, fmt.Errorf("getting %s: %w", entry.GetPath(), err)
-		}
-		files[entry.GetPath()] = content
-	}
-
-	return files, nil
-}
-
-// blob returns the content of a .gitattributes file, cached by blob SHA. Parsing is left to each ranking:
-// the same blob parses differently in each directory holding it.
-func (s *service) blob(ctx context.Context, webhook pkggithub.RepoSenderGetter, entry *gogithub.TreeEntry) (string, error) {
-	s.mu.Lock()
-	content, ok := s.blobs[entry.GetSHA()]
-	s.mu.Unlock()
-	if ok {
-		return content, nil
-	}
-
-	raw, _, err := s.githubClient.GetBlobRaw(ctx, webhook, entry.GetSHA())
-	if err != nil {
-		return "", err
-	}
-
-	s.mu.Lock()
-	s.blobs[entry.GetSHA()] = string(raw)
-	s.mu.Unlock()
-
-	return string(raw), nil
-}
 
 // additions returns the lines pr adds to the files excluded doesn't exclude, or to every file when excluded
 // is nil. Failing to list the files of a PR changing more than ListOpenPRsWithReviewers lists counts all of

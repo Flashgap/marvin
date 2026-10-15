@@ -38,7 +38,7 @@ var _ = Describe("HasAIReviewed", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockClient = mock_github.NewMockClient(mockCtrl)
-		svc = svcgithub.NewService(mockClient)
+		svc = svcgithub.NewService(mockClient, nil)
 		pr = &gogithub.PullRequest{
 			Number: utils.Ptr(prNumber),
 			Head:   &gogithub.PullRequestBranch{SHA: utils.Ptr(headSHA)},

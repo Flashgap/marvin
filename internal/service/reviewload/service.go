@@ -7,7 +7,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"sync"
 
 	gogithub "github.com/google/go-github/v90/github"
 	"golang.org/x/sync/errgroup"
@@ -19,15 +18,14 @@ import (
 const maxConcurrentRepos = 8
 
 type service struct {
-	githubClient pkggithub.Client
-
-	mu    sync.Mutex
-	blobs map[string]string // Content of the .gitattributes files read so far, by blob SHA
+	githubClient  pkggithub.Client
+	gitattributes Gitattributes
 }
 
-// NewService wires the review load service on the GitHub App's client.
-func NewService(githubClient pkggithub.Client) Service {
-	return &service{githubClient: githubClient, blobs: make(map[string]string)}
+// NewService wires the review load service on the GitHub App's client, leaving out of each repository's
+// review load the files its gitattributes exclude.
+func NewService(githubClient pkggithub.Client, gitattributes Gitattributes) Service {
+	return &service{githubClient: githubClient, gitattributes: gitattributes}
 }
 
 func (s *service) RepoReviewLoad(ctx context.Context, name string) (*gogithub.Repository, []Reviewer, error) {
@@ -115,17 +113,12 @@ func (s *service) openPRs(ctx context.Context, webhook pkggithub.RepoSenderGette
 		return nil, fmt.Errorf("listing open pull requests with reviewers of %s: %w", webhook.GetRepo().GetFullName(), err)
 	}
 
-	// A PR nobody reviews counts for nobody: don't size it, which can cost API calls
-	reviewed := func(load pkggithub.OpenPRReviewLoad) bool { return len(load.Reviewers) > 0 }
-	if !slices.ContainsFunc(loads, reviewed) {
-		return nil, nil
-	}
-	excluded := s.exclusions(ctx, webhook)
-
 	repo := webhook.GetRepo()
+	excluded := s.gitattributes.Gitattributes(repo)
 	prs := make([]openPR, 0, len(loads))
 	for _, load := range loads {
-		if !reviewed(load) {
+		// A PR nobody reviews counts for nobody: don't size it, which can cost API calls
+		if len(load.Reviewers) == 0 {
 			continue
 		}
 		prs = append(prs, openPR{

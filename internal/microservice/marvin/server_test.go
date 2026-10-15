@@ -52,7 +52,7 @@ func initMarvinTest(ctx SpecContext) marvinTest {
 	marvinMock := mock_marvin.NewMockService(mockCtrl)
 	services := &marvin.Services{
 		MarvinService: marvinMock,
-		GithubService: github.NewService(mock_github.NewMockClient(mockCtrl)),
+		GithubService: github.NewService(mock_github.NewMockClient(mockCtrl), nil),
 		JiraService:   mock_jira.NewMockService(mockCtrl),
 	}
 	server, err := marvin.NewServer(ctx, &cfg, services)

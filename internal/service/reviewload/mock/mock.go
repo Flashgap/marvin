@@ -15,6 +15,7 @@ import (
 
 	reviewload "github.com/Flashgap/marvin/internal/service/reviewload"
 	github "github.com/Flashgap/marvin/pkg/github"
+	linguist "github.com/Flashgap/marvin/pkg/linguist"
 	github0 "github.com/google/go-github/v90/github"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -87,4 +88,42 @@ func (m *MockService) ReviewLoad(ctx context.Context) ([]reviewload.RepositoryRe
 func (mr *MockServiceMockRecorder) ReviewLoad(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReviewLoad", reflect.TypeOf((*MockService)(nil).ReviewLoad), ctx)
+}
+
+// MockGitattributes is a mock of Gitattributes interface.
+type MockGitattributes struct {
+	ctrl     *gomock.Controller
+	recorder *MockGitattributesMockRecorder
+	isgomock struct{}
+}
+
+// MockGitattributesMockRecorder is the mock recorder for MockGitattributes.
+type MockGitattributesMockRecorder struct {
+	mock *MockGitattributes
+}
+
+// NewMockGitattributes creates a new mock instance.
+func NewMockGitattributes(ctrl *gomock.Controller) *MockGitattributes {
+	mock := &MockGitattributes{ctrl: ctrl}
+	mock.recorder = &MockGitattributesMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockGitattributes) EXPECT() *MockGitattributesMockRecorder {
+	return m.recorder
+}
+
+// Gitattributes mocks base method.
+func (m *MockGitattributes) Gitattributes(repo *github0.Repository) *linguist.Matcher {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Gitattributes", repo)
+	ret0, _ := ret[0].(*linguist.Matcher)
+	return ret0
+}
+
+// Gitattributes indicates an expected call of Gitattributes.
+func (mr *MockGitattributesMockRecorder) Gitattributes(repo any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Gitattributes", reflect.TypeOf((*MockGitattributes)(nil).Gitattributes), repo)
 }

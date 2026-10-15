@@ -26,7 +26,7 @@ var _ = Describe("BranchRequirements", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockClient = mock_github.NewMockClient(mockCtrl)
-		svc = svcgithub.NewService(mockClient)
+		svc = svcgithub.NewService(mockClient, nil)
 		event = &gogithub.PullRequestEvent{
 			Repo: &gogithub.Repository{
 				Name:  utils.Ptr("infra"),
