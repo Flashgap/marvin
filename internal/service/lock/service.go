@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io/fs"
 	"regexp"
 	"sort"
 	"strings"
@@ -33,29 +32,16 @@ type service struct {
 	slack slacksvc.Service
 }
 
-// NewService applies pending migrations and wires the lock service. A non-nil
-// db is required; pass migrations via mfs (typically internal/migrations.FS).
-func NewService(ctx context.Context, db database.Client, slackSvc slacksvc.Service, mfs fs.FS) (Service, error) {
+// NewService wires the lock service. A non-nil db is required, with its
+// migrations already applied (see Services.initialize).
+func NewService(db database.Client, slackSvc slacksvc.Service) (Service, error) {
 	if db == nil {
 		return nil, fmt.Errorf("lock: database client is required")
 	}
 	if slackSvc == nil {
 		return nil, fmt.Errorf("lock: slack service is required")
 	}
-	if err := db.Migrate(ctx, mfs); err != nil {
-		return nil, fmt.Errorf("lock: applying migrations: %w", err)
-	}
-	return newServiceUnchecked(db, slackSvc), nil
-}
-
-// NewTestService builds a Service without running migrations. Use only from
-// tests that drive the database via sqlmock.
-func NewTestService(db database.Client, slackSvc slacksvc.Service) Service {
-	return newServiceUnchecked(db, slackSvc)
-}
-
-func newServiceUnchecked(db database.Client, slackSvc slacksvc.Service) Service {
-	return &service{db: db, slack: slackSvc}
+	return &service{db: db, slack: slackSvc}, nil
 }
 
 func (s *service) Lock(ctx context.Context, cmd slack.SlashCommand) (*slack.Msg, error) {

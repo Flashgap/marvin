@@ -10,23 +10,29 @@ import (
 	"github.com/Flashgap/marvin/internal/service/lock"
 	"github.com/Flashgap/marvin/internal/service/marvin"
 	"github.com/Flashgap/marvin/internal/service/reviewload"
+	"github.com/Flashgap/marvin/internal/service/standup"
 	"github.com/Flashgap/marvin/internal/web"
+	"github.com/Flashgap/marvin/pkg/googleid"
 )
 
 type Controller struct {
 	web.BaseController
-	configuration *Config
-	marvinService marvin.Service
-	lockService   lock.Service
-	reviewLoad    reviewload.Service
+	configuration     *Config
+	marvinService     marvin.Service
+	lockService       lock.Service
+	reviewLoad        reviewload.Service
+	standupService    standup.Service
+	taskTokenVerifier *googleid.Verifier
 }
 
-func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, reviewLoad reviewload.Service) *Controller {
+func NewController(configuration *Config, marvinService marvin.Service, lockService lock.Service, reviewLoad reviewload.Service, standupService standup.Service, taskTokenVerifier *googleid.Verifier) *Controller {
 	return &Controller{
-		configuration: configuration,
-		marvinService: marvinService,
-		lockService:   lockService,
-		reviewLoad:    reviewLoad,
+		configuration:     configuration,
+		marvinService:     marvinService,
+		lockService:       lockService,
+		reviewLoad:        reviewLoad,
+		standupService:    standupService,
+		taskTokenVerifier: taskTokenVerifier,
 	}
 }
 
@@ -39,7 +45,14 @@ func (ctrl *Controller) RouteEndpoints(router gin.IRouter) {
 	}
 }
 
-func (*Controller) RouteTasks(_ gin.IRouter) {
+func (ctrl *Controller) RouteTasks(router gin.IRouter) {
+	// Every task route requires a task token: checked on the group, so a route
+	// added below can't miss it.
+	router.Use(middlewares.ValidateTaskToken(ctrl.configuration.IsDevEnv, ctrl.taskTokenVerifier.Verify))
+
+	// Daily standup reminder, triggered by a cron (e.g. Cloud Scheduler). The
+	// handler returns 501 when no DB-backed standup service is wired in.
+	router.POST(path.Join(marvinroute.Standup, marvinroute.StandupRemind), ctrl.standupRemindHandler)
 }
 
 func (ctrl *Controller) RouteWebhooks(router gin.IRouter) {

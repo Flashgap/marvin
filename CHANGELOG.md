@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [2.5.0] — 2026-10-14
+## [2.6.0] — 2026-10-15
 
 ### Changed
 
@@ -13,6 +13,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `linguist-vendored`: a reviewer of a protobuf PR was charged every line of its generated code. The
   `.marvin.yaml` poller reads them for every installed repository, so ranking never fetches them. If a
   poll can't read them all, the last ones read still apply; if none were ever read, every file counts.
+
+## [2.5.0] — 2026-10-13
+
+### Added
+
+- **Task routes**: the `/marvin/_task/*` routes, called by a scheduler such as Cloud Scheduler, are now
+  mounted. They only accept the OIDC tokens Google signs for `MARVIN_TASKS_SERVICE_ACCOUNT` with the
+  `MARVIN_TASKS_AUDIENCE` audience. See the README's "Task routes" section.
+- **Daily standup reminder**: `POST /marvin/_task/standup/remind`, called by a cron on standup days,
+  DMs every member of the `MARVIN_STANDUP_CHANNEL_ID` channel who hasn't posted their standup there
+  yet today (UTC), quoting the *Today:* section of their last update along with a
+  *Yesterday / Today / Blockers* template. Requires the database. See the README's "Daily standup
+  reminder" section for the Slack scopes and the Cloud Scheduler job.
 
 ## [2.4.0] — 2026-10-08
 
