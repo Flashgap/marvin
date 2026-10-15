@@ -33,7 +33,7 @@ func buildLockTest(ctx SpecContext, lockSvc lock.Service) *testenv.HTTPEnv {
 	mockCtrl := gomock.NewController(GinkgoT())
 	services := &marvin.Services{
 		MarvinService: mock_marvin.NewMockService(mockCtrl),
-		GithubService: github.NewService(mock_github.NewMockClient(mockCtrl)),
+		GithubService: github.NewService(mock_github.NewMockClient(mockCtrl), nil),
 		JiraService:   mock_jira.NewMockService(mockCtrl),
 		LockService:   lockSvc,
 	}
@@ -112,7 +112,7 @@ var _ = Describe("POST /marvin/_webhook/slack/review-load", func() {
 		cfg.IsDevEnv = true // bypass Slack signing in tests
 		server, err := marvin.NewServer(ctx, &cfg, &marvin.Services{
 			MarvinService: mock_marvin.NewMockService(mockCtrl),
-			GithubService: github.NewService(mock_github.NewMockClient(mockCtrl)),
+			GithubService: github.NewService(mock_github.NewMockClient(mockCtrl), nil),
 			JiraService:   mock_jira.NewMockService(mockCtrl),
 			ReviewLoad:    mockReviewLoad,
 		})

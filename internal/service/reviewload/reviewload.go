@@ -8,6 +8,7 @@ import (
 	gogithub "github.com/google/go-github/v90/github"
 
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
+	"github.com/Flashgap/marvin/pkg/linguist"
 )
 
 // Service ranks reviewers by review load.
@@ -26,7 +27,18 @@ type Service interface {
 	Rank(ctx context.Context, webhook pkggithub.RepoSenderGetter, members []string) ([]Reviewer, error)
 }
 
-// Reviewer is a login with its review load score: the sum of the additions of the open PRs it reviews.
+// Gitattributes holds the last .gitattributes files read off each repository's default branch, never off a
+// PR's head, which would let a PR author shrink their own PR's score. Reading them is left to a poller: ranking
+// makes no call for them.
+type Gitattributes interface {
+	// Gitattributes returns the matcher of the files repo's .gitattributes files mark linguist-generated or
+	// linguist-vendored, or nil when they exclude none or none were read: every file then counts.
+	Gitattributes(repo *gogithub.Repository) *linguist.Matcher
+}
+
+// Reviewer is a login with its review load score: the sum of the lines added by the open PRs it reviews,
+// leaving out the files the .gitattributes files of the repository's default branch mark linguist-generated
+// or linguist-vendored.
 type Reviewer struct {
 	Login string
 	Score int

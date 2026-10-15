@@ -18,12 +18,14 @@ import (
 const maxConcurrentRepos = 8
 
 type service struct {
-	githubClient pkggithub.Client
+	githubClient  pkggithub.Client
+	gitattributes Gitattributes
 }
 
-// NewService wires the review load service on the GitHub App's client.
-func NewService(githubClient pkggithub.Client) Service {
-	return &service{githubClient: githubClient}
+// NewService wires the review load service on the GitHub App's client, leaving out of each repository's
+// review load the files its gitattributes exclude.
+func NewService(githubClient pkggithub.Client, gitattributes Gitattributes) Service {
+	return &service{githubClient: githubClient, gitattributes: gitattributes}
 }
 
 func (s *service) RepoReviewLoad(ctx context.Context, name string) (*gogithub.Repository, []Reviewer, error) {
@@ -100,10 +102,11 @@ func (s *service) Rank(ctx context.Context, webhook pkggithub.RepoSenderGetter, 
 // openPR is an open PR with its size and reviewers.
 type openPR struct {
 	PullRequest
-	additions int
+	additions int // Lines added, generated and vendored files left out
 	reviewers map[string]struct{}
 }
 
+// openPRs lists the open PRs someone reviews, sized without their generated and vendored files.
 func (s *service) openPRs(ctx context.Context, webhook pkggithub.RepoSenderGetter) ([]openPR, error) {
 	loads, err := s.githubClient.ListOpenPRsWithReviewers(ctx, webhook)
 	if err != nil {
@@ -111,14 +114,19 @@ func (s *service) openPRs(ctx context.Context, webhook pkggithub.RepoSenderGette
 	}
 
 	repo := webhook.GetRepo()
+	excluded := s.gitattributes.Gitattributes(repo)
 	prs := make([]openPR, 0, len(loads))
 	for _, load := range loads {
+		// A PR nobody reviews counts for nobody: don't size it, which can cost API calls
+		if len(load.Reviewers) == 0 {
+			continue
+		}
 		prs = append(prs, openPR{
 			PullRequest: PullRequest{
 				Number: load.Number,
 				URL:    fmt.Sprintf("%s/pull/%d", repo.GetHTMLURL(), load.Number),
 			},
-			additions: load.Additions,
+			additions: s.additions(ctx, webhook, load, excluded),
 			reviewers: load.Reviewers,
 		})
 	}
@@ -126,8 +134,9 @@ func (s *service) openPRs(ctx context.Context, webhook pkggithub.RepoSenderGette
 	return prs, nil
 }
 
-// rank scores reviewers by review load, lowest first, ties broken by login. With nil members, everyone
-// reviewing one of prs is ranked. Otherwise only members are, including those reviewing nothing.
+// rank scores reviewers by review load, the sum of the additions of the prs they review, lowest first, ties
+// broken by login. With nil members, everyone reviewing one of prs is ranked. Otherwise only members are,
+// including those reviewing nothing.
 func rank(prs []openPR, members []string) []Reviewer {
 	byLogin := make(map[string]*Reviewer, len(members))
 	for _, login := range members {

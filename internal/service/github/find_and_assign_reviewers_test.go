@@ -10,6 +10,8 @@ import (
 	"go.uber.org/mock/gomock"
 
 	svcgithub "github.com/Flashgap/marvin/internal/service/github"
+	"github.com/Flashgap/marvin/internal/service/reviewload"
+	mock_reviewload "github.com/Flashgap/marvin/internal/service/reviewload/mock"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 	mock_github "github.com/Flashgap/marvin/pkg/github/mock"
 	"github.com/Flashgap/marvin/pkg/utils"
@@ -43,7 +45,10 @@ var _ = Describe("FindAndAssignReviewers", func() {
 
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockClient = mock_github.NewMockClient(mockCtrl)
-		svc = svcgithub.NewService(mockClient)
+		// No .gitattributes file: review load counts every file of openPRs
+		gitattributes := mock_reviewload.NewMockGitattributes(mockCtrl)
+		gitattributes.EXPECT().Gitattributes(gomock.Any()).Return(nil).AnyTimes()
+		svc = svcgithub.NewService(mockClient, reviewload.NewService(mockClient, gitattributes))
 		pr = &gogithub.PullRequest{
 			Number: utils.Ptr(prNumber),
 			User:   &gogithub.User{Login: utils.Ptr("dave")},

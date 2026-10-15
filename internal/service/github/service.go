@@ -53,11 +53,11 @@ type service struct {
 	reviewLoad reviewload.Service
 }
 
-// NewService returns a new GitHub service
-func NewService(githubClient github.Client) Service {
+// NewService returns a new GitHub service, ranking reviewers to assign with reviewLoad
+func NewService(githubClient github.Client, reviewLoad reviewload.Service) Service {
 	return &service{
 		Client:     githubClient,
-		reviewLoad: reviewload.NewService(githubClient),
+		reviewLoad: reviewLoad,
 	}
 }
 

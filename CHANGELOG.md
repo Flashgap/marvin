@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.6.0] — 2026-10-15
+
+### Changed
+
+- Review load, which `auto_review_assign` and `/review-load` rank reviewers by, no longer counts the
+  files the `.gitattributes` files of the default branch mark `linguist-generated` or
+  `linguist-vendored`: a reviewer of a protobuf PR was charged every line of its generated code. The
+  `.marvin.yaml` poller reads them for every installed repository, so ranking never fetches them. If a
+  poll can't read them all, the last ones read still apply; if none were ever read, every file counts.
+
 ## [2.5.0] — 2026-10-13
 
 ### Added

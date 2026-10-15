@@ -47,7 +47,7 @@ var _ = Describe("ListStackLayers", func() {
 })
 
 var _ = Describe("ListOpenPRsWithReviewers", func() {
-	It("only asks for reviews with a verdict and merges them with pending requests", func(ctx context.Context) {
+	It("only asks for reviews with a verdict, merges them with pending requests and sizes each file", func(ctx context.Context) {
 		var body string
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			b, _ := io.ReadAll(r.Body)
@@ -55,8 +55,14 @@ var _ = Describe("ListOpenPRsWithReviewers", func() {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"data":{"repository":{"pullRequests":{"nodes":[
 				{"number":286,"additions":120,
+					"files":{"nodes":[{"path":"go/api.go","additions":20},{"path":"go/api.pb.go","additions":100}],
+						"pageInfo":{"hasNextPage":false}},
 					"reviews":{"nodes":[{"author":{"login":"Dal-Papa"}},{"author":{"login":"Dal-Papa"}}]},
-					"reviewRequests":{"nodes":[{"requestedReviewer":{"login":"clem"}},{"requestedReviewer":{}}]}}
+					"reviewRequests":{"nodes":[{"requestedReviewer":{"login":"clem"}},{"requestedReviewer":{}}]}},
+				{"number":290,"additions":5000,
+					"files":{"nodes":[{"path":"go/user.pb.go","additions":40}],"pageInfo":{"hasNextPage":true}},
+					"reviews":{"nodes":[]},"reviewRequests":{"nodes":[]}},
+				{"number":291,"additions":30,"files":null,"reviews":{"nodes":[]},"reviewRequests":{"nodes":[]}}
 			]}}}}`))
 		}))
 		DeferCleanup(server.Close)
@@ -72,7 +78,18 @@ var _ = Describe("ListOpenPRsWithReviewers", func() {
 		// COMMENTED reviews are filtered by GitHub: the author replying in a thread, or a drive-by comment
 		Expect(body).To(ContainSubstring("reviews(first: 100, states: [APPROVED, CHANGES_REQUESTED, DISMISSED])"))
 		Expect(prs).To(Equal([]OpenPRReviewLoad{
-			{Number: 286, Additions: 120, Reviewers: map[string]struct{}{"Dal-Papa": {}, "clem": {}}},
+			{
+				Number: 286, Additions: 120,
+				Files:     []FileAdditions{{Path: "go/api.go", Additions: 20}, {Path: "go/api.pb.go", Additions: 100}},
+				Reviewers: map[string]struct{}{"Dal-Papa": {}, "clem": {}},
+			},
+			{
+				Number: 290, Additions: 5000,
+				Files:     []FileAdditions{{Path: "go/user.pb.go", Additions: 40}},
+				MoreFiles: true,
+				Reviewers: map[string]struct{}{},
+			},
+			{Number: 291, Additions: 30, MoreFiles: true, Reviewers: map[string]struct{}{}},
 		}))
 	})
 })

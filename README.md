@@ -201,7 +201,7 @@ features are on, who reviews what — live in each repo's own `.marvin.yaml` ins
 | `MARVIN_GITHUB_TO_SLACK` | Comma-separated `github-handle:slack-user-id` for Slack DMs | `octocat:U012345678` |
 | `MARVIN_AI_REVIEWER_LOGINS` | Comma-separated extra AI-reviewer bot logins recognized by `require_ai_review` and `auto_changes_required`, in addition to the built-in `coderabbitai[bot]`/`graphite-app[bot]`/`copilot-pull-request-reviewer[bot]` (exact, case-insensitive match). Repos can add their own via `.marvin.yaml`'s `ai_review.reviewer_logins`. | `my-custom-ai-bot[bot]` |
 | `MARVIN_AI_REVIEW_STATUS_CONTEXTS` | Comma-separated extra commit-status contexts accepted by `require_ai_review` as a completed AI review when no formal review is found, in addition to the built-in `CodeRabbit` (exact, case-insensitive match on the current HEAD). Repos can add their own via `.marvin.yaml`'s `ai_review.status_contexts`. | `MyAIReviewer` |
-| `MARVIN_REPO_CONFIG_POLL_INTERVAL` | How often Marvin re-polls every installed repository's `.marvin.yaml` in the background. Webhook handling always reads from this cache and never fetches `.marvin.yaml` itself. | `5m` (default) |
+| `MARVIN_REPO_CONFIG_POLL_INTERVAL` | How often Marvin re-polls every installed repository's `.marvin.yaml` and `.gitattributes` files in the background. Webhook handling always reads from this cache and never fetches them itself. | `5m` (default) |
 
 ### Linear (required for Linear features)
 
@@ -466,7 +466,9 @@ the GitHub App is installed on (every `MARVIN_REPO_CONFIG_POLL_INTERVAL`, defaul
 webhook handling only ever reads from that cache. Changes to `.marvin.yaml` take effect once
 merged to the default branch, subject to that poll interval. If a repository's `.marvin.yaml`
 becomes invalid or fails to load, Marvin keeps using the last known-good configuration and
-comments on the pull request explaining why.
+comments on the pull request explaining why. The same poller reads the default branch's
+`.gitattributes` files of every installed repository, with or without a `.marvin.yaml`, for
+[review load](#auto_review_assign).
 
 ```yaml
 # .marvin.yaml, at the root of the repository
@@ -560,8 +562,14 @@ union of every matched team, falling back to `reviewers.default_team` when nothi
 is what lets a single monorepo route reviews to different teams per subtree (e.g. `go/**` →
 `backend-team`, `py/**` → `data-team`).
 
-Within the resolved team pool, the algorithm assigns people with the smallest current review load
-(load = total additions across open PRs assigned to them).
+Within the resolved team pool, the algorithm assigns people with the smallest current review load:
+the lines added by the open PRs they review, leaving out generated and vendored code: the files the
+`.gitattributes` files of the default branch mark `linguist-generated` or `linguist-vendored`. They
+are never read off a PR's head ref, so a PR can't shrink its own load. The background poller reading
+`.marvin.yaml` reads them too, so a change takes effect after its next poll. As in git, a line that
+can't be parsed (e.g. a macro outside the root `.gitattributes`) is skipped and the others
+still apply. If a poll can't read them all, including when GitHub truncates the listing of a very
+large tree, Marvin keeps the last ones read; if none were ever read, every file counts.
 The number of reviewers to assign is derived from the branch's required approving review count —
 Marvin supports both classic branch protection rules and repository rulesets.
 

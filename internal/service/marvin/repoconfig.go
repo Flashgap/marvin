@@ -14,6 +14,7 @@ import (
 
 	"github.com/Flashgap/marvin/internal/config"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
+	"github.com/Flashgap/marvin/pkg/linguist"
 )
 
 // RepoConfigFileName is the name of the per-repository Marvin configuration file, committed at
@@ -50,6 +51,7 @@ type aiReviewConfig struct {
 // RepoConfigProvider resolves a repository's Marvin configuration from the .marvin.yaml file
 // committed on that repository's default branch, so that repo owners can self-serve their own
 // Marvin settings (including which team reviews which subtree) via a normal PR to their own repo.
+// It polls the .gitattributes files of that branch too, which review load reads.
 type RepoConfigProvider interface {
 	// Get returns the last-polled configuration for the repository targeted by webhook, or nil if
 	// the repository has no .marvin.yaml. A nil configuration means Marvin is disabled for that
@@ -65,6 +67,12 @@ type RepoConfigProvider interface {
 	// transient GitHub outage. If no known-good configuration exists yet, Get returns a nil
 	// configuration alongside the warning.
 	Get(webhook pkggithub.RepoSenderGetter) (*GitHubRepositoryConfiguration, *ConfigWarning)
+
+	// Gitattributes returns the matcher of the files the last-polled .gitattributes files of repo mark
+	// linguist-generated or linguist-vendored, polled for every installed repository, with a .marvin.yaml
+	// or not. Like Get, it only reads the cache. If the last poll couldn't read them, it returns the last
+	// matcher read; nil when they exclude none or none were ever read.
+	Gitattributes(repo *gogithub.Repository) *linguist.Matcher
 
 	// Start performs an initial poll of every repository accessible to the GitHub App installation,
 	// populating the cache Get reads from, then repeats the poll every interval until ctx is
@@ -94,6 +102,9 @@ func (p StaticRepoConfigProvider) Get(webhook pkggithub.RepoSenderGetter) (*GitH
 	return p[webhook.GetRepo().GetName()], nil
 }
 
+// Gitattributes returns nil: every file counts in review load.
+func (p StaticRepoConfigProvider) Gitattributes(_ *gogithub.Repository) *linguist.Matcher { return nil }
+
 func (p StaticRepoConfigProvider) Start(_ context.Context, _ time.Duration) {}
 
 type repoConfigCacheEntry struct {
@@ -105,17 +116,22 @@ type repoConfigProvider struct {
 	githubClient pkggithub.Client
 	orgConfig    config.Marvin
 
-	mu    sync.RWMutex
-	cache map[string]repoConfigCacheEntry
+	mu            sync.RWMutex
+	cache         map[string]repoConfigCacheEntry
+	gitattributes map[string]*linguist.Matcher // By repository full name, the last read
+
+	blobs map[string]string // Content of the .gitattributes files downloaded so far, by blob SHA. Only poll uses it
 }
 
 // NewRepoConfigProvider builds a RepoConfigProvider backed by the given GitHub client. Call Start
 // to begin polling; until then, Get returns a nil configuration for every repository.
 func NewRepoConfigProvider(githubClient pkggithub.Client, orgConfig config.Marvin) RepoConfigProvider {
 	return &repoConfigProvider{
-		githubClient: githubClient,
-		orgConfig:    orgConfig,
-		cache:        make(map[string]repoConfigCacheEntry),
+		githubClient:  githubClient,
+		orgConfig:     orgConfig,
+		cache:         make(map[string]repoConfigCacheEntry),
+		gitattributes: make(map[string]*linguist.Matcher),
+		blobs:         make(map[string]string),
 	}
 }
 
@@ -150,8 +166,9 @@ func (p *repoConfigProvider) Start(ctx context.Context, interval time.Duration) 
 }
 
 // poll refreshes every repository accessible to the GitHub App installation. A repository whose
-// refresh fails keeps its last known-good cached configuration (see pollRepo); a failure to even
-// list the installed repositories leaves the whole cache untouched until the next tick.
+// refresh fails keeps its last known-good cached configuration (see pollRepo) and .gitattributes
+// matcher (see pollGitattributes), each failing on its own; a failure to even list the installed
+// repositories leaves the whole cache untouched until the next tick.
 func (p *repoConfigProvider) poll(ctx context.Context) {
 	repos, err := p.listInstalledRepos(ctx)
 	if err != nil {
@@ -161,6 +178,7 @@ func (p *repoConfigProvider) poll(ctx context.Context) {
 
 	for _, repo := range repos {
 		p.pollRepo(ctx, repo)
+		p.pollGitattributes(ctx, repo)
 	}
 
 	logrus.Infof("repo config poll: refreshed %d repositories", len(repos))

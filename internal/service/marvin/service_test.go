@@ -16,6 +16,7 @@ import (
 	"github.com/Flashgap/marvin/internal/service/github"
 	mock_jira "github.com/Flashgap/marvin/internal/service/jira/mock"
 	"github.com/Flashgap/marvin/internal/service/marvin"
+	"github.com/Flashgap/marvin/internal/service/reviewload"
 	mock_slack "github.com/Flashgap/marvin/internal/service/slack/mock"
 	pkggithub "github.com/Flashgap/marvin/pkg/github"
 	"github.com/Flashgap/marvin/pkg/github/githubtest"
@@ -52,7 +53,7 @@ var _ = Describe("Service tests", func() {
 		mockGithub = mock_github.NewMockClient(mockCtrl)
 		mockSlack = mock_slack.NewMockService(mockCtrl)
 		mockLinear = mock_linear.NewMockClient(mockCtrl)
-		githubService = github.NewService(mockGithub)
+		githubService = github.NewService(mockGithub, reviewload.NewService(mockGithub, marvin.StaticRepoConfigProvider{}))
 		mockJira = mock_jira.NewMockService(mockCtrl)
 	})
 

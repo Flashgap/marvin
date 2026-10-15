@@ -28,6 +28,8 @@ var _ = Describe("Config migration", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockGithub = mock_github.NewMockClient(mockCtrl)
+		// No .gitattributes file: their polling is specified in gitattributes_test.go
+		mockGithub.EXPECT().GetTree(gomock.Any(), gomock.Any(), gomock.Any(), true).Return(&gogithub.Tree{}, &gogithub.Response{}, nil).AnyTimes()
 
 		repo = &gogithub.Repository{
 			Name:          new(repoName),
