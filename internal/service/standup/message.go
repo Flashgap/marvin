@@ -84,7 +84,7 @@ func formatReminder(channelID, lastTS, lastText string) string {
 		// when it is; the fallback is UTC:
 		// https://docs.slack.dev/messaging/formatting-message-text#date-formatting
 		postedAt := pkgslack.ParseTS(lastTS)
-		fmt.Fprintf(&b, " _Yesterday_ is what you planned <!date^%d^{date_long_pretty}|%s>.", postedAt.Unix(), postedAt.Format("Mon, 02 Jan 2006"))
+		fmt.Fprintf(&b, " _Yesterday_ comes from your last standup (<!date^%d^{date_short_pretty}|%s>).", postedAt.Unix(), postedAt.Format("Mon, 02 Jan 2006"))
 		yesterday = capQuote(quotableText(lastText))
 	}
 	fmt.Fprintf(&b, "\n\n*Yesterday:*\n%s\n*Today:*\n- todo", yesterday)
