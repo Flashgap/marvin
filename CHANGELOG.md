@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.7.0] — 2026-10-20
+
+### Changed
+
+- **Daily standup reminder**: the DM now ends with a draft ready to copy and post. *Yesterday* is
+  filled with the *Today* section of the member's last update, instead of quoting it above the
+  template, and *Today* is an empty bullet to complete. The *Blockers* line is gone.
+
 ## [2.6.0] — 2026-10-15
 
 ### Changed
