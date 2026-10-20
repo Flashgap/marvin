@@ -379,13 +379,14 @@ On a `401`, Marvin's log says which check failed.
 A standup bot (Geekbot replacement): on standup days, a cron calls Marvin, which DMs every member of
 the standup channel who hasn't posted their standup there yet today. The DM ends with a draft to
 copy, complete and post in the channel: *Yesterday* is already filled with the *Today* section of
-their last update (the header can be bold, with or without a colon), *Today* is an empty bullet:
+their last update (the header can be bold, with or without a colon), *Today* is a `- todo` line to
+replace:
 
 ```
 *Yesterday:*
-• what they planned in their last update
+- what they planned in their last update
 *Today:*
-•
+- todo
 ```
 
 - A day is a UTC day: any top-level message posted in the channel since 00:00 UTC counts as today's

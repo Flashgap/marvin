@@ -72,13 +72,13 @@ func quotableText(text string) string {
 }
 
 // formatReminder builds the reminder DM, which ends with a draft to copy and
-// post: Yesterday holds the Today section of the stored last update, Today an
-// empty bullet. lastTS and lastText are that update; an empty lastTS means
-// there is none, and Yesterday is an empty bullet too.
+// post: Yesterday holds the Today section of the stored last update, Today a
+// "- todo" line to replace. lastTS and lastText are that update; an empty
+// lastTS means there is none, and Yesterday is a "- todo" line too.
 func formatReminder(channelID, lastTS, lastText string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, ":wave: Time for your standup in <#%s>! Copy this, add your day, and post it.", channelID)
-	yesterday := "• "
+	yesterday := "- todo"
 	if lastTS != "" {
 		// Slack renders the date token in the reader's timezone, as "yesterday"
 		// when it is; the fallback is UTC:
@@ -87,7 +87,7 @@ func formatReminder(channelID, lastTS, lastText string) string {
 		fmt.Fprintf(&b, " _Yesterday_ is what you planned <!date^%d^{date_long_pretty}|%s>.", postedAt.Unix(), postedAt.Format("Mon, 02 Jan 2006"))
 		yesterday = capQuote(quotableText(lastText))
 	}
-	fmt.Fprintf(&b, "\n\n*Yesterday:*\n%s\n*Today:*\n• ", yesterday)
+	fmt.Fprintf(&b, "\n\n*Yesterday:*\n%s\n*Today:*\n- todo", yesterday)
 	return b.String()
 }
 

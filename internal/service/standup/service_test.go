@@ -149,7 +149,7 @@ var _ = Describe("Remind", func() {
 		Expect(report).To(Equal(&standup.Report{Members: 1, Reminded: 1}))
 		Expect(*dm).To(Equal(fmt.Sprintf(":wave: Time for your standup in <#C1>! Copy this, add your day, and post it. "+
 			"_Yesterday_ is what you planned <!date^%d^{date_long_pretty}|Tue, 06 Oct 2026>.\n\n"+
-			"*Yesterday:*\ndid the thing\n*Today:*\n• ", yesterday.Unix())))
+			"*Yesterday:*\ndid the thing\n*Today:*\n- todo", yesterday.Unix())))
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 
@@ -179,7 +179,7 @@ var _ = Describe("Remind", func() {
 		report, err := svc.Remind(ctx)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(report.Reminded).To(Equal(1))
-		Expect(*dm).To(Equal(":wave: Time for your standup in <#C1>! Copy this, add your day, and post it.\n\n*Yesterday:*\n• \n*Today:*\n• "))
+		Expect(*dm).To(Equal(":wave: Time for your standup in <#C1>! Copy this, add your day, and post it.\n\n*Yesterday:*\n- todo\n*Today:*\n- todo"))
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 

@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **Daily standup reminder**: the DM now ends with a draft ready to copy and post. *Yesterday* is
   filled with the *Today* section of the member's last update, instead of quoting it above the
-  template, and *Today* is an empty bullet to complete. The *Blockers* line is gone.
+  template, and *Today* is a `- todo` line to replace. The *Blockers* line is gone.
 
 ## [2.6.0] — 2026-10-15
 
