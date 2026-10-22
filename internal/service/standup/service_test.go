@@ -134,7 +134,7 @@ var _ = Describe("Remind", func() {
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 
-	It("stores yesterday's post, DMs a quote of it and marks the member reminded", func(ctx SpecContext) {
+	It("stores yesterday's post, DMs a draft carrying it over and marks the member reminded", func(ctx SpecContext) {
 		svc, mock, mslack := newStandupService(GinkgoT())
 		expectChannel(mslack, []string{"U1"}, post("U1", yesterday, standupText))
 		expectStates(mock)
@@ -147,11 +147,13 @@ var _ = Describe("Remind", func() {
 		report, err := svc.Remind(ctx)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(report).To(Equal(&standup.Report{Members: 1, Reminded: 1}))
-		Expect(*dm).To(ContainSubstring(fmt.Sprintf("On <!date^%d^{date_long}|Tue, 06 Oct 2026> you said:\n> did the thing\n", yesterday.Unix())))
+		Expect(*dm).To(Equal(fmt.Sprintf(":wave: Time for your standup in <#C1>! Copy this, add your day, and post it. "+
+			"_Yesterday_ comes from your last standup (<!date^%d^{date_short_pretty}|Tue, 06 Oct 2026>).\n\n"+
+			"*Yesterday:*\ndid the thing\n*Today:*\n- todo", yesterday.Unix())))
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 
-	It("quotes the stored update when the member hasn't posted in the window", func(ctx SpecContext) {
+	It("carries over the stored update when the member hasn't posted in the window", func(ctx SpecContext) {
 		svc, mock, mslack := newStandupService(GinkgoT())
 		expectChannel(mslack, []string{"U1"})
 		expectStates(mock, []driver.Value{"U1", ts(lastWeek), "Today: old news", 0})
@@ -162,11 +164,11 @@ var _ = Describe("Remind", func() {
 		report, err := svc.Remind(ctx)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(report.Reminded).To(Equal(1))
-		Expect(*dm).To(ContainSubstring("|Wed, 30 Sep 2026> you said:\n> old news\n"))
+		Expect(*dm).To(ContainSubstring("|Wed, 30 Sep 2026>).\n\n*Yesterday:*\nold news\n"))
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 
-	It("sends only the template to a brand-new member", func(ctx SpecContext) {
+	It("sends an empty draft to a brand-new member", func(ctx SpecContext) {
 		svc, mock, mslack := newStandupService(GinkgoT())
 		expectChannel(mslack, []string{"U1"})
 		expectStates(mock)
@@ -177,8 +179,7 @@ var _ = Describe("Remind", func() {
 		report, err := svc.Remind(ctx)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(report.Reminded).To(Equal(1))
-		Expect(*dm).ToNot(ContainSubstring("you said"))
-		Expect(*dm).To(ContainSubstring("Yesterday: …\nToday: …\nBlockers: …"))
+		Expect(*dm).To(Equal(":wave: Time for your standup in <#C1>! Copy this, add your day, and post it.\n\n*Yesterday:*\n- todo\n*Today:*\n- todo"))
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 
@@ -211,7 +212,7 @@ var _ = Describe("Remind", func() {
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 
-	It("reminds again the day after a late answer, quoting it", func(ctx SpecContext) {
+	It("reminds again the day after a late answer, carrying it over", func(ctx SpecContext) {
 		// Reminded yesterday at 09:00, answered at 10:00: today's run must not
 		// mistake that answer for today's standup.
 		svc, mock, mslack := newStandupService(GinkgoT())
@@ -225,7 +226,7 @@ var _ = Describe("Remind", func() {
 		report, err := svc.Remind(ctx)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(report.Reminded).To(Equal(1))
-		Expect(*dm).To(ContainSubstring("> late answer\n"))
+		Expect(*dm).To(ContainSubstring("*Yesterday:*\nlate answer\n"))
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 
@@ -242,7 +243,7 @@ var _ = Describe("Remind", func() {
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 
-	It("stores an edited update and quotes the new text", func(ctx SpecContext) {
+	It("stores an edited update and carries over the new text", func(ctx SpecContext) {
 		svc, mock, mslack := newStandupService(GinkgoT())
 		expectChannel(mslack, []string{"U1"}, post("U1", yesterday, "Today: edited"))
 		expectStates(mock, []driver.Value{"U1", ts(yesterday), "Today: original", 0})
@@ -253,7 +254,7 @@ var _ = Describe("Remind", func() {
 
 		_, err := svc.Remind(ctx)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(*dm).To(ContainSubstring("> edited\n"))
+		Expect(*dm).To(ContainSubstring("*Yesterday:*\nedited\n"))
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 
@@ -269,7 +270,7 @@ var _ = Describe("Remind", func() {
 		report, err := svc.Remind(ctx)
 		Expect(err).To(MatchError(ContainSubstring("db hiccup")))
 		Expect(report.Reminded).To(Equal(1))
-		Expect(*dm).To(ContainSubstring("> did the thing\n"))
+		Expect(*dm).To(ContainSubstring("*Yesterday:*\ndid the thing\n"))
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 
@@ -300,7 +301,7 @@ var _ = Describe("Remind", func() {
 		Expect(mock.ExpectationsWereMet()).To(Succeed())
 	})
 
-	It("quotes the member's newest post, file shares included, skipping other messages", func(ctx SpecContext) {
+	It("carries over the member's newest post, file shares included, skipping other messages", func(ctx SpecContext) {
 		later := yesterday.Add(time.Hour)
 		dm := remindDM(ctx,
 			slacksvc.Message{UserID: "U1", TS: ts(later), PostedAt: later, Text: "has joined the channel", SubType: "channel_join"},
@@ -311,24 +312,24 @@ var _ = Describe("Remind", func() {
 			slacksvc.Message{UserID: "U1", TS: ts(yesterday), PostedAt: yesterday, Text: "Today: the real one", SubType: "file_share"},
 			post("U1", lastWeek, "Today: older"),
 		)
-		Expect(dm).To(ContainSubstring("you said:\n> the real one\n\nCopy"))
+		Expect(dm).To(ContainSubstring("*Yesterday:*\nthe real one\n*Today:*"))
 	})
 
-	DescribeTable("quotes the Today section, one quote mark per line",
-		func(ctx SpecContext, text, quote string) {
-			Expect(remindDM(ctx, post("U1", yesterday, text))).To(ContainSubstring("you said:\n" + quote + "\nCopy"))
+	DescribeTable("carries the Today section over as Yesterday",
+		func(ctx SpecContext, text, section string) {
+			Expect(remindDM(ctx, post("U1", yesterday, text))).To(ContainSubstring("*Yesterday:*\n" + section + "\n*Today:*"))
 		},
-		Entry("plain headers", "Yesterday: a\nToday: b\nBlockers: c", "> b\n"),
-		Entry("bold headers", "*Yesterday:* a\n*Today:* b\n*Blockers:* c", "> b\n"),
-		Entry("quoted headers, as Slack escapes them", "&gt; Yesterday: a\n&gt; Today: b\n&gt; Blockers: c", "> b\n"),
-		Entry("bold headers without colons, over bulleted lists", "*Yesterday*\n• a\n*Today*\n• b1\n• b2", "> • b1\n> • b2\n"),
-		Entry("prose starting with Today, not a header", "Today I shipped the thing", "> Today I shipped the thing\n"),
-		Entry("multi-line section", "Today:\n- b1\n\n- b2\nBlockers: none", "> - b1\n> \n> - b2\n"),
-		Entry("no header", "  shipped the thing  \n", "> shipped the thing\n"),
+		Entry("plain headers", "Yesterday: a\nToday: b\nBlockers: c", "b"),
+		Entry("bold headers", "*Yesterday:* a\n*Today:* b\n*Blockers:* c", "b"),
+		Entry("quoted headers, as Slack escapes them", "&gt; Yesterday: a\n&gt; Today: b\n&gt; Blockers: c", "b"),
+		Entry("bold headers without colons, over bulleted lists", "*Yesterday*\n• a\n*Today*\n• b1\n• b2", "• b1\n• b2"),
+		Entry("prose starting with Today, not a header", "Today I shipped the thing", "Today I shipped the thing"),
+		Entry("multi-line section", "Today:\n- b1\n\n- b2\nBlockers: none", "- b1\n\n- b2"),
+		Entry("no header", "  shipped the thing  \n", "shipped the thing"),
 	)
 
 	It("cuts a long update at the last newline before the cap", func(ctx SpecContext) {
 		text := strings.Repeat("a", 2000) + "\n" + strings.Repeat("b", 2000)
-		Expect(remindDM(ctx, post("U1", yesterday, text))).To(ContainSubstring("> " + strings.Repeat("a", 2000) + "…\n\nCopy"))
+		Expect(remindDM(ctx, post("U1", yesterday, text))).To(ContainSubstring("*Yesterday:*\n" + strings.Repeat("a", 2000) + "…\n*Today:*"))
 	})
 })

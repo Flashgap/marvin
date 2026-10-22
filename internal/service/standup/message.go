@@ -9,8 +9,8 @@ import (
 	pkgslack "github.com/Flashgap/marvin/pkg/slack"
 )
 
-// maxQuoteRunes caps the quoted update so a long message can't push the
-// template past Slack's recommended 4,000-character message length:
+// maxQuoteRunes caps the carried-over update so a long message can't push the
+// draft past Slack's recommended 4,000-character message length:
 // https://docs.slack.dev/reference/methods/chat.postMessage
 const maxQuoteRunes = 3000
 
@@ -71,21 +71,23 @@ func quotableText(text string) string {
 	return strings.TrimSpace(text)
 }
 
-// formatReminder builds the reminder DM. lastTS and lastText are the stored
-// last update; an empty lastTS means there is none to quote.
+// formatReminder builds the reminder DM, which ends with a draft to copy and
+// post: Yesterday holds the Today section of the stored last update, Today a
+// "- todo" line to replace. lastTS and lastText are that update; an empty
+// lastTS means there is none, and Yesterday is a "- todo" line too.
 func formatReminder(channelID, lastTS, lastText string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, ":wave: Time for your standup in <#%s>!\n", channelID)
+	fmt.Fprintf(&b, ":wave: Time for your standup in <#%s>! Copy this, add your day, and post it.", channelID)
+	yesterday := "- todo"
 	if lastTS != "" {
-		// Slack renders the date token in the reader's timezone; the fallback is UTC:
+		// Slack renders the date token in the reader's timezone, as "yesterday"
+		// when it is; the fallback is UTC:
 		// https://docs.slack.dev/messaging/formatting-message-text#date-formatting
 		postedAt := pkgslack.ParseTS(lastTS)
-		fmt.Fprintf(&b, "On <!date^%d^{date_long}|%s> you said:\n", postedAt.Unix(), postedAt.Format("Mon, 02 Jan 2006"))
-		for line := range strings.SplitSeq(capQuote(quotableText(lastText)), "\n") {
-			b.WriteString("> " + line + "\n")
-		}
+		fmt.Fprintf(&b, " _Yesterday_ comes from your last standup (<!date^%d^{date_short_pretty}|%s>).", postedAt.Unix(), postedAt.Format("Mon, 02 Jan 2006"))
+		yesterday = capQuote(quotableText(lastText))
 	}
-	fmt.Fprintf(&b, "\nCopy, fill in and post in <#%s>:\nYesterday: …\nToday: …\nBlockers: …", channelID)
+	fmt.Fprintf(&b, "\n\n*Yesterday:*\n%s\n*Today:*\n- todo", yesterday)
 	return b.String()
 }
 

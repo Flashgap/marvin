@@ -377,20 +377,22 @@ On a `401`, Marvin's log says which check failed.
 ### Daily standup reminder (optional)
 
 A standup bot (Geekbot replacement): on standup days, a cron calls Marvin, which DMs every member of
-the standup channel who hasn't posted their standup there yet today. The DM quotes the *Today*
-section of their last update (the header can be bold, with or without a colon) and gives them a
-template to copy, fill in and post in the channel:
+the standup channel who hasn't posted their standup there yet today. The DM ends with a draft to
+copy, complete and post in the channel: *Yesterday* is already filled with the *Today* section of
+their last update (the header can be bold, with or without a colon), *Today* is a `- todo` line to
+replace:
 
 ```
-Yesterday: …
-Today: …
-Blockers: …
+*Yesterday:*
+- what they planned in their last update
+*Today:*
+- todo
 ```
 
 - A day is a UTC day: any top-level message posted in the channel since 00:00 UTC counts as today's
   standup. Thread replies, bot posts and channel events (joins, topic changes…) don't count.
-- Each member's latest post from the last 14 days is stored as their last update and quoted in their
-  next reminder. Members who haven't posted in that window keep the update stored before.
+- Each member's latest post from the last 14 days is stored as their last update and carried over
+  in their next reminder. Members who haven't posted in that window keep the update stored before.
 - A member is reminded at most once per UTC day, so a retry only DMs the people a previous run missed.
 - Bots and deactivated users are skipped, as is anyone Marvin can never look up or DM (e.g. `user_not_visible`).
 
