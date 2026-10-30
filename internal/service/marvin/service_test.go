@@ -1858,4 +1858,156 @@ blabla
 			})
 		})
 	})
+
+	Context("Extra careful", func() {
+		prNumber := 800
+		extraCareful := &gogithub.Label{Name: github.LabelExtraCareful}
+		readyForReview := &gogithub.Label{Name: github.LabelReadyForReview}
+		protection := &gogithub.Protection{
+			RequiredPullRequestReviews: &gogithub.PullRequestReviewsEnforcement{
+				RequiredApprovingReviewCount: 1,
+			},
+		}
+
+		approvals := func(logins ...string) []*gogithub.PullRequestReview {
+			reviews := make([]*gogithub.PullRequestReview, 0, len(logins))
+			for _, login := range logins {
+				reviews = append(reviews, &gogithub.PullRequestReview{
+					User:  &gogithub.User{Login: utils.Ptr(login)},
+					State: utils.Ptr(pkggithub.PullRequestReviewStateApproved),
+				})
+			}
+			return reviews
+		}
+
+		When("a PR labelled Extra careful gets approved", func() {
+			cfgs := marvin.StaticRepoConfigProvider{
+				repoName: &marvin.GitHubRepositoryConfiguration{AutoApprove: true},
+			}
+
+			reviewEvent := &gogithub.PullRequestReviewEvent{
+				Action: utils.Ptr(pkggithub.EventPullRequestReviewActionSubmitted),
+				Repo:   &gogithub.Repository{Name: utils.Ptr(repoName)},
+				Review: &gogithub.PullRequestReview{State: utils.Ptr(pkggithub.PullRequestReviewStateApproved)},
+				PullRequest: &gogithub.PullRequest{
+					Number: utils.Ptr(prNumber),
+					Base:   &gogithub.PullRequestBranch{Ref: utils.Ptr("main")},
+					Labels: []*gogithub.Label{readyForReview, extraCareful},
+				},
+			}
+
+			BeforeEach(func() {
+				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), reviewEvent, "main").Return(protection, nil, nil)
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+			})
+
+			It("does not approve it with only the approvals the branch requires", func(ctx SpecContext) {
+				mockGithub.EXPECT().ListReviews(gomock.Any(), reviewEvent, prNumber, gomock.Any()).Return(approvals("alice"), nil, nil)
+
+				Expect(svc.OnPullRequestReview(ctx, reviewEvent)).To(Succeed())
+			})
+
+			It("approves it with one more approval than the branch requires", func(ctx SpecContext) {
+				mockGithub.EXPECT().ListReviews(gomock.Any(), reviewEvent, prNumber, gomock.Any()).Return(approvals("alice", "bob"), nil, nil)
+				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{
+					{Name: github.LabelApproved},
+					{Name: github.LabelReadyForReview},
+					{Name: github.LabelChangesRequired},
+				}, nil, nil).Times(3)
+				mockGithub.EXPECT().AddPRLabels(gomock.Any(), reviewEvent, prNumber, []string{github.LabelApproved}).Return(nil, nil, nil)
+				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), reviewEvent, prNumber, github.LabelReadyForReview).Return(nil, nil)
+				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), reviewEvent, prNumber, github.LabelChangesRequired).Return(nil, nil)
+
+				Expect(svc.OnPullRequestReview(ctx, reviewEvent)).To(Succeed())
+			})
+		})
+
+		When("the Extra careful label is added", func() {
+			cfgs := marvin.StaticRepoConfigProvider{
+				repoName: &marvin.GitHubRepositoryConfiguration{AutoReviewAssign: true, DefaultTeam: "my-team"},
+			}
+
+			labeledEvent := func(labels ...*gogithub.Label) *gogithub.PullRequestEvent {
+				return &gogithub.PullRequestEvent{
+					Action: utils.Ptr(pkggithub.EventPullRequestActionLabeled),
+					Repo:   &gogithub.Repository{Name: utils.Ptr(repoName)},
+					Sender: &gogithub.User{Login: utils.Ptr("mx-test")},
+					Label:  extraCareful,
+					PullRequest: &gogithub.PullRequest{
+						State:  utils.Ptr("open"),
+						Number: utils.Ptr(prNumber),
+						User:   &gogithub.User{Login: utils.Ptr("dave")},
+						Labels: labels,
+					},
+				}
+			}
+
+			BeforeEach(func() {
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+			})
+
+			It("requests the extra reviewer on a PR already ready for review", func(ctx SpecContext) {
+				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), gomock.Any(), gomock.Any()).Return(protection, nil, nil)
+				mockGithub.EXPECT().ListReviews(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(nil, nil, nil)
+				mockGithub.EXPECT().ListReviewers(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(&gogithub.Reviewers{
+					Users: []*gogithub.User{{Login: utils.Ptr("alice")}},
+				}, nil, nil)
+				mockGithub.EXPECT().ListTeamMembers(gomock.Any(), gomock.Any(), "my-team", gomock.Any()).Return([]*gogithub.User{
+					{Login: utils.Ptr("alice")}, {Login: utils.Ptr("bob")},
+				}, nil, nil)
+				mockGithub.EXPECT().ListOpenPRsWithReviewers(gomock.Any(), gomock.Any()).Return(nil, nil)
+				mockGithub.EXPECT().RequestReviewers(gomock.Any(), gomock.Any(), prNumber, []string{"bob"}).Return(nil, nil, nil)
+
+				Expect(svc.OnPullRequest(ctx, labeledEvent(readyForReview, extraCareful))).To(Succeed())
+			})
+
+			It("waits for the PR to be ready for review", func(ctx SpecContext) {
+				// No mocks expected: reviewers are assigned once Ready for review is added
+				Expect(svc.OnPullRequest(ctx, labeledEvent(extraCareful))).To(Succeed())
+			})
+		})
+
+		When("the merge label is added to a PR labelled Extra careful", func() {
+			cfgs := marvin.StaticRepoConfigProvider{
+				repoName: &marvin.GitHubRepositoryConfiguration{AutoMerge: true},
+			}
+			mergeLabel := &gogithub.Label{Name: github.LabelMerge}
+
+			It("cancels the merge without one more approval than the branch requires", func(ctx SpecContext) {
+				prEvent := &gogithub.PullRequestEvent{
+					Action: utils.Ptr(pkggithub.EventPullRequestActionLabeled),
+					Repo:   &gogithub.Repository{Name: utils.Ptr(repoName)},
+					Sender: &gogithub.User{Login: utils.Ptr("mx-test")},
+					Label:  mergeLabel,
+					PullRequest: &gogithub.PullRequest{
+						State:  utils.Ptr("open"),
+						Number: utils.Ptr(prNumber),
+						Head:   &gogithub.PullRequestBranch{Ref: utils.Ptr("mybranch"), SHA: utils.Ptr("mybranch")},
+						Base:   &gogithub.PullRequestBranch{Ref: utils.Ptr("main")},
+						Labels: []*gogithub.Label{mergeLabel, extraCareful},
+					},
+				}
+
+				mockGithub.EXPECT().ListCheckRunsForRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&gogithub.ListCheckRunsResults{
+					CheckRuns: []*gogithub.CheckRun{{
+						Name:       utils.Ptr(marvin.CheckName),
+						Status:     utils.Ptr(pkggithub.CheckRunStatusCompleted),
+						Conclusion: utils.Ptr(pkggithub.CheckRunConclusionSuccess),
+					}},
+				}, nil, nil)
+				mockGithub.EXPECT().ListReviews(gomock.Any(), prEvent, prNumber, gomock.Any()).Return(approvals("alice"), nil, nil)
+				mockGithub.EXPECT().GetBranchProtection(gomock.Any(), prEvent, "main").Return(protection, nil, nil)
+				mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{mergeLabel}, nil, nil)
+				mockGithub.EXPECT().RemovePRLabel(gomock.Any(), prEvent, prNumber, github.LabelMerge).Return(nil, nil)
+				mockGithub.EXPECT().CreatePRComment(gomock.Any(), prEvent, prNumber, gomock.Any()).
+					DoAndReturn(func(_ context.Context, _ pkggithub.RepoSenderGetter, _ int, comment *gogithub.IssueComment) (*gogithub.IssueComment, *gogithub.Response, error) {
+						Expect(comment.GetBody()).To(ContainSubstring("Extra careful"))
+						return nil, nil, nil
+					})
+
+				svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+				Expect(svc.OnPullRequest(ctx, prEvent)).To(Succeed())
+			})
+		})
+	})
 })

@@ -131,6 +131,19 @@ func (s *service) requiredReviewCount(ctx context.Context, webhook github.RepoSe
 	return 1, nil
 }
 
+// requiredReviewCountForPR returns the number of approving reviews the given PR needs before Marvin
+// considers it reviewed: what the branch requires, plus one when the PR is labelled Extra careful.
+func (s *service) requiredReviewCountForPR(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, branch string) (int, error) {
+	count, err := s.requiredReviewCount(ctx, webhook, branch)
+	if err != nil {
+		return 0, err
+	}
+	if github.IsLabelInList(pr.Labels, LabelExtraCareful) {
+		count++
+	}
+	return count, nil
+}
+
 // requiredReviewCountFromRuleset looks for a pull_request rule in the branch's active rulesets
 // and returns its required approving review count. Defaults to 1 if no rule is found.
 func (s *service) requiredReviewCountFromRuleset(ctx context.Context, webhook github.RepoSenderGetter, branch string) (int, error) {
@@ -148,6 +161,7 @@ func (s *service) requiredReviewCountFromRuleset(ctx context.Context, webhook gi
 // All members of the given teams are pooled together and considered after being ranked by current review load.
 // With preferStackReviewers, a stacked PR first takes the team members reviewing the nearest layer of its stack.
 // Succeeding in assigning reviewers means that we found and assigned at least enough reviewers to satisfy the main branch protection
+// (plus one for a PR labelled Extra careful)
 func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, fromTeams []string, preferStackReviewers bool) (bool, error) {
 	prNumber := pr.GetNumber()
 	prOwner := pr.GetUser().GetLogin()
@@ -189,7 +203,7 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 
 	log.Infof("PR has reviewers in teams %v: %v", fromTeams, consideredReviewers)
 
-	requiredReviewers, err := s.requiredReviewCount(ctx, webhook, webhook.GetRepo().GetDefaultBranch())
+	requiredReviewers, err := s.requiredReviewCountForPR(ctx, webhook, pr, webhook.GetRepo().GetDefaultBranch())
 	if err != nil {
 		return false, fmt.Errorf("error getting required reviewer count: %w", err)
 	}
@@ -415,6 +429,7 @@ func (s *service) AreAllCheckRunsDone(ctx context.Context, webhook github.RepoSe
 }
 
 // HasEnoughApprovals returns true if the given PR has sufficient approved reviews to satisfy the main branch protection constraint
+// (plus one for a PR labelled Extra careful)
 func (s *service) HasEnoughApprovals(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest) (bool, error) {
 	log := middlewares.LoggerFromGHContext(ctx, "github.HasEnoughApprovals")
 
@@ -451,7 +466,7 @@ func (s *service) HasEnoughApprovals(ctx context.Context, webhook github.RepoSen
 	log.Infof("found %d approvals: %+v", len(devReview), devReview)
 
 	mergeBranch := pr.GetBase().GetRef()
-	requiredReviewers, err := s.requiredReviewCount(ctx, webhook, mergeBranch)
+	requiredReviewers, err := s.requiredReviewCountForPR(ctx, webhook, pr, mergeBranch)
 	if err != nil {
 		return false, fmt.Errorf("error getting required reviewer count: %w", err)
 	}

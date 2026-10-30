@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.8.0] — 2026-10-29
+
+### Added
+
+- **Extra careful label**: a PR labelled *Extra careful 👀* needs one more approval than its base
+  branch requires. `auto_review_assign` requests one more reviewer, also when the label is added to a
+  PR already *Ready for review*; `auto_approve` waits for the extra approval before adding *Approved*;
+  and `auto_merge` cancels the merge without it. Create the label from `labels.json`.
+
 ## [2.7.0] — 2026-10-20
 
 ### Changed

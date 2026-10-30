@@ -592,6 +592,20 @@ with layer 1 reviewed by Maxime and layer 2 by Clem, layer 3 gets Clem.
 Only GitHub's native stacks (e.g. created with `gh stack`) are detected. Has no effect unless
 `auto_review_assign` is also enabled.
 
+### *Extra careful* label
+
+Adding the **Extra careful 👀** label to a PR asks for one more approval than the base branch
+requires. It needs no configuration and applies wherever Marvin counts approvals:
+
+- `auto_review_assign` requests one more reviewer. If the label is added once the PR is already
+  *Ready for review*, Marvin requests the missing reviewer right away.
+- `auto_approve` adds the *Approved* label only once the extra approval is in.
+- `auto_merge` cancels the merge and comments if the extra approval is missing, since GitHub's
+  branch protection doesn't know about it.
+
+Adding the label to a PR that is already approved changes nothing: request the extra reviewer
+yourself. Removing it lowers the requirement back, and reviewers already requested stay.
+
 ### `auto_draft_labels`
 
 Automatically manages the **Work in progress ⏳** and **Ready for review 👌** labels based on GitHub's native draft state transitions:

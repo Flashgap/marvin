@@ -235,6 +235,22 @@ var _ = Describe("FindAndAssignReviewers", func() {
 		})
 	})
 
+	It("requests one more reviewer than the branch requires for a PR labelled Extra careful", func(ctx SpecContext) {
+		requiredReview = 1
+		pr.Labels = []*gogithub.Label{{Name: svcgithub.LabelReadyForReview}, {Name: svcgithub.LabelExtraCareful}}
+		mockClient.EXPECT().ListTeamMembers(gomock.Any(), event, "backend-team", gomock.Any()).
+			Return([]*gogithub.User{member("alice"), member("bob"), member("carol")}, nil, nil)
+		mockClient.EXPECT().RequestReviewers(gomock.Any(), event, prNumber, gomock.Any()).
+			DoAndReturn(func(_ context.Context, _ pkggithub.RepoSenderGetter, _ int, reviewers []string) (*gogithub.PullRequest, *gogithub.Response, error) {
+				Expect(reviewers).To(HaveLen(2))
+				return pr, nil, nil
+			})
+
+		ok, err := svc.FindAndAssignReviewers(ctx, event, pr, []string{"backend-team"}, false)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ok).To(BeTrue())
+	})
+
 	It("does not read any stack for a PR outside of one", func(ctx SpecContext) {
 		// No ListStackLayers expectation: the strict mock fails the spec if the stack is read
 		requiredReview = 1

@@ -9,4 +9,5 @@ const (
 	LabelHotfix          = "action:Hotfix"
 	LabelChangesRequired = "action:Changes required"
 	LabelDoNotMerge      = "action:DO NOT MERGE"
+	LabelExtraCareful    = "action:Extra careful"
 )
