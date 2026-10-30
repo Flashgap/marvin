@@ -27,33 +27,32 @@ var DefaultAIReviewStatusContexts = []string{"CodeRabbit"}
 const DefaultChangelogFile = "CHANGELOG.md"
 
 // PathReviewRule maps a glob pattern (matched against changed file paths, doublestar syntax e.g. "go/**")
-// to the GitHub team that should review matching changes.
+// to the GitHub team that should review matching changes and/or the label to add to the PR.
 type PathReviewRule struct {
 	Pattern string
 	Team    string
+	Label   string
 }
 
 type GitHubRepositoryConfiguration struct {
 	// ReviewRules is the ordered list of path->team rules declared under `reviewers.rules` in .marvin.yaml.
 	// A PR requests reviewers from the union of every team whose pattern matches a changed file.
-	ReviewRules []PathReviewRule
-	// DefaultTeam is used when no ReviewRules pattern matches any changed file. Declared as
-	// `reviewers.default_team` in .marvin.yaml.
-	DefaultTeam         string
-	AutoApprove         bool
-	AutoChangesRequired bool
-	AutoMerge           bool
-	AutoReviewAssign    bool
-	AutoDraftLabels     bool
-	UpdateTitle         bool
-	CheckTitle          bool
-	CheckDescription    bool
-	CheckTimeSpent      bool
-	CheckLinearLink     bool
-	CheckLinearProject  bool
-	CheckChangelog      bool
-	// ChangelogFile is the path check_changelog validates against. Defaults to DefaultChangelogFile;
-	// overridable per repo via `check_changelog.file` in .marvin.yaml.
+	ReviewRules            []PathReviewRule
+	DefaultTeam            string
+	DefaultLabel           string
+	AutoApprove            bool
+	AutoChangesRequired    bool
+	AutoMerge              bool
+	AutoReviewAssign       bool
+	AutoDraftLabels        bool
+	PathLabels             bool
+	UpdateTitle            bool
+	CheckTitle             bool
+	CheckDescription       bool
+	CheckTimeSpent         bool
+	CheckLinearLink        bool
+	CheckLinearProject     bool
+	CheckChangelog         bool
 	ChangelogFile          string
 	AutoAssignee           bool
 	UpdateLinearLink       bool
@@ -88,6 +87,10 @@ func withStickyStackReviewers(c *GitHubRepositoryConfiguration) {
 
 func withAutoDraftLabels(c *GitHubRepositoryConfiguration) {
 	c.AutoDraftLabels = true
+}
+
+func withPathLabels(c *GitHubRepositoryConfiguration) {
+	c.PathLabels = true
 }
 
 func withUpdateTitle(c *GitHubRepositoryConfiguration) {
@@ -147,6 +150,7 @@ var configToFunc = map[string]optionFunc{
 	"auto_review_assign":     withAutoReviewAssign,
 	"sticky_stack_reviewers": withStickyStackReviewers,
 	"auto_draft_labels":      withAutoDraftLabels,
+	"path_labels":            withPathLabels,
 	"update_title":           withUpdateTitle,
 	"check_title":            withCheckTitle,
 	"check_description":      withCheckDescription,

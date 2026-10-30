@@ -34,6 +34,7 @@ and a repository with no `.marvin.yaml` has Marvin fully disabled on it.
 | `auto_assignee` | Assigns the PR opener as assignee if none is set |
 | `auto_draft_labels` | Automatically manages *Work in progress* and *Ready for review* labels based on GitHub draft state |
 | `auto_review_assign` | Requests reviewers from a configured team when the *Ready for review* label is added |
+| `path_labels` | Labels the PR from the files it changes, using the `label` of each matching `reviewers.rules` entry |
 | `sticky_stack_reviewers` | On a stacked PR, makes `auto_review_assign` keep the reviewers of the nearest layer of the stack before falling back to review load |
 | `auto_approve` | Adds the *Approved* label and removes *Ready for review* once enough approvals are in |
 | `auto_changes_required` | Adds the *Changes required* label and notifies via Slack when a review requests changes; removes it and re-requests the affected human reviewers when *Ready for review* is re-applied |
@@ -479,16 +480,22 @@ features:
   - auto_merge
   - auto_review_assign
   - check_changelog
+  - path_labels
   - require_ai_review
   - slack_notify                # still requires the central MARVIN_GITHUB_TO_SLACK mapping
 
 reviewers:
   default_team: platform        # used when no rule below matches a changed file (optional)
+  default_label: misc           # path_labels fallback when no rule with a label matches (optional)
   rules:
     - path: "go/**"
       team: backend-team
+      label: go                 # added by path_labels (optional)
     - path: "py/**"
       team: data-team
+      label: ai
+    - path: "docs/**"
+      label: docs               # a rule may only label, with no team
 
 check_changelog:
   file: docs/CHANGELOG.md        # optional, defaults to CHANGELOG.md at the repo root
@@ -504,7 +511,8 @@ ai_review:
   against every file changed in a PR. When a PR touches files matched by more than one rule,
   Marvin requests reviewers from the **union** of every matched team — this is what makes
   `auto_review_assign` work across a monorepo with per-team subtrees. `reviewers.default_team` is
-  used as a fallback when no rule matches any changed file.
+  used as a fallback when no rule matches any changed file. A rule can also set a `label`, for
+  [`path_labels`](#path_labels), and needs a `team`, a `label` or both.
 - `check_changelog.file` overrides which file `check_changelog` validates against; defaults to
   `CHANGELOG.md` at the repo root when omitted.
 - An invalid or unparsable `.marvin.yaml` disables Marvin for that repository (fails closed) rather
@@ -591,6 +599,20 @@ with layer 1 reviewed by Maxime and layer 2 by Clem, layer 3 gets Clem.
 
 Only GitHub's native stacks (e.g. created with `gh stack`) are detected. Has no effect unless
 `auto_review_assign` is also enabled.
+
+### `path_labels`
+
+Labels each PR with who it affects, so a PR list can be filtered by team. When a PR is opened,
+reopened or pushed to, Marvin matches its changed files against `reviewers.rules` in the
+repository's [`.marvin.yaml`](#repository-configuration-marvinyaml) and adds the `label` of every
+matching rule, or `reviewers.default_label` when no rule with a label matches. Draft PRs are labelled
+too. It works with or without `auto_review_assign`.
+
+- Labels are matched by their exact name, ignoring case, and must already exist in the repository.
+  When one doesn't, Marvin comments on the PR when it's opened or reopened. It doesn't comment again
+  on later pushes.
+- Labels are only ever added. One stays when a later push no longer touches its path, because
+  Marvin can't tell it apart from a label added by hand.
 
 ### *Extra careful* label
 

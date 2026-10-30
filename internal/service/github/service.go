@@ -35,7 +35,7 @@ var (
 type Service interface {
 	github.Client // This could be removed by defining the interface on the requesters side
 	FindAndAssignReviewers(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest, fromTeams []string, preferStackReviewers bool) (bool, error)
-	AddLabel(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, label string) error
+	AddLabel(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, label string, match LabelMatch) error
 	RemoveLabel(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, label string) error
 	UpdateAndMergePR(ctx context.Context, webhook github.RepoSenderGetter, pr *gogithub.PullRequest) error
 	AddCheckRun(ctx context.Context, webhook github.RepoSenderGetter, name string, headSHA string, success bool, output *gogithub.CheckRunOutput) error
@@ -61,17 +61,33 @@ func NewService(githubClient github.Client, reviewLoad reviewload.Service) Servi
 	}
 }
 
-func (s *service) labelByString(ctx context.Context, webhook github.RepoSenderGetter, label string) (*gogithub.Label, error) {
-	ghLabels, _, err := s.ListLabels(ctx, webhook, nil)
+func (s *service) labelByString(ctx context.Context, webhook github.RepoSenderGetter, label string, match LabelMatch) (*gogithub.Label, error) {
+	var found *gogithub.Label
+	err := github.ConsumePaginatedResource(github.MaxPerPage, func(opts *gogithub.ListOptions) (*gogithub.Response, bool, error) {
+		ghLabels, res, err := s.ListLabels(ctx, webhook, opts)
+		if err != nil {
+			return res, false, fmt.Errorf("error listing labels: %w", err)
+		}
+
+		for _, ghLabel := range ghLabels {
+			if (match == LabelMatchExact && strings.EqualFold(ghLabel.GetName(), label)) ||
+				(match == LabelMatchPrefix && github.IsLabel(ghLabel, label)) {
+				found = ghLabel
+				return res, false, nil
+			}
+		}
+
+		return res, true, nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("error listing labels: %w", err)
+		return nil, err
 	}
 
-	if ghLabel := github.GetLabelInList(ghLabels, label); ghLabel != nil {
-		return ghLabel, nil
+	if found == nil {
+		return nil, fmt.Errorf("%w: no label found matching %q", ErrLabelNotFound, label)
 	}
 
-	return nil, fmt.Errorf("%w: no label found matching %q", ErrLabelNotFound, label)
+	return found, nil
 }
 
 // ListAllReviewers returns a map where keys are the GitHub logins of all people who have either left a review or have a review pending on the PR
@@ -261,7 +277,7 @@ func (s *service) FindAndAssignReviewers(ctx context.Context, webhook github.Rep
 // RemoveLabel attempts to match the label given with existing labels in the repository by case-insensitive prefix.
 // If found, it removes the label from the PR
 func (s *service) RemoveLabel(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, label string) error {
-	ghLabel, err := s.labelByString(ctx, webhook, label)
+	ghLabel, err := s.labelByString(ctx, webhook, label, LabelMatchPrefix)
 	if err != nil {
 		return fmt.Errorf("error getting label %q: %w", label, err)
 	}
@@ -279,10 +295,11 @@ func (s *service) RemoveLabel(ctx context.Context, webhook github.RepoSenderGett
 	return nil
 }
 
-// AddLabel attempts to match the label given with existing labels in the repository by case-insensitive prefix.
-// If found, it adds the label to the PR
-func (s *service) AddLabel(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, label string) error {
-	ghLabel, err := s.labelByString(ctx, webhook, label)
+// AddLabel attempts to match the label given with existing labels in the repository, by case-insensitive
+// prefix or exact name depending on match. If found, it adds the label to the PR, otherwise it returns
+// an error wrapping ErrLabelNotFound.
+func (s *service) AddLabel(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, label string, match LabelMatch) error {
+	ghLabel, err := s.labelByString(ctx, webhook, label, match)
 	if err != nil {
 		return fmt.Errorf("error getting label %q: %w", label, err)
 	}
