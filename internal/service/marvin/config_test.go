@@ -171,6 +171,54 @@ reviewers:
 		}))
 	})
 
+	It("parses rule labels into ReviewRules and reviewers.default_label into DefaultLabel", func() {
+		expectListInstalledRepos()
+		mockGithub.EXPECT().
+			GetFileContent(gomock.Any(), gomock.Any(), marvin.RepoConfigFileName, defaultBranch).
+			Return(`
+features: [path_labels]
+reviewers:
+  default_label: misc
+  rules:
+    - path: "go/**"
+      team: backend-team
+      label: go
+    - path: "docs/**"
+      label: docs
+`, &gogithub.Response{}, nil).
+			Times(1)
+
+		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
+		provider.Start(context.Background(), 0)
+
+		cfg, _ := provider.Get(webhook)
+		Expect(cfg.PathLabels).To(BeTrue())
+		Expect(cfg.DefaultLabel).To(Equal("misc"))
+		Expect(cfg.ReviewRules).To(Equal([]marvin.PathReviewRule{
+			{Pattern: "go/**", Team: "backend-team", Label: "go"},
+			{Pattern: "docs/**", Label: "docs"},
+		}))
+	})
+
+	It("returns a nil config and a warning when a reviewers rule has neither a team nor a label", func() {
+		expectListInstalledRepos()
+		mockGithub.EXPECT().
+			GetFileContent(gomock.Any(), gomock.Any(), marvin.RepoConfigFileName, defaultBranch).
+			Return(`
+reviewers:
+  rules:
+    - path: "go/**"
+`, &gogithub.Response{}, nil).
+			Times(1)
+
+		provider := marvin.NewRepoConfigProvider(mockGithub, config.Marvin{})
+		provider.Start(context.Background(), 0)
+
+		cfg, warning := provider.Get(webhook)
+		Expect(cfg).To(BeNil())
+		Expect(warning).NotTo(BeNil())
+	})
+
 	It("defaults ChangelogFile to CHANGELOG.md when check_changelog.file is not set", func() {
 		expectListInstalledRepos()
 		mockGithub.EXPECT().

@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.9.0] — 2026-10-30
+
+### Added
+
+- **`path_labels` feature**: labels a PR with who it affects, so a PR list can be filtered by team. A
+  `reviewers.rules` entry in `.marvin.yaml` can now set a `label`, added to every PR, drafts included,
+  that changes a file matching its `path`. `reviewers.default_label` is added when no rule with a label
+  matches. Labels are matched by exact name and must exist in the repository: Marvin comments on the
+  PR when one doesn't. Labels are only ever added. Works with or without `auto_review_assign`; opt-in
+  per repository via `.marvin.yaml`'s `features`.
+
+### Changed
+
+- A `reviewers.rules` entry can set a `label` without a `team`. `reviewers.default_team` is now used
+  when no matching rule has a team, and a rule with neither a team nor a label makes `.marvin.yaml`
+  invalid.
+
 ## [2.8.0] — 2026-10-29
 
 ### Added

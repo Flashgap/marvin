@@ -34,13 +34,15 @@ type checkChangelogConfig struct {
 }
 
 type reviewersConfig struct {
-	DefaultTeam string             `yaml:"default_team"`
-	Rules       []reviewRuleConfig `yaml:"rules"`
+	DefaultTeam  string             `yaml:"default_team"`
+	DefaultLabel string             `yaml:"default_label"`
+	Rules        []reviewRuleConfig `yaml:"rules"`
 }
 
 type reviewRuleConfig struct {
-	Path string `yaml:"path"`
-	Team string `yaml:"team"`
+	Path  string `yaml:"path"`
+	Team  string `yaml:"team"`
+	Label string `yaml:"label"`
 }
 
 type aiReviewConfig struct {
@@ -302,8 +304,12 @@ func parseRepoConfig(content string, orgConfig config.Marvin) (*GitHubRepository
 
 	if file.Reviewers != nil {
 		repoConfig.DefaultTeam = file.Reviewers.DefaultTeam
+		repoConfig.DefaultLabel = file.Reviewers.DefaultLabel
 		for _, rule := range file.Reviewers.Rules {
-			repoConfig.ReviewRules = append(repoConfig.ReviewRules, PathReviewRule{Pattern: rule.Path, Team: rule.Team})
+			if rule.Team == "" && rule.Label == "" {
+				return nil, fmt.Errorf("reviewers rule for path %q needs a team, a label or both", rule.Path)
+			}
+			repoConfig.ReviewRules = append(repoConfig.ReviewRules, PathReviewRule{Pattern: rule.Path, Team: rule.Team, Label: rule.Label})
 		}
 	}
 

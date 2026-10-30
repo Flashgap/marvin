@@ -27,10 +27,11 @@ var DefaultAIReviewStatusContexts = []string{"CodeRabbit"}
 const DefaultChangelogFile = "CHANGELOG.md"
 
 // PathReviewRule maps a glob pattern (matched against changed file paths, doublestar syntax e.g. "go/**")
-// to the GitHub team that should review matching changes.
+// to the GitHub team that should review matching changes and/or the label to add to the PR.
 type PathReviewRule struct {
 	Pattern string
 	Team    string
+	Label   string
 }
 
 type GitHubRepositoryConfiguration struct {
@@ -39,12 +40,16 @@ type GitHubRepositoryConfiguration struct {
 	ReviewRules []PathReviewRule
 	// DefaultTeam is used when no ReviewRules pattern matches any changed file. Declared as
 	// `reviewers.default_team` in .marvin.yaml.
-	DefaultTeam         string
+	DefaultTeam string
+	// DefaultLabel is added by path_labels when no ReviewRules pattern with a label matches any
+	// changed file. Declared as `reviewers.default_label` in .marvin.yaml.
+	DefaultLabel        string
 	AutoApprove         bool
 	AutoChangesRequired bool
 	AutoMerge           bool
 	AutoReviewAssign    bool
 	AutoDraftLabels     bool
+	PathLabels          bool
 	UpdateTitle         bool
 	CheckTitle          bool
 	CheckDescription    bool
@@ -88,6 +93,10 @@ func withStickyStackReviewers(c *GitHubRepositoryConfiguration) {
 
 func withAutoDraftLabels(c *GitHubRepositoryConfiguration) {
 	c.AutoDraftLabels = true
+}
+
+func withPathLabels(c *GitHubRepositoryConfiguration) {
+	c.PathLabels = true
 }
 
 func withUpdateTitle(c *GitHubRepositoryConfiguration) {
@@ -147,6 +156,7 @@ var configToFunc = map[string]optionFunc{
 	"auto_review_assign":     withAutoReviewAssign,
 	"sticky_stack_reviewers": withStickyStackReviewers,
 	"auto_draft_labels":      withAutoDraftLabels,
+	"path_labels":            withPathLabels,
 	"update_title":           withUpdateTitle,
 	"check_title":            withCheckTitle,
 	"check_description":      withCheckDescription,

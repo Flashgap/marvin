@@ -107,6 +107,17 @@ func (s *service) OnPullRequest(ctx context.Context, event *gogithub.PullRequest
 
 	log.Infof("Got a pull request webhook with action %q", action)
 
+	// Path labels say who a PR affects, drafts and WIPs included, so they're applied before the
+	// draft handling and the WIP guard below. A failure is logged rather than returned so that it
+	// never blocks the PR checks.
+	if config.PathLabels && (action == pkggithub.EventPullRequestActionOpened ||
+		action == pkggithub.EventPullRequestActionReopened ||
+		action == pkggithub.EventPullRequestActionSynchronize) {
+		if err := s.applyPathLabels(ctx, event, pr, config, action == pkggithub.EventPullRequestActionSynchronize); err != nil {
+			log.Errorf("error applying path labels: %v", err)
+		}
+	}
+
 	// Handle draft/ready-for-review transitions before the WIP guard so that
 	// draft PRs can be labeled before IsWorkInProgress drops the event.
 	if handled, err := s.handleDraftTransition(ctx, event, pr, config); err != nil {
@@ -190,10 +201,10 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 		if !pr.GetDraft() {
 			return false, nil
 		}
-		return true, s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelWorkInProgress)
+		return true, s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelWorkInProgress, github.LabelMatchPrefix)
 	case pkggithub.EventPullRequestActionConvertedToDraft:
 		var errs error
-		if err := s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelWorkInProgress); err != nil {
+		if err := s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelWorkInProgress, github.LabelMatchPrefix); err != nil {
 			errs = errors.Join(errs, err)
 		}
 		if err := s.githubService.RemoveLabel(ctx, event, pr.GetNumber(), github.LabelReadyForReview); err != nil {
@@ -222,7 +233,7 @@ func (s *service) handleDraftTransition(ctx context.Context, event *gogithub.Pul
 		if err := s.githubService.RemoveLabel(ctx, event, pr.GetNumber(), github.LabelWorkInProgress); err != nil {
 			errs = errors.Join(errs, err)
 		}
-		if err := s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelReadyForReview); err != nil {
+		if err := s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelReadyForReview, github.LabelMatchPrefix); err != nil {
 			errs = errors.Join(errs, err)
 		}
 		if errs != nil {
@@ -327,7 +338,7 @@ func (s *service) OnPullRequestReview(ctx context.Context, event *gogithub.PullR
 				if err := s.notifyChangesRequestedBySlack(ctx, event.GetSender().GetLogin(), pr, pr.GetUser().GetLogin(), config); err != nil {
 					errs = errors.Join(errs, err)
 				}
-				if err := s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelChangesRequired); err != nil {
+				if err := s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelChangesRequired, github.LabelMatchPrefix); err != nil {
 					errs = errors.Join(errs, err)
 				}
 
@@ -344,7 +355,7 @@ func (s *service) OnPullRequestReview(ctx context.Context, event *gogithub.PullR
 				}
 
 				if config.AutoApprove {
-					if err = s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelApproved); err != nil {
+					if err = s.githubService.AddLabel(ctx, event, pr.GetNumber(), github.LabelApproved, github.LabelMatchPrefix); err != nil {
 						return fmt.Errorf("error adding approved label: %w", err)
 					}
 
@@ -536,7 +547,7 @@ func (s *service) aiReviewGatePassed(ctx context.Context, webhook pkggithub.Repo
 	if err := s.githubService.RemoveLabel(ctx, webhook, pr.GetNumber(), github.LabelReadyForReview); err != nil {
 		errs = errors.Join(errs, err)
 	}
-	if err := s.githubService.AddLabel(ctx, webhook, pr.GetNumber(), github.LabelWorkInProgress); err != nil {
+	if err := s.githubService.AddLabel(ctx, webhook, pr.GetNumber(), github.LabelWorkInProgress, github.LabelMatchPrefix); err != nil {
 		errs = errors.Join(errs, err)
 	}
 	if _, _, err := s.githubService.CreatePRComment(ctx, webhook, pr.GetNumber(), &gogithub.IssueComment{

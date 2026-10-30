@@ -1021,6 +1021,119 @@ blabla
 		})
 	})
 
+	Context("Path labels", func() {
+		prNumber := 700
+
+		// Draft PRs are dropped by the WIP guard right after path labels are applied, so these
+		// events only reach the path labels code.
+		getEvent := func(action string, labels ...string) gogithub.PullRequestEvent {
+			prLabels := make([]*gogithub.Label, 0, len(labels))
+			for _, label := range labels {
+				prLabels = append(prLabels, &gogithub.Label{Name: label})
+			}
+
+			return gogithub.PullRequestEvent{
+				Action: utils.Ptr(action),
+				Repo:   &gogithub.Repository{Name: utils.Ptr(repoName)},
+				Sender: &gogithub.User{Login: utils.Ptr("mx-test")},
+				PullRequest: &gogithub.PullRequest{
+					State:  utils.Ptr("open"),
+					Number: utils.Ptr(prNumber),
+					Draft:  utils.Ptr(true),
+					Labels: prLabels,
+				},
+			}
+		}
+
+		getConfig := func() marvin.StaticRepoConfigProvider {
+			return marvin.StaticRepoConfigProvider{
+				repoName: &marvin.GitHubRepositoryConfiguration{
+					PathLabels:   true,
+					DefaultLabel: "misc",
+					ReviewRules: []marvin.PathReviewRule{
+						{Pattern: "go/**", Team: "backend-team", Label: "go"},
+						{Pattern: "py/**", Team: "data-team", Label: "ai"},
+						{Pattern: "py/**", Team: "ml-team", Label: "ai"},
+						{Pattern: "infra/**", Team: "platform"},
+					},
+				},
+			}
+		}
+
+		expectChangedFiles := func(files ...string) {
+			commitFiles := make([]*gogithub.CommitFile, 0, len(files))
+			for _, file := range files {
+				commitFiles = append(commitFiles, &gogithub.CommitFile{Filename: utils.Ptr(file)})
+			}
+			mockGithub.EXPECT().ListPRFiles(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).Return(commitFiles, &gogithub.Response{}, nil).Times(1)
+		}
+
+		repoLabels := []*gogithub.Label{{Name: "good first issue"}, {Name: "go"}, {Name: "ai"}, {Name: "misc"}}
+
+		It("adds the deduped labels of every rule matching a changed file, by exact name", func(ctx SpecContext) {
+			expectChangedFiles("go/main.go", "py/app.py", "py/model.py", "infra/main.tf")
+			mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return(repoLabels, nil, nil).Times(2)
+			mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{"go"}).Return(nil, nil, nil).Times(1)
+			mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{"ai"}).Return(nil, nil, nil).Times(1)
+
+			prEvent := getEvent(pkggithub.EventPullRequestActionOpened)
+			svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, getConfig(), testPRParserConfig)
+			Expect(svc.OnPullRequest(ctx, &prEvent)).To(Succeed())
+		})
+
+		It("adds the default label when no rule with a label matches a changed file", func(ctx SpecContext) {
+			expectChangedFiles("infra/main.tf", "README.md")
+			mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return(repoLabels, nil, nil).Times(1)
+			mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{"misc"}).Return(nil, nil, nil).Times(1)
+
+			prEvent := getEvent(pkggithub.EventPullRequestActionSynchronize)
+			svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, getConfig(), testPRParserConfig)
+			Expect(svc.OnPullRequest(ctx, &prEvent)).To(Succeed())
+		})
+
+		It("skips labels the PR already has", func(ctx SpecContext) {
+			expectChangedFiles("go/main.go")
+
+			prEvent := getEvent(pkggithub.EventPullRequestActionSynchronize, "Go")
+			svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, getConfig(), testPRParserConfig)
+			Expect(svc.OnPullRequest(ctx, &prEvent)).To(Succeed())
+		})
+
+		It("comments on the PR when a label doesn't exist in the repository", func(ctx SpecContext) {
+			expectChangedFiles("go/main.go", "py/app.py")
+			mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{{Name: "good first issue"}, {Name: "ai"}}, nil, nil).Times(2)
+			mockGithub.EXPECT().AddPRLabels(gomock.Any(), gomock.Any(), prNumber, []string{"ai"}).Return(nil, nil, nil).Times(1)
+			mockGithub.EXPECT().CreatePRComment(gomock.Any(), gomock.Any(), prNumber, gomock.Any()).DoAndReturn(
+				func(_ context.Context, _ pkggithub.RepoSenderGetter, _ int, comment *gogithub.IssueComment) (*gogithub.IssueComment, *gogithub.Response, error) {
+					Expect(comment.GetBody()).To(ContainSubstring("`go`"))
+					Expect(comment.GetBody()).To(ContainSubstring(marvin.RepoConfigFileName))
+					return nil, nil, nil
+				}).Times(1)
+
+			prEvent := getEvent(pkggithub.EventPullRequestActionOpened)
+			svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, getConfig(), testPRParserConfig)
+			Expect(svc.OnPullRequest(ctx, &prEvent)).To(Succeed())
+		})
+
+		It("doesn't comment again about a missing label on a new push", func(ctx SpecContext) {
+			expectChangedFiles("go/main.go")
+			mockGithub.EXPECT().ListLabels(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*gogithub.Label{{Name: "good first issue"}}, nil, nil).Times(1)
+
+			prEvent := getEvent(pkggithub.EventPullRequestActionSynchronize)
+			svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, getConfig(), testPRParserConfig)
+			Expect(svc.OnPullRequest(ctx, &prEvent)).To(Succeed())
+		})
+
+		It("does nothing when path_labels is disabled", func(ctx SpecContext) {
+			cfgs := getConfig()
+			cfgs[repoName].PathLabels = false
+
+			prEvent := getEvent(pkggithub.EventPullRequestActionOpened)
+			svc = marvin.NewService(githubService, mockJira, mockLinear, mockSlack, cfgs, testPRParserConfig)
+			Expect(svc.OnPullRequest(ctx, &prEvent)).To(Succeed())
+		})
+	})
+
 	Context("Cap report", func() {
 		It("should call the linear API on a merged PR event", func(ctx SpecContext) {
 			cfg := marvin.GitHubRepositoryConfiguration{
