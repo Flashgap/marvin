@@ -15,6 +15,11 @@
     "description": "Pull request should not be merged"
   },
   {
+    "name": "action:Extra careful 👀",
+    "color": "5319E7",
+    "description": "Pull request needs one more approval than the base branch requires"
+  },
+  {
     "name": "action:Hotfix 🔥",
     "color": "B60205",
     "description": "Pull requests that immediately fix a bug"

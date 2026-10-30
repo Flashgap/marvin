@@ -40,6 +40,7 @@ I removed this label, please add it back when the PR is ready to be merged!`
 Check the merge box at the bottom of the PR for the exact reason, then re-apply the label.`
 	commentMergeBlockedHeader     = "GitHub is refusing to merge this PR. The %s branch requires:\n"
 	commentMergeBlockedFooter     = "\nCheck which of these isn't satisfied, then re-apply the label."
+	commentExtraCareful           = "This PR is labelled *Extra careful* and needs one more approval than the base branch requires."
 	commentCheckTimeSpent         = "Hey @%s, you added the merge label but you might forgot to update the time spent. Please take a look at it."
 	commentErrorsToFix            = "Hey @%s, thanks for your PR! It contains some errors to fix:\n %s"
 	commentNotEnoughReviewers     = "Hey @%s, I didn't find enough reviewers for your PR. Please take a look at it!"
@@ -600,6 +601,31 @@ func (s *service) labelActions(ctx context.Context, webhook pkggithub.RepoSender
 				return fmt.Errorf("error re-requesting reviewers: %w", err)
 			}
 		}
+	case pkggithub.IsLabel(addedLabel, github.LabelExtraCareful):
+		// A PR labelled Extra careful before being ready for review gets its extra reviewer when it becomes ready
+		if !config.AutoReviewAssign || !pkggithub.IsLabelInList(pr.Labels, github.LabelReadyForReview) {
+			return nil
+		}
+
+		reviewTeams, err := s.resolveReviewTeams(ctx, webhook, pr.GetNumber(), config)
+		if err != nil {
+			return err
+		}
+
+		success, err := s.githubService.FindAndAssignReviewers(ctx, webhook, pr, reviewTeams, config.StickyStackReviewers)
+		if err != nil {
+			return err
+		}
+		if !success {
+			log.Info("didn't get enough reviewers to request")
+			if _, _, err := s.githubService.CreatePRComment(ctx, webhook, pr.GetNumber(), &gogithub.IssueComment{
+				Body: utils.Ptr(
+					fmt.Sprintf(commentNotEnoughReviewers, webhook.GetSender().GetLogin()),
+				),
+			}); err != nil {
+				return fmt.Errorf("cannot add comment to ask for reviewers: %w", err)
+			}
+		}
 	case pkggithub.IsLabel(addedLabel, github.LabelMerge):
 		if err = s.attemptMerge(ctx, webhook, pr, config); err != nil {
 			if errors.Is(err, github.ErrMerge) {
@@ -683,6 +709,22 @@ func (s *service) attemptMerge(ctx context.Context, webhook pkggithub.RepoSender
 				desc = "Marvin's checks failed."
 			}
 			return s.cancelMerge(ctx, webhook, pr.GetNumber(), desc)
+		}
+	}
+
+	// Branch protection only knows about the approvals the branch requires: the extra one asked for
+	// by the Extra careful label is Marvin's to enforce.
+	if pkggithub.IsLabelInList(pr.Labels, github.LabelExtraCareful) {
+		var ok bool
+		ok, err = s.githubService.HasEnoughApprovals(ctx, webhook, pr)
+		if err != nil {
+			err = fmt.Errorf("error checking for approvals: %w", err)
+			return err
+		}
+
+		if !ok {
+			err = s.cancelMerge(ctx, webhook, pr.GetNumber(), commentExtraCareful)
+			return err
 		}
 	}
 
