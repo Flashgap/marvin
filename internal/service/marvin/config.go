@@ -37,28 +37,22 @@ type PathReviewRule struct {
 type GitHubRepositoryConfiguration struct {
 	// ReviewRules is the ordered list of path->team rules declared under `reviewers.rules` in .marvin.yaml.
 	// A PR requests reviewers from the union of every team whose pattern matches a changed file.
-	ReviewRules []PathReviewRule
-	// DefaultTeam is used when no ReviewRules pattern matches any changed file. Declared as
-	// `reviewers.default_team` in .marvin.yaml.
-	DefaultTeam string
-	// DefaultLabel is added by path_labels when no ReviewRules pattern with a label matches any
-	// changed file. Declared as `reviewers.default_label` in .marvin.yaml.
-	DefaultLabel        string
-	AutoApprove         bool
-	AutoChangesRequired bool
-	AutoMerge           bool
-	AutoReviewAssign    bool
-	AutoDraftLabels     bool
-	PathLabels          bool
-	UpdateTitle         bool
-	CheckTitle          bool
-	CheckDescription    bool
-	CheckTimeSpent      bool
-	CheckLinearLink     bool
-	CheckLinearProject  bool
-	CheckChangelog      bool
-	// ChangelogFile is the path check_changelog validates against. Defaults to DefaultChangelogFile;
-	// overridable per repo via `check_changelog.file` in .marvin.yaml.
+	ReviewRules            []PathReviewRule
+	DefaultTeam            string
+	DefaultLabel           string
+	AutoApprove            bool
+	AutoChangesRequired    bool
+	AutoMerge              bool
+	AutoReviewAssign       bool
+	AutoDraftLabels        bool
+	PathLabels             bool
+	UpdateTitle            bool
+	CheckTitle             bool
+	CheckDescription       bool
+	CheckTimeSpent         bool
+	CheckLinearLink        bool
+	CheckLinearProject     bool
+	CheckChangelog         bool
 	ChangelogFile          string
 	AutoAssignee           bool
 	UpdateLinearLink       bool
