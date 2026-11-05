@@ -505,8 +505,9 @@ func (s *service) checkAndFormatPR(ctx context.Context, webhook pkggithub.RepoSe
 }
 
 // aiReviewGatePassed returns true if reviewer assignment should proceed. When RequireAIReview is
-// disabled it always returns true. When enabled, it checks whether a known AI reviewer has already
-// reviewed the PR's current HEAD commit; if not, it reverts the PR to Work in progress, removes the
+// disabled it always returns true. When enabled, it looks for a formal review from a known AI
+// reviewer, then for a success commit status, then for a success check run with a known name on the
+// PR's current HEAD commit; if none is found, it reverts the PR to Work in progress, removes the
 // Ready for review label, and comments explaining why, then returns false.
 func (s *service) aiReviewGatePassed(ctx context.Context, webhook pkggithub.RepoSenderGetter, pr *gogithub.PullRequest, config *GitHubRepositoryConfiguration) (bool, error) {
 	if !config.RequireAIReview {
@@ -524,13 +525,24 @@ func (s *service) aiReviewGatePassed(ctx context.Context, webhook pkggithub.Repo
 	}
 
 	// No formal review found. Some AI reviewers skip submitting a review on trivial/no-op diffs but
-	// still publish a success commit status; accept that as evidence of a completed review.
+	// still report a success commit status or check run; accept either as evidence of a completed
+	// review.
 	statusOK, err := s.githubService.HasAIReviewStatusSucceeded(ctx, webhook, pr.GetHead().GetSHA(), config.AIReviewStatusContexts)
 	if err != nil {
 		return false, fmt.Errorf("error checking for AI review status: %w", err)
 	}
 	if statusOK {
 		return true, nil
+	}
+
+	for _, name := range config.AIReviewStatusContexts {
+		checkRunOK, err := s.githubService.HasCheckRunSucceeded(ctx, webhook, pr.GetNumber(), name)
+		if err != nil {
+			return false, fmt.Errorf("error checking for AI review check run: %w", err)
+		}
+		if checkRunOK {
+			return true, nil
+		}
 	}
 
 	log.Info("require_ai_review is enabled and no AI review was found on the current commit, blocking reviewer assignment")
