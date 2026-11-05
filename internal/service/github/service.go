@@ -396,7 +396,7 @@ func (s *service) AddCheckRun(
 	return err
 }
 
-// HasCheckRunSucceeded returns true if the check run under the given checkName has succeeded on the HEAD commit of the given PR
+// HasCheckRunSucceeded returns true if the check run under the given checkName (case-insensitive) has succeeded on the HEAD commit of the given PR
 func (s *service) HasCheckRunSucceeded(ctx context.Context, webhook github.RepoSenderGetter, prNumber int, checkName string) (bool, error) {
 	log := middlewares.LoggerFromGHContext(ctx, "github.HasCheckRunSucceeded")
 
@@ -411,7 +411,7 @@ func (s *service) HasCheckRunSucceeded(ctx context.Context, webhook github.RepoS
 
 	for _, cr := range checkRuns.CheckRuns {
 		log.Infof("checkRun %q status: %q conclusion: %q", cr.GetName(), cr.GetStatus(), cr.GetConclusion())
-		if cr.GetName() == checkName &&
+		if strings.EqualFold(cr.GetName(), checkName) &&
 			cr.GetStatus() == github.CheckRunStatusCompleted &&
 			cr.GetConclusion() == github.CheckRunConclusionSuccess {
 			return true, nil
@@ -536,8 +536,7 @@ func (s *service) HasAIReviewed(ctx context.Context, webhook github.RepoSenderGe
 // contexts (case-insensitive) is present on ref.
 //
 // This complements HasAIReviewed: some AI reviewers (e.g. CodeRabbit) skip submitting a formal review
-// on trivial or no-op diffs but still publish a success status named after themselves, which is the
-// only completion signal available in that case.
+// on trivial or no-op diffs but can still publish a success status named after themselves.
 func (s *service) HasAIReviewStatusSucceeded(ctx context.Context, webhook github.RepoSenderGetter, ref string, contexts []string) (bool, error) {
 	log := middlewares.LoggerFromGHContext(ctx, "github.HasAIReviewStatusSucceeded")
 

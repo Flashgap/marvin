@@ -38,7 +38,7 @@ and a repository with no `.marvin.yaml` has Marvin fully disabled on it.
 | `sticky_stack_reviewers` | On a stacked PR, makes `auto_review_assign` keep the reviewers of the nearest layer of the stack before falling back to review load |
 | `auto_approve` | Adds the *Approved* label and removes *Ready for review* once enough approvals are in |
 | `auto_changes_required` | Adds the *Changes required* label and notifies via Slack when a review requests changes; removes it and re-requests the affected human reviewers when *Ready for review* is re-applied |
-| `require_ai_review` | Blocks `auto_review_assign` until a recognized AI reviewer (CodeRabbit, Graphite, etc.) has reviewed the PR at least once, or reported completion via a success commit status; reverts to *Work in progress* and comments if triggered early |
+| `require_ai_review` | Blocks `auto_review_assign` until a recognized AI reviewer (CodeRabbit, Graphite, etc.) has reviewed the PR at least once, or reported completion via a success commit status or check run; reverts to *Work in progress* and comments if triggered early |
 | `auto_merge` | Merges the PR (squash) when the *Merge 🚀* label is added and all checks pass |
 | `update_title` | Corrects the PR title format (adds missing issue ID prefix, strips GitHub-generated noise) |
 | `update_linear_link` | Auto-fills the *Fixed issues* section from the git branch name if it's empty |
@@ -201,7 +201,7 @@ features are on, who reviews what — live in each repo's own `.marvin.yaml` ins
 |----------|-------------|---------|
 | `MARVIN_GITHUB_TO_SLACK` | Comma-separated `github-handle:slack-user-id` for Slack DMs | `octocat:U012345678` |
 | `MARVIN_AI_REVIEWER_LOGINS` | Comma-separated extra AI-reviewer bot logins recognized by `require_ai_review` and `auto_changes_required`, in addition to the built-in `coderabbitai[bot]`/`graphite-app[bot]`/`copilot-pull-request-reviewer[bot]` (exact, case-insensitive match). Repos can add their own via `.marvin.yaml`'s `ai_review.reviewer_logins`. | `my-custom-ai-bot[bot]` |
-| `MARVIN_AI_REVIEW_STATUS_CONTEXTS` | Comma-separated extra commit-status contexts accepted by `require_ai_review` as a completed AI review when no formal review is found, in addition to the built-in `CodeRabbit` (exact, case-insensitive match on the current HEAD). Repos can add their own via `.marvin.yaml`'s `ai_review.status_contexts`. | `MyAIReviewer` |
+| `MARVIN_AI_REVIEW_STATUS_CONTEXTS` | Comma-separated extra names accepted by `require_ai_review` as a completed AI review when no formal review is found, in addition to the built-in `CodeRabbit`. Each name matches both commit status contexts and check run names (exact, case-insensitive match on the current HEAD). Repos can add their own via `.marvin.yaml`'s `ai_review.status_contexts`, which matches both as well. | `MyAIReviewer` |
 | `MARVIN_REPO_CONFIG_POLL_INTERVAL` | How often Marvin re-polls every installed repository's `.marvin.yaml` and `.gitattributes` files in the background. Webhook handling always reads from this cache and never fetches them itself. | `5m` (default) |
 
 ### Linear (required for Linear features)
@@ -651,9 +651,9 @@ Manages the *Changes required* label lifecycle:
 Gates `auto_review_assign` behind AI-reviewer confirmation:
 
 - When the *Ready for review* label is added (manually, or via the native draft → ready transition), Marvin checks whether a recognized AI reviewer bot (default: `coderabbitai[bot]`, `graphite-app[bot]`, `copilot-pull-request-reviewer[bot]`, extendable org-wide via `MARVIN_AI_REVIEWER_LOGINS` or per-repo via `.marvin.yaml`'s `ai_review.reviewer_logins`) has submitted **at least one** review on the PR. The review does not have to be on the current commit — an AI reviewer legitimately skips re-reviewing commits that add no reviewable changes (e.g. base-branch merges), so we rely on the author to re-request a review when needed.
-- As a fallback, if no formal review is found, Marvin accepts a **successful commit status** whose context matches a known AI reviewer (default: `CodeRabbit`, extendable org-wide via `MARVIN_AI_REVIEW_STATUS_CONTEXTS` or per-repo via `.marvin.yaml`'s `ai_review.status_contexts`) on the current HEAD. Some reviewers skip submitting a review on trivial/no-op diffs but still publish this completion status.
-- If neither is found, Marvin removes *Ready for review*, re-adds *Work in progress*, comments asking the author to request an AI review, and does **not** assign a human reviewer.
-- If an AI review (or matching success status) is found, `auto_review_assign` proceeds as normal.
+- As a fallback, if no formal review is found, Marvin accepts a **successful commit status** or a **successful check run** on the current HEAD whose context or name matches a known AI reviewer (default: `CodeRabbit`, extendable org-wide via `MARVIN_AI_REVIEW_STATUS_CONTEXTS` or per-repo via `.marvin.yaml`'s `ai_review.status_contexts`, which match both commit status contexts and check run names). Some reviewers skip submitting a review on trivial/no-op diffs but still publish one of these completion signals. A check run only counts with the `success` conclusion: one that ends as `skipped`, `neutral` or `cancelled` does not let the PR pass.
+- If none of these is found, Marvin removes *Ready for review*, re-adds *Work in progress*, comments asking the author to request an AI review, and does **not** assign a human reviewer.
+- If an AI review (or matching success status or check run) is found, `auto_review_assign` proceeds as normal.
 
 Has no effect unless `auto_review_assign` is also enabled.
 

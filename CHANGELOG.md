@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.9.1] — 2026-11-05
+
+### Fixed
+
+- `require_ai_review` now also accepts a check run on the PR's current HEAD, when its name is in the
+  `ai_review.status_contexts` list and its conclusion is `success`. CodeRabbit now reports on GitHub
+  through a `CodeRabbit` check run rather than a commit status, so a PR it finished reviewing without
+  a comment was blocked until a new AI review. The commit status is still accepted.
+
 ## [2.9.0] — 2026-10-30
 
 ### Added

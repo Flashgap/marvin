@@ -15,11 +15,12 @@ import (
 // repo-specific logins declared in that repo's .marvin.yaml into GitHubRepositoryConfiguration.AIReviewerLogins.
 var DefaultAIReviewerLogins = []string{"coderabbitai[bot]", "graphite-app[bot]", "copilot-pull-request-reviewer[bot]"}
 
-// DefaultAIReviewStatusContexts lists commit-status contexts that count as a completed AI review when
-// no formal review is found. Some AI reviewers (e.g. CodeRabbit) skip submitting a review on trivial
-// or no-op diffs but still publish a success status named after themselves. Merged with the
-// MARVIN_AI_REVIEW_STATUS_CONTEXTS env var and any repo-specific contexts declared in that repo's
-// .marvin.yaml into GitHubRepositoryConfiguration.AIReviewStatusContexts.
+// DefaultAIReviewStatusContexts lists the commit status contexts and check run names that count as a
+// completed AI review when no formal review is found. Some AI reviewers (e.g. CodeRabbit) skip
+// submitting a review on trivial or no-op diffs but still publish a success commit status or check
+// run named after themselves. Merged with the MARVIN_AI_REVIEW_STATUS_CONTEXTS env var and any
+// repo-specific names declared in that repo's .marvin.yaml into
+// GitHubRepositoryConfiguration.AIReviewStatusContexts.
 var DefaultAIReviewStatusContexts = []string{"CodeRabbit"}
 
 // DefaultChangelogFile is the changelog path check_changelog validates against when a repository's
